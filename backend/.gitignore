@@ -1,0 +1,8 @@
+# Future local secrets and generated output
+.env
+.env.*
+!.env.example
+bin/
+coverage/
+*.test
+*.out

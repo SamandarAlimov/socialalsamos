@@ -1,0 +1,3488 @@
+{
+    "schema_version":  1,
+    "status":  "structure-only",
+    "repository":  "SamandarAlimov/socialalsamos",
+    "plan":  "../backend.md",
+    "files":  [
+                  {
+                      "path":  ".dockerignore",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  ".env.example",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  ".gitignore",
+                      "status":  "documentation-or-inventory"
+                  },
+                  {
+                      "path":  "IMPLEMENTATION_STATUS.md",
+                      "status":  "documentation-or-inventory"
+                  },
+                  {
+                      "path":  "Makefile",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "README.md",
+                      "status":  "documentation-or-inventory"
+                  },
+                  {
+                      "path":  "STRUCTURE.md",
+                      "status":  "documentation-or-inventory"
+                  },
+                  {
+                      "path":  "ci/README.md",
+                      "status":  "documentation-or-inventory"
+                  },
+                  {
+                      "path":  "ci/backend-checks.yaml",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "cmd/api/bootstrap.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "cmd/api/main.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "cmd/migrate/bootstrap.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "cmd/migrate/main.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "cmd/realtime/bootstrap.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "cmd/realtime/main.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "cmd/worker/bootstrap.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "cmd/worker/main.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/README.md",
+                      "status":  "documentation-or-inventory"
+                  },
+                  {
+                      "path":  "contracts/database-manifest.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/events/call_updated.v1.schema.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/events/envelope.schema.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/events/media_ready.v1.schema.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/events/message_created.v1.schema.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/events/message_deleted.v1.schema.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/events/order_updated.v1.schema.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/events/session_revoked.v1.schema.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/admin/error.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/admin/request.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/admin/response.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/ads/error.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/ads/request.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/ads/response.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/ai/error.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/ai/request.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/ai/response.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/bots/error.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/bots/request.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/bots/response.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/calls/error.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/calls/request.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/calls/response.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/channels/error.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/channels/request.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/channels/response.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/comments/error.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/comments/request.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/comments/response.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/content/error.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/content/request.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/content/response.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/exports/error.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/exports/request.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/exports/response.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/feedback/error.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/feedback/request.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/feedback/response.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/feeds/error.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/feeds/request.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/feeds/response.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/identity/error.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/identity/request.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/identity/response.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/live/error.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/live/request.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/live/response.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/logistics/error.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/logistics/request.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/logistics/response.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/maps/error.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/maps/request.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/maps/response.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/marketplace/error.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/marketplace/request.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/marketplace/response.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/media/error.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/media/request.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/media/response.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/messages/deleted.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/messages/legacy.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/messages/location.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/messages/structured_v1.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/messaging/error.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/messaging/request.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/messaging/response.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/miniapps/error.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/miniapps/request.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/miniapps/response.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/moderation/error.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/moderation/request.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/moderation/response.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/notifications/error.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/notifications/request.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/notifications/response.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/oauth/error.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/oauth/request.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/oauth/response.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/payments/error.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/payments/request.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/payments/response.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/privacy/error.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/privacy/request.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/privacy/response.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/profiles/error.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/profiles/request.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/profiles/response.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/reactions/error.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/reactions/request.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/reactions/response.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/relationships/error.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/relationships/request.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/relationships/response.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/search/error.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/search/request.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/search/response.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/settings/error.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/settings/request.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/settings/response.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/stories/error.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/stories/request.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/stories/response.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/wallet/error.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/wallet/request.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/fixtures/wallet/response.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/openapi.yaml",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/parity.csv",
+                      "status":  "documentation-or-inventory"
+                  },
+                  {
+                      "path":  "contracts/schemas/admin.schema.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/schemas/ads.schema.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/schemas/ai.schema.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/schemas/bots.schema.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/schemas/calls.schema.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/schemas/channels.schema.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/schemas/comments.schema.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/schemas/content.schema.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/schemas/error.schema.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/schemas/exports.schema.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/schemas/feedback.schema.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/schemas/feeds.schema.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/schemas/identity.schema.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/schemas/live.schema.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/schemas/logistics.schema.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/schemas/maps.schema.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/schemas/marketplace.schema.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/schemas/media.schema.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/schemas/message_payload.schema.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/schemas/messaging.schema.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/schemas/miniapps.schema.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/schemas/moderation.schema.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/schemas/notifications.schema.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/schemas/oauth.schema.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/schemas/pagination.schema.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/schemas/payments.schema.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/schemas/privacy.schema.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/schemas/profiles.schema.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/schemas/reactions.schema.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/schemas/relationships.schema.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/schemas/search.schema.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/schemas/settings.schema.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/schemas/stories.schema.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "contracts/schemas/wallet.schema.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/baseline/cron.sql",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/baseline/extensions.sql",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/baseline/functions.sql",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/baseline/grants.sql",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/baseline/migration-history.csv",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/baseline/object-manifest.csv",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/baseline/policies.sql",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/baseline/roles.sql",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/baseline/schema.sql",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/baseline/triggers.sql",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/baseline/views.sql",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/migrations/.gitkeep",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/migrations/README.md",
+                      "status":  "documentation-or-inventory"
+                  },
+                  {
+                      "path":  "db/queries/admin/read.sql",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/queries/admin/write.sql",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/queries/ads/read.sql",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/queries/ads/write.sql",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/queries/ai/read.sql",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/queries/ai/write.sql",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/queries/bots/read.sql",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/queries/bots/write.sql",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/queries/calls/read.sql",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/queries/calls/write.sql",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/queries/channels/read.sql",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/queries/channels/write.sql",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/queries/comments/read.sql",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/queries/comments/write.sql",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/queries/content/read.sql",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/queries/content/write.sql",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/queries/exports/read.sql",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/queries/exports/write.sql",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/queries/feedback/read.sql",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/queries/feedback/write.sql",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/queries/feeds/read.sql",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/queries/feeds/write.sql",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/queries/identity/read.sql",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/queries/identity/write.sql",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/queries/live/read.sql",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/queries/live/write.sql",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/queries/logistics/read.sql",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/queries/logistics/write.sql",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/queries/maps/read.sql",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/queries/maps/write.sql",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/queries/marketplace/read.sql",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/queries/marketplace/write.sql",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/queries/media/read.sql",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/queries/media/write.sql",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/queries/messaging/read.sql",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/queries/messaging/write.sql",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/queries/miniapps/read.sql",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/queries/miniapps/write.sql",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/queries/moderation/read.sql",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/queries/moderation/write.sql",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/queries/notifications/read.sql",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/queries/notifications/write.sql",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/queries/oauth/read.sql",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/queries/oauth/write.sql",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/queries/payments/read.sql",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/queries/payments/write.sql",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/queries/privacy/read.sql",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/queries/privacy/write.sql",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/queries/profiles/read.sql",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/queries/profiles/write.sql",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/queries/reactions/read.sql",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/queries/reactions/write.sql",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/queries/relationships/read.sql",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/queries/relationships/write.sql",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/queries/search/read.sql",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/queries/search/write.sql",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/queries/settings/read.sql",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/queries/settings/write.sql",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/queries/stories/read.sql",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/queries/stories/write.sql",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/queries/wallet/read.sql",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/queries/wallet/write.sql",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/seeds/synthetic_commerce.sql",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/seeds/synthetic_content.sql",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/seeds/synthetic_messages.sql",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "db/seeds/synthetic_users.sql",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "deploy/README.md",
+                      "status":  "documentation-or-inventory"
+                  },
+                  {
+                      "path":  "deploy/compose/.env.example",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "deploy/compose/compose.yaml",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "deploy/containers/api.Dockerfile",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "deploy/containers/media.Dockerfile",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "deploy/containers/migrate.Dockerfile",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "deploy/containers/realtime.Dockerfile",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "deploy/containers/worker.Dockerfile",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "deploy/production/README.md",
+                      "status":  "documentation-or-inventory"
+                  },
+                  {
+                      "path":  "deploy/production/backup.yaml",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "deploy/production/ingress.yaml",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "deploy/production/livekit.yaml",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "deploy/production/media.yaml",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "deploy/production/objectstore.yaml",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "deploy/production/postgres.yaml",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "deploy/production/redis.yaml",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "deploy/production/secrets.example.yaml",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "deploy/production/services.yaml",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "deploy/production/turn.yaml",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "deploy/staging/README.md",
+                      "status":  "documentation-or-inventory"
+                  },
+                  {
+                      "path":  "deploy/staging/backup.yaml",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "deploy/staging/ingress.yaml",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "deploy/staging/livekit.yaml",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "deploy/staging/media.yaml",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "deploy/staging/objectstore.yaml",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "deploy/staging/postgres.yaml",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "deploy/staging/redis.yaml",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "deploy/staging/secrets.example.yaml",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "deploy/staging/services.yaml",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "deploy/staging/turn.yaml",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "go.mod",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "go.sum",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/adapters/ai/ai_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/adapters/ai/client.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/adapters/ai/streaming.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/adapters/ai/usage.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/adapters/email/client.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/adapters/email/email_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/adapters/email/templates.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/adapters/livekit/client.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/adapters/livekit/livekit_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/adapters/livekit/rooms.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/adapters/livekit/tokens.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/adapters/livekit/webhooks.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/adapters/objectstore/checksum.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/adapters/objectstore/client.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/adapters/objectstore/multipart.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/adapters/objectstore/objectstore_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/adapters/objectstore/presign.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/adapters/payme/authentication.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/adapters/payme/callbacks.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/adapters/payme/client.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/adapters/payme/payme_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/adapters/push/client.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/adapters/push/fcm.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/adapters/push/push_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/adapters/supabase/client.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/adapters/supabase/identity.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/adapters/supabase/import.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/adapters/supabase/supabase_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/adapters/supabase/verifier.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/admin/README.md",
+                      "status":  "documentation-or-inventory"
+                  },
+                  {
+                      "path":  "internal/domains/admin/audit.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/admin/authorization.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/admin/authorization_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/admin/controls.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/admin/events.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/admin/handler.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/admin/model.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/admin/permissions.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/admin/repository.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/admin/roles.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/admin/service.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/admin/service_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/admin/validation.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/ads/README.md",
+                      "status":  "documentation-or-inventory"
+                  },
+                  {
+                      "path":  "internal/domains/ads/analytics.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/ads/authorization.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/ads/authorization_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/ads/budgets.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/ads/campaigns.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/ads/delivery.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/ads/events.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/ads/experiments.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/ads/handler.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/ads/integrity.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/ads/model.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/ads/repository.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/ads/service.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/ads/service_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/ads/validation.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/ai/README.md",
+                      "status":  "documentation-or-inventory"
+                  },
+                  {
+                      "path":  "internal/domains/ai/authorization.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/ai/authorization_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/ai/budgets.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/ai/conversations.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/ai/events.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/ai/handler.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/ai/jobs.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/ai/model.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/ai/providers.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/ai/repository.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/ai/sandbox.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/ai/service.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/ai/service_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/ai/tools.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/ai/validation.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/bots/README.md",
+                      "status":  "documentation-or-inventory"
+                  },
+                  {
+                      "path":  "internal/domains/bots/authorization.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/bots/authorization_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/bots/commands.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/bots/events.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/bots/handler.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/bots/model.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/bots/registration.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/bots/repository.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/bots/service.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/bots/service_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/bots/tokens.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/bots/updates.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/bots/validation.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/calls/README.md",
+                      "status":  "documentation-or-inventory"
+                  },
+                  {
+                      "path":  "internal/domains/calls/authorization.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/calls/authorization_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/calls/events.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/calls/handler.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/calls/invitations.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/calls/lifecycle.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/calls/model.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/calls/participants.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/calls/repository.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/calls/service.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/calls/service_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/calls/timeouts.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/calls/tokens.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/calls/validation.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/calls/webhooks.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/channels/README.md",
+                      "status":  "documentation-or-inventory"
+                  },
+                  {
+                      "path":  "internal/domains/channels/authorization.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/channels/authorization_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/channels/channel.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/channels/events.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/channels/handler.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/channels/invitations.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/channels/model.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/channels/repository.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/channels/roles.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/channels/service.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/channels/service_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/channels/topics.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/channels/validation.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/comments/README.md",
+                      "status":  "documentation-or-inventory"
+                  },
+                  {
+                      "path":  "internal/domains/comments/authorization.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/comments/authorization_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/comments/comment.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/comments/events.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/comments/handler.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/comments/model.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/comments/replies.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/comments/repository.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/comments/service.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/comments/service_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/comments/validation.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/content/README.md",
+                      "status":  "documentation-or-inventory"
+                  },
+                  {
+                      "path":  "internal/domains/content/authorization.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/content/authorization_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/content/collaborations.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/content/drafts.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/content/events.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/content/handler.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/content/model.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/content/polls.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/content/posts.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/content/publishing.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/content/repository.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/content/scheduling.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/content/service.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/content/service_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/content/validation.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/exports/README.md",
+                      "status":  "documentation-or-inventory"
+                  },
+                  {
+                      "path":  "internal/domains/exports/archive.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/exports/authorization.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/exports/authorization_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/exports/deletion.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/exports/events.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/exports/handler.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/exports/model.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/exports/repository.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/exports/requests.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/exports/retention.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/exports/service.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/exports/service_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/exports/validation.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/feedback/README.md",
+                      "status":  "documentation-or-inventory"
+                  },
+                  {
+                      "path":  "internal/domains/feedback/authorization.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/feedback/authorization_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/feedback/events.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/feedback/handler.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/feedback/messages.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/feedback/model.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/feedback/repository.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/feedback/service.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/feedback/service_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/feedback/threads.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/feedback/validation.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/feeds/README.md",
+                      "status":  "documentation-or-inventory"
+                  },
+                  {
+                      "path":  "internal/domains/feeds/authorization.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/feeds/authorization_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/feeds/events.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/feeds/handler.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/feeds/model.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/feeds/pagination.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/feeds/ranking.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/feeds/repository.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/feeds/service.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/feeds/service_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/feeds/timeline.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/feeds/validation.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/identity/README.md",
+                      "status":  "documentation-or-inventory"
+                  },
+                  {
+                      "path":  "internal/domains/identity/account_slots.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/identity/accounts.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/identity/authorization.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/identity/authorization_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/identity/devices.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/identity/events.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/identity/handler.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/identity/mfa.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/identity/model.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/identity/recovery.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/identity/repository.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/identity/service.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/identity/service_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/identity/sessions.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/identity/validation.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/live/README.md",
+                      "status":  "documentation-or-inventory"
+                  },
+                  {
+                      "path":  "internal/domains/live/audience.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/live/authorization.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/live/authorization_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/live/broadcast.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/live/cohosts.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/live/events.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/live/handler.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/live/model.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/live/moderation.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/live/playback.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/live/recording.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/live/repository.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/live/service.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/live/service_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/live/validation.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/logistics/README.md",
+                      "status":  "documentation-or-inventory"
+                  },
+                  {
+                      "path":  "internal/domains/logistics/authorization.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/logistics/authorization_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/logistics/carriers.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/logistics/customs.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/logistics/events.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/logistics/handler.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/logistics/model.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/logistics/quotes.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/logistics/repository.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/logistics/service.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/logistics/service_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/logistics/shipments.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/logistics/tracking.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/logistics/validation.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/maps/README.md",
+                      "status":  "documentation-or-inventory"
+                  },
+                  {
+                      "path":  "internal/domains/maps/authorization.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/maps/authorization_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/maps/events.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/maps/handler.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/maps/live_location.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/maps/model.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/maps/places.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/maps/repository.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/maps/routes.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/maps/service.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/maps/service_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/maps/transit.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/maps/validation.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/marketplace/README.md",
+                      "status":  "documentation-or-inventory"
+                  },
+                  {
+                      "path":  "internal/domains/marketplace/authorization.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/marketplace/authorization_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/marketplace/cart.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/marketplace/catalog.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/marketplace/checkout.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/marketplace/events.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/marketplace/handler.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/marketplace/inventory.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/marketplace/model.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/marketplace/orders.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/marketplace/repository.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/marketplace/reviews.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/marketplace/sellers.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/marketplace/service.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/marketplace/service_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/marketplace/validation.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/media/README.md",
+                      "status":  "documentation-or-inventory"
+                  },
+                  {
+                      "path":  "internal/domains/media/access.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/media/assets.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/media/authorization.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/media/authorization_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/media/events.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/media/finalization.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/media/handler.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/media/legacy.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/media/model.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/media/processing.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/media/repository.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/media/service.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/media/service_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/media/uploads.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/media/validation.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/media/variants.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/messaging/README.md",
+                      "status":  "documentation-or-inventory"
+                  },
+                  {
+                      "path":  "internal/domains/messaging/attachments.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/messaging/authorization.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/messaging/authorization_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/messaging/conversations.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/messaging/deletions.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/messaging/edits.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/messaging/events.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/messaging/forwards.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/messaging/handler.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/messaging/membership.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/messaging/mentions.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/messaging/messages.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/messaging/model.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/messaging/pins.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/messaging/receipts.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/messaging/repository.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/messaging/requests.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/messaging/service.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/messaging/service_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/messaging/stickers.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/messaging/sync.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/messaging/validation.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/miniapps/README.md",
+                      "status":  "documentation-or-inventory"
+                  },
+                  {
+                      "path":  "internal/domains/miniapps/authorization.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/miniapps/authorization_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/miniapps/domains.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/miniapps/embedding.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/miniapps/events.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/miniapps/grants.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/miniapps/handler.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/miniapps/init_data.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/miniapps/manifests.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/miniapps/model.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/miniapps/repository.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/miniapps/service.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/miniapps/service_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/miniapps/validation.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/moderation/README.md",
+                      "status":  "documentation-or-inventory"
+                  },
+                  {
+                      "path":  "internal/domains/moderation/appeals.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/moderation/authorization.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/moderation/authorization_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/moderation/cases.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/moderation/decisions.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/moderation/events.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/moderation/handler.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/moderation/model.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/moderation/reports.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/moderation/repository.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/moderation/service.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/moderation/service_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/moderation/validation.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/notifications/README.md",
+                      "status":  "documentation-or-inventory"
+                  },
+                  {
+                      "path":  "internal/domains/notifications/authorization.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/notifications/authorization_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/notifications/delivery.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/notifications/events.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/notifications/handler.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/notifications/inbox.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/notifications/model.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/notifications/preferences.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/notifications/push_tokens.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/notifications/repository.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/notifications/service.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/notifications/service_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/notifications/validation.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/oauth/README.md",
+                      "status":  "documentation-or-inventory"
+                  },
+                  {
+                      "path":  "internal/domains/oauth/authorization.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/oauth/authorization_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/oauth/clients.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/oauth/consent.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/oauth/discovery.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/oauth/events.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/oauth/handler.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/oauth/model.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/oauth/repository.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/oauth/revocation.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/oauth/service.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/oauth/service_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/oauth/tokens.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/oauth/validation.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/payments/README.md",
+                      "status":  "documentation-or-inventory"
+                  },
+                  {
+                      "path":  "internal/domains/payments/authorization.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/payments/authorization_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/payments/callbacks.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/payments/events.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/payments/handler.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/payments/intents.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/payments/model.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/payments/refunds.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/payments/repository.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/payments/service.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/payments/service_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/payments/settlement.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/payments/validation.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/privacy/README.md",
+                      "status":  "documentation-or-inventory"
+                  },
+                  {
+                      "path":  "internal/domains/privacy/audience.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/privacy/authorization.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/privacy/authorization_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/privacy/consent.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/privacy/discoverability.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/privacy/events.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/privacy/handler.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/privacy/model.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/privacy/repository.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/privacy/service.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/privacy/service_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/privacy/validation.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/profiles/README.md",
+                      "status":  "documentation-or-inventory"
+                  },
+                  {
+                      "path":  "internal/domains/profiles/authorization.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/profiles/authorization_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/profiles/avatar.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/profiles/events.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/profiles/handler.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/profiles/model.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/profiles/profile.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/profiles/repository.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/profiles/service.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/profiles/service_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/profiles/username.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/profiles/validation.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/reactions/README.md",
+                      "status":  "documentation-or-inventory"
+                  },
+                  {
+                      "path":  "internal/domains/reactions/authorization.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/reactions/authorization_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/reactions/counters.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/reactions/events.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/reactions/handler.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/reactions/model.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/reactions/reaction.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/reactions/repository.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/reactions/service.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/reactions/service_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/reactions/validation.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/relationships/README.md",
+                      "status":  "documentation-or-inventory"
+                  },
+                  {
+                      "path":  "internal/domains/relationships/authorization.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/relationships/authorization_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/relationships/block.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/relationships/events.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/relationships/follow.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/relationships/handler.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/relationships/model.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/relationships/mute.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/relationships/repository.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/relationships/service.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/relationships/service_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/relationships/validation.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/search/README.md",
+                      "status":  "documentation-or-inventory"
+                  },
+                  {
+                      "path":  "internal/domains/search/authorization.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/search/authorization_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/search/events.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/search/handler.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/search/indexing.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/search/model.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/search/query.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/search/repository.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/search/service.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/search/service_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/search/validation.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/search/visibility.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/settings/README.md",
+                      "status":  "documentation-or-inventory"
+                  },
+                  {
+                      "path":  "internal/domains/settings/account_storage.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/settings/authorization.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/settings/authorization_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/settings/events.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/settings/handler.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/settings/model.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/settings/preferences.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/settings/repository.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/settings/service.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/settings/service_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/settings/validation.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/stories/README.md",
+                      "status":  "documentation-or-inventory"
+                  },
+                  {
+                      "path":  "internal/domains/stories/archive.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/stories/authorization.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/stories/authorization_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/stories/events.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/stories/handler.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/stories/model.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/stories/repository.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/stories/service.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/stories/service_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/stories/story.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/stories/validation.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/stories/viewers.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/wallet/README.md",
+                      "status":  "documentation-or-inventory"
+                  },
+                  {
+                      "path":  "internal/domains/wallet/accounts.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/wallet/authorization.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/wallet/authorization_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/wallet/balances.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/wallet/events.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/wallet/handler.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/wallet/ledger.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/wallet/model.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/wallet/reconciliation.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/wallet/repository.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/wallet/service.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/wallet/service_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/wallet/transfers.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/domains/wallet/validation.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/jobs/outbox/dedupe.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/jobs/outbox/delivery.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/jobs/outbox/dispatcher.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/jobs/outbox/outbox_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/jobs/reconciliation/counters.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/jobs/reconciliation/objects.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/jobs/reconciliation/payments.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/jobs/reconciliation/reconciliation_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/jobs/retention/cleanup.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/jobs/retention/retention_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/jobs/retention/tombstones.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/jobs/scheduler/leases.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/jobs/scheduler/retries.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/jobs/scheduler/runner.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/jobs/scheduler/scheduler_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/platform/auth/README.md",
+                      "status":  "documentation-or-inventory"
+                  },
+                  {
+                      "path":  "internal/platform/auth/auth_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/platform/auth/authorization.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/platform/auth/principal.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/platform/auth/sessions.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/platform/auth/verifier.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/platform/clock/README.md",
+                      "status":  "documentation-or-inventory"
+                  },
+                  {
+                      "path":  "internal/platform/clock/clock.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/platform/clock/clock_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/platform/config/README.md",
+                      "status":  "documentation-or-inventory"
+                  },
+                  {
+                      "path":  "internal/platform/config/config.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/platform/config/config_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/platform/config/validation.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/platform/db/README.md",
+                      "status":  "documentation-or-inventory"
+                  },
+                  {
+                      "path":  "internal/platform/db/actor_context.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/platform/db/db_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/platform/db/pool.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/platform/db/transactions.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/platform/http/README.md",
+                      "status":  "documentation-or-inventory"
+                  },
+                  {
+                      "path":  "internal/platform/http/cors.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/platform/http/errors.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/platform/http/http_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/platform/http/limits.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/platform/http/middleware.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/platform/http/pagination.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/platform/http/request_id.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/platform/http/router.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/platform/idempotency/README.md",
+                      "status":  "documentation-or-inventory"
+                  },
+                  {
+                      "path":  "internal/platform/idempotency/idempotency_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/platform/idempotency/middleware.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/platform/idempotency/store.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/platform/observability/README.md",
+                      "status":  "documentation-or-inventory"
+                  },
+                  {
+                      "path":  "internal/platform/observability/logging.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/platform/observability/metrics.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/platform/observability/observability_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/platform/observability/redaction.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "internal/platform/observability/tracing.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "observability/alerts/availability.yaml",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "observability/alerts/backups.yaml",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "observability/alerts/budgets.yaml",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "observability/alerts/database.yaml",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "observability/alerts/jobs.yaml",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "observability/alerts/rtc.yaml",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "observability/dashboards/api.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "observability/dashboards/calls.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "observability/dashboards/costs.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "observability/dashboards/database.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "observability/dashboards/jobs.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "observability/dashboards/media.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "observability/dashboards/realtime.json",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "runbooks/cutover/README.md",
+                      "status":  "documentation-or-inventory"
+                  },
+                  {
+                      "path":  "runbooks/incident/README.md",
+                      "status":  "documentation-or-inventory"
+                  },
+                  {
+                      "path":  "runbooks/key-rotation/README.md",
+                      "status":  "documentation-or-inventory"
+                  },
+                  {
+                      "path":  "runbooks/restore/README.md",
+                      "status":  "documentation-or-inventory"
+                  },
+                  {
+                      "path":  "runbooks/rollback/README.md",
+                      "status":  "documentation-or-inventory"
+                  },
+                  {
+                      "path":  "scaffold-manifest.json",
+                      "status":  "documentation-or-inventory"
+                  },
+                  {
+                      "path":  "scripts/copy-objects/README.md",
+                      "status":  "documentation-or-inventory"
+                  },
+                  {
+                      "path":  "scripts/copy-objects/copy.ps1",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "scripts/copy-objects/verify.ps1",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "scripts/inventory/README.md",
+                      "status":  "documentation-or-inventory"
+                  },
+                  {
+                      "path":  "scripts/inventory/contracts.ps1",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "scripts/inventory/objects.ps1",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "scripts/inventory/schema.ps1",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "scripts/inventory/usage.ps1",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "scripts/reconcile/README.md",
+                      "status":  "documentation-or-inventory"
+                  },
+                  {
+                      "path":  "scripts/reconcile/database.ps1",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "scripts/reconcile/ledger.ps1",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "scripts/reconcile/media.ps1",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "scripts/verify/README.md",
+                      "status":  "documentation-or-inventory"
+                  },
+                  {
+                      "path":  "scripts/verify/contracts.ps1",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "scripts/verify/restore.ps1",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "scripts/verify/scaffold.ps1",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "scripts/verify/security.ps1",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "sqlc.yaml",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "tests/contract/README.md",
+                      "status":  "documentation-or-inventory"
+                  },
+                  {
+                      "path":  "tests/contract/api_parity_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "tests/contract/events_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "tests/contract/legacy_payloads_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "tests/contract/message_protocol_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "tests/integration/README.md",
+                      "status":  "documentation-or-inventory"
+                  },
+                  {
+                      "path":  "tests/integration/media_pipeline_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "tests/integration/outbox_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "tests/integration/transactions_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "tests/integration/wallet_ledger_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "tests/load/README.md",
+                      "status":  "documentation-or-inventory"
+                  },
+                  {
+                      "path":  "tests/load/api_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "tests/load/calls_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "tests/load/live_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "tests/load/messages_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "tests/load/websocket_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "tests/migration/README.md",
+                      "status":  "documentation-or-inventory"
+                  },
+                  {
+                      "path":  "tests/migration/baseline_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "tests/migration/cutover_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "tests/migration/object_copy_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "tests/migration/reconciliation_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "tests/migration/restore_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "tests/migration/rollback_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "tests/security/README.md",
+                      "status":  "documentation-or-inventory"
+                  },
+                  {
+                      "path":  "tests/security/authorization_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "tests/security/object_access_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "tests/security/rate_limits_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "tests/security/session_revocation_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "tests/security/ssrf_test.go",
+                      "status":  "placeholder"
+                  },
+                  {
+                      "path":  "tests/unit/README.md",
+                      "status":  "documentation-or-inventory"
+                  },
+                  {
+                      "path":  "tests/unit/invariants_test.go",
+                      "status":  "placeholder"
+                  }
+              ]
+}
