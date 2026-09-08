@@ -32,6 +32,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Skeleton } from '@/components/ui/skeleton';
+import { ProfileCommercePanel } from '@/components/profile/ProfileCommercePanel';
 
 interface StoryHighlightsProps {
   userId: string;
@@ -118,6 +119,8 @@ export function StoryHighlights({ userId, className }: StoryHighlightsProps) {
 
   return (
     <>
+      {isOwnProfile && <ProfileCommercePanel className="mb-6" />}
+
       <div className={cn('space-y-2', className)}>
         <div className="flex items-center justify-between">
           <h2 className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
@@ -152,7 +155,7 @@ export function StoryHighlights({ userId, className }: StoryHighlightsProps) {
               </span>
               <span className="block text-xs text-muted-foreground">
                 {t('profile.highlights.createHint', {
-                  defaultValue: "Story'laringizni profilda doimiy saqlab qo\u2018ying",
+                  defaultValue: "Story'laringizni profilda doimiy saqlab qo‘ying",
                 })}
               </span>
             </span>
@@ -267,7 +270,7 @@ export function StoryHighlights({ userId, className }: StoryHighlightsProps) {
             <DialogDescription>
               {t('profile.highlights.createDescription', {
                 defaultValue:
-                  "Tanlanganga nom bering. Story'larni keyinroq arxivdan qo\u2018shishingiz mumkin.",
+                  "Tanlanganga nom bering. Story'larni keyinroq arxivdan qo‘shishingiz mumkin.",
               })}
             </DialogDescription>
           </DialogHeader>
@@ -330,7 +333,7 @@ export function StoryHighlights({ userId, className }: StoryHighlightsProps) {
             <AlertDialogDescription>
               {t('profile.highlights.deleteDescription', {
                 defaultValue:
-                  '\u201c' + NAME_TOKEN + "\u201d butunlay o'chiriladi. Story'lar arxivda qoladi.",
+                  '“' + NAME_TOKEN + '” butunlay o\'chiriladi. Story\'lar arxivda qoladi.',
                 name: deletingHighlight?.name || '',
               })}
             </AlertDialogDescription>
