@@ -67,7 +67,73 @@
   }
 }
 
+/*
+ * Product detail mobile containment.
+ *
+ * ProductDetail is the direct `.relative.min-h-full` child of the
+ * `.marketplace-neutral` page wrapper. Long prices, translated labels, seller
+ * names and variant values must never become the grid item's intrinsic width.
+ * Let flex/grid children actually shrink, wrap summary rows when needed, and
+ * keep monetary values intact on their own line instead of clipping offscreen.
+ */
+.marketplace-neutral > .relative.min-h-full {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+.marketplace-neutral > .relative.min-h-full .grid > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
 @media (max-width: 767px) {
+  .marketplace-neutral > .relative.min-h-full .flex.justify-between {
+    min-width: 0;
+    flex-wrap: wrap;
+  }
+
+  .marketplace-neutral > .relative.min-h-full .flex.justify-between > * {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .marketplace-neutral > .relative.min-h-full .text-3xl.font-extrabold {
+    max-width: 100%;
+    font-size: clamp(1.75rem, 8.5vw, 2.25rem);
+    line-height: 1.08;
+    white-space: nowrap;
+  }
+
+  .marketplace-neutral > .relative.min-h-full .text-lg.font-extrabold {
+    margin-left: auto;
+    max-width: 100%;
+    font-size: clamp(1rem, 4.8vw, 1.125rem);
+    line-height: 1.25;
+    white-space: nowrap;
+  }
+
+  .marketplace-neutral > .relative.min-h-full .mt-1.flex.justify-between {
+    column-gap: 0.75rem;
+    row-gap: 0.25rem;
+  }
+
+  .marketplace-neutral > .relative.min-h-full .space-y-5.p-4,
+  .marketplace-neutral > .relative.min-h-full .space-y-6,
+  .marketplace-neutral > .relative.min-h-full .rounded-2xl {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .marketplace-neutral > .relative.min-h-full h1,
+  .marketplace-neutral > .relative.min-h-full h2,
+  .marketplace-neutral > .relative.min-h-full h3,
+  .marketplace-neutral > .relative.min-h-full p {
+    max-width: 100%;
+    overflow-wrap: break-word;
+  }
+
   .marketplace-neutral [class~="bottom-[78px]"] {
     bottom: env(safe-area-inset-bottom) !important;
     padding-bottom: calc(0.75rem + env(safe-area-inset-bottom)) !important;

@@ -9,7 +9,6 @@ import {
   MARKETPLACE_LOCATION_PICKER_OPEN_EVENT,
   useMarketplaceDeliveryLocation,
 } from '@/hooks/useMarketplaceDeliveryLocation';
-import { useIsMobile } from '@/hooks/use-mobile';
 
 const RETURN_ROUTE_KEY = 'alsamos:marketplace:return-route';
 
@@ -18,19 +17,20 @@ function safeInternalRoute(value: string | null) {
 }
 
 /**
- * Marketplace chrome bridge.
+ * Shared Marketplace chrome bridge.
  *
- * The old implementation rendered a permanently floating delivery-location
- * pill above every Marketplace screen. That obscured products and competed
- * with the Marketplace bottom nav. This bridge is intentionally invisible
- * until a product/cart/checkout asks for an address; then it opens the shared
- * map picker. It also injects a real mobile back button into the Marketplace
- * header without bringing back the global app-shell header.
+ * Delivery address UI stays contextual: product/cart/checkout can ask for the
+ * picker without a permanent floating dock covering commerce content.
+ *
+ * The Marketplace home back button is portaled directly into the real sticky
+ * header row. The row can be replaced once on mobile when useIsMobile settles
+ * and PullToRefresh mounts, so the MutationObserver deliberately keeps
+ * watching instead of disconnecting after the first match. This prevents the
+ * portal from getting stranded in a detached, invisible header node.
  */
 export function MarketplaceDeliveryLocationDock() {
   const route = useLocation();
   const navigate = useNavigate();
-  const isMobile = useIsMobile();
   const [pickerOpen, setPickerOpen] = useState(false);
   const [headerTarget, setHeaderTarget] = useState<HTMLElement | null>(null);
   const { location, setLocation } = useMarketplaceDeliveryLocation();
@@ -43,7 +43,7 @@ export function MarketplaceDeliveryLocationDock() {
           `${route.pathname}${route.search}${route.hash}`,
         );
       } catch {
-        // Navigation fallback remains /home when session storage is unavailable.
+        // Navigation still falls back to browser history or /home.
       }
     }
   }, [route.hash, route.pathname, route.search]);
@@ -55,7 +55,7 @@ export function MarketplaceDeliveryLocationDock() {
   }, []);
 
   useEffect(() => {
-    if (!isMobile || route.pathname !== '/marketplace') {
+    if (route.pathname !== '/marketplace') {
       setHeaderTarget(null);
       return;
     }
@@ -63,51 +63,54 @@ export function MarketplaceDeliveryLocationDock() {
     const findTarget = () =>
       document.querySelector<HTMLElement>('.marketplace-neutral > header > div > div');
 
-    const immediate = findTarget();
-    if (immediate) {
-      setHeaderTarget(immediate);
-      return;
-    }
-
-    const observer = new MutationObserver(() => {
+    const syncTarget = () => {
       const target = findTarget();
-      if (target) {
-        setHeaderTarget(target);
-        observer.disconnect();
-      }
-    });
+      setHeaderTarget(current => (current === target ? current : target));
+    };
+
+    syncTarget();
+
+    // Keep observing while the Marketplace home route is mounted. On mobile
+    // the first header can be replaced after the responsive hook resolves.
+    const observer = new MutationObserver(syncTarget);
     observer.observe(document.body, { childList: true, subtree: true });
+
     return () => observer.disconnect();
-  }, [isMobile, route.pathname]);
+  }, [route.pathname]);
 
   const goBack = () => {
+    // The main Marketplace back action should return to the app surface from
+    // which Marketplace was entered, even after browsing products internally.
+    try {
+      const stored = sessionStorage.getItem(RETURN_ROUTE_KEY);
+      if (safeInternalRoute(stored) && !stored!.startsWith('/marketplace')) {
+        navigate(stored!);
+        return;
+      }
+    } catch {
+      // Continue with history fallback.
+    }
+
     const historyIndex = Number(window.history.state?.idx);
     if (Number.isFinite(historyIndex) && historyIndex > 0) {
       navigate(-1);
       return;
     }
 
-    let fallback = '/home';
-    try {
-      const stored = sessionStorage.getItem(RETURN_ROUTE_KEY);
-      if (safeInternalRoute(stored) && !stored!.startsWith('/marketplace')) fallback = stored!;
-    } catch {
-      // /home is a safe deterministic fallback.
-    }
-    navigate(fallback, { replace: true });
+    navigate('/home', { replace: true });
   };
 
   const showPicker = route.pathname.startsWith('/marketplace') && route.pathname !== '/marketplace/chat';
 
   return (
     <>
-      {isMobile && route.pathname === '/marketplace' && headerTarget
+      {route.pathname === '/marketplace' && headerTarget
         ? createPortal(
             <Button
               type="button"
-              variant="ghost"
+              variant="outline"
               size="icon"
-              className="order-first h-11 w-11 shrink-0 rounded-2xl border border-border/50 bg-background/80 shadow-sm md:hidden"
+              className="order-first h-11 w-11 shrink-0 rounded-2xl border-border/60 bg-background/90 shadow-sm md:hidden"
               onClick={goBack}
               aria-label="Oldingi sahifaga qaytish"
             >
