@@ -845,8 +845,16 @@ export function useWebRTC(roomId: string | null) {
           for (const row of backlog) {
             const payload = (row.payload || {}) as unknown as SignalPayload;
             if (markSignalSeen(payload.signalId || row.id)) continue;
-            if (row.type === "offer" && payload.sdp) await handleOffer(row.sender_id, payload.sdp);
-            if (row.type === "answer" && payload.sdp) await handleAnswer(row.sender_id, payload.sdp);
+
+            // Never replay an old SDP into a peer that is already negotiated:
+            // that reopens the m-line ordering race and kills live media.
+            const existingPc = peerConnectionsRef.current.get(row.sender_id);
+            const alreadyNegotiated = Boolean(existingPc?.currentRemoteDescription);
+
+            if (row.type === "offer" && payload.sdp && !alreadyNegotiated)
+              await handleOffer(row.sender_id, payload.sdp);
+            if (row.type === "answer" && payload.sdp && !alreadyNegotiated)
+              await handleAnswer(row.sender_id, payload.sdp);
             if (row.type === "ice" && payload.candidate) await handleIce(row.sender_id, payload.candidate);
             if (row.type === "leave") closePeer(row.sender_id);
           }
