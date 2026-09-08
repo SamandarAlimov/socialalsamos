@@ -1,0 +1,25 @@
+port: 7880
+log_level: info
+
+rtc:
+  tcp_port: 7881
+  port_range_start: 50000
+  port_range_end: 60000
+  use_external_ip: true
+
+# The production compose file runs Redis on host networking, bound to loopback.
+redis:
+  address: 127.0.0.1:6379
+
+# API keys are intentionally NOT committed here.
+# Provide them with LIVEKIT_KEYS="api_key: api_secret" at runtime.
+turn:
+  enabled: true
+  udp_port: 3478
+  # For maximum restrictive-network coverage, provision a TLS certificate and:
+  # tls_port: 5349
+  # domain: turn.alsamos.com
+  # cert_file: /etc/livekit/tls/tls.crt
+  # key_file: /etc/livekit/tls/tls.key
+
+prometheus_port: 6789
