@@ -65,6 +65,14 @@ function findVideoSurfaceAt(clientX: number, clientY: number) {
   return null;
 }
 
+function isVideoWatchSurface(surface: HTMLElement) {
+  return Boolean(surface.querySelector('button[aria-label="Videolarga qaytish"]'));
+}
+
+function revealVideoWatchControls(surface: HTMLElement) {
+  surface.dispatchEvent(new Event('pointermove', { bubbles: true }));
+}
+
 function seekVideoBy(video: HTMLVideoElement, delta: number) {
   const current = Number.isFinite(video.currentTime) ? video.currentTime : 0;
   const duration = Number.isFinite(video.duration) && video.duration > 0 ? video.duration : null;
@@ -80,12 +88,15 @@ function seekVideoBy(video: HTMLVideoElement, delta: number) {
 /**
  * Distinguishes single tap from double tap while preserving the richer Alsamos
  * video gesture model:
- * - single tap: play/pause;
+ * - regular Videos feed single tap: play/pause;
+ * - YouTube-style VideoWatchPanel single tap: reveal controls without changing
+ *   playback; play/pause remains an explicit controller action;
  * - double tap in left third: seek -10s (YouTube-style);
  * - double tap in center third: caller action (VideosPage = like);
  * - double tap in right third: seek +10s (YouTube-style).
  *
- * Long-press speed/pause is handled separately by VideosPage and is unaffected.
+ * Long-press speed/pause is handled separately by the owning video surface and
+ * is unaffected.
  */
 export function useVideoSurfaceTap({
   onSingleTap,
@@ -159,9 +170,19 @@ export function useVideoSurfaceTap({
     lastTapRef.current = { x: clientX, y: clientY, at: now };
     lastRegisteredAtRef.current = now;
     timerRef.current = setTimeout(() => {
+      const point = lastTapRef.current;
       timerRef.current = null;
       lastTapRef.current = null;
       lastRegisteredAtRef.current = 0;
+
+      if (point) {
+        const hit = findVideoSurfaceAt(point.x, point.y);
+        if (hit && isVideoWatchSurface(hit.surface)) {
+          revealVideoWatchControls(hit.surface);
+          return;
+        }
+      }
+
       onSingleTap();
     }, delay);
   }, [cancelTimer, delay, maxDistance, onDoubleTap, onSingleTap, seekSeconds]);

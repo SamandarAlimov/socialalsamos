@@ -165,4 +165,36 @@ describe('useVideoSurfaceTap', () => {
     expect(onDoubleTap).not.toHaveBeenCalled();
     expect(onSingleTap).not.toHaveBeenCalled();
   });
+
+  it('reveals VideoWatchPanel controls on single tap instead of toggling playback', () => {
+    const surface = document.createElement('div');
+    const video = document.createElement('video');
+    const backButton = document.createElement('button');
+    backButton.setAttribute('aria-label', 'Videolarga qaytish');
+    surface.append(video, backButton);
+    document.body.appendChild(surface);
+
+    Object.defineProperty(document, 'elementFromPoint', {
+      configurable: true,
+      value: vi.fn(() => surface),
+    });
+
+    const revealControls = vi.fn();
+    surface.addEventListener('pointermove', revealControls);
+
+    const onSingleTap = vi.fn();
+    const onDoubleTap = vi.fn();
+    const { result } = renderHook(() =>
+      useVideoSurfaceTap({ onSingleTap, onDoubleTap, delay: 240 }),
+    );
+
+    act(() => {
+      result.current.registerTap(150, 220);
+      vi.advanceTimersByTime(240);
+    });
+
+    expect(revealControls).toHaveBeenCalledTimes(1);
+    expect(onSingleTap).not.toHaveBeenCalled();
+    expect(onDoubleTap).not.toHaveBeenCalled();
+  });
 });
