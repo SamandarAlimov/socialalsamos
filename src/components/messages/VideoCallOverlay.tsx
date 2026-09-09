@@ -18,7 +18,12 @@ import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { UI_LAYER } from '@/lib/uiLayers';
-import { callPhaseLabel, deriveCallUiPhase, formatCallDuration } from '@/lib/callUi';
+import {
+  callPhaseLabel,
+  deriveCallUiPhase,
+  formatCallDuration,
+  resolveCallDisplayName,
+} from '@/lib/callUi';
 import { NetworkQualityIndicator } from './NetworkQualityIndicator';
 import { CallDebugPanel } from './CallDebugPanel';
 import type { CallStats, ICEDebugInfo } from '@/hooks/useCallStats';
@@ -109,7 +114,6 @@ function MediaElement({
     );
   }
 
-  // Audio calls and camera-off participants still need a live media element.
   return <audio ref={ref as React.RefObject<HTMLAudioElement>} autoPlay className="hidden" />;
 }
 
@@ -210,9 +214,14 @@ export function VideoCallOverlay({
   const [isDragging, setIsDragging] = useState(false);
 
   const primaryParticipant = participants[0];
-  const displayName = primaryParticipant?.name || peerName || 'Suhbatdosh';
+  const isGroupCall = participants.length > 1 || Boolean(onAddPeople);
+  const displayName = resolveCallDisplayName({
+    participantName: primaryParticipant?.name,
+    peerName,
+    participantCount: participants.length,
+    groupControlsAvailable: Boolean(onAddPeople),
+  });
   const displayAvatar = primaryParticipant?.avatarUrl || peerAvatar;
-  const isGroupCall = participants.length > 1;
 
   const changeOutputDevice = useCallback((deviceId: string) => {
     setOutputDeviceId(deviceId);
@@ -277,8 +286,6 @@ export function VideoCallOverlay({
     setShowControls(true);
     if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
 
-    // Audio/ringing/error states keep controls visible. Auto-hide only while a
-    // connected video is actually occupying the canvas.
     if (!isCallConnected || !hasRemoteVideo || isMinimized) return;
 
     controlsTimeoutRef.current = setTimeout(() => {
@@ -424,7 +431,6 @@ export function VideoCallOverlay({
       onTouchStart={revealControls}
       onClick={revealControls}
     >
-      {/* Ambient background keeps audio/camera-off calls visually premium. */}
       <div className="pointer-events-none absolute inset-0">
         {displayAvatar ? (
           <>
@@ -440,7 +446,6 @@ export function VideoCallOverlay({
         )}
       </div>
 
-      {/* Remote media. Audio-only streams are deliberately attached too. */}
       <div className="absolute inset-0">
         {participants.length === 1 && primaryParticipant ? (
           primaryParticipant.stream ? (
@@ -498,8 +503,7 @@ export function VideoCallOverlay({
         ) : null}
       </div>
 
-      {/* Waiting/audio/camera-off identity stage. */}
-      {(!hasRemoteVideo && !isGroupCall) && (
+      {!hasRemoteVideo && !isGroupCall && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-6 pb-24">
           <div className="flex max-w-lg flex-col items-center text-center">
             <div className="relative mb-6">
@@ -531,7 +535,6 @@ export function VideoCallOverlay({
         </div>
       )}
 
-      {/* Top glass bar. */}
       <div
         className={cn(
           'safe-area-inset-top absolute inset-x-0 top-0 z-30 flex items-center justify-between gap-3 bg-gradient-to-b from-black/75 via-black/30 to-transparent px-3 pb-8 pt-3 transition-opacity duration-200 sm:px-5',
@@ -614,7 +617,6 @@ export function VideoCallOverlay({
 
       {callStats && debugInfo && <CallDebugPanel stats={callStats} debugInfo={debugInfo} />}
 
-      {/* Local picture-in-picture. */}
       {localStream && (
         <div
           className={cn(
@@ -655,7 +657,6 @@ export function VideoCallOverlay({
         </div>
       )}
 
-      {/* Floating Telegram-style control dock. */}
       <div
         className={cn(
           'safe-area-inset-bottom absolute bottom-3 left-1/2 z-30 -translate-x-1/2 transition-all duration-200 sm:bottom-5',

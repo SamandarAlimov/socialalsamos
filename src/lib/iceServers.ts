@@ -33,22 +33,47 @@ const STUN_SERVERS: RTCIceServer[] = [
   { urls: "stun:stun4.l.google.com:19302" },
 ];
 
-// Reliability is the production default. Setting the flag explicitly to false
-// is the only way to strip TURN from the candidate set.
 const TURN_RELAY_ENABLED =
   String(import.meta.env.VITE_WEBRTC_ALLOW_TURN_RELAY ?? "true")
     .trim()
     .toLowerCase() !== "false";
 
+/**
+ * Remote TURN credentials are deliberately short cached. Production providers
+ * commonly rotate ephemeral credentials; keeping them for the lifetime of the
+ * SPA makes later calls fail even though call_webrtc_config already contains a
+ * replacement credential.
+ */
+export const REMOTE_ICE_CACHE_TTL_MS = 60_000;
+export const RELAY_PROBE_TTL_MS = 60_000;
+
 let warnedTurnDisabled = false;
 let warnedTurnMissing = false;
 let loggedTurnConfigured = false;
 let relayProbePromise: Promise<TurnRelayProbeResult> | null = null;
+let relayProbeAt = 0;
+let relayProbeConfigKey = "";
+let cachedRemote: RTCIceServer[] | null = null;
+let cachedRemoteAt = 0;
+let inflight: Promise<RTCIceServer[]> | null = null;
 
 export interface TurnRelayProbeResult {
   configured: boolean;
   relayCandidateGathered: boolean;
   error?: string;
+}
+
+export interface LoadIceServersOptions {
+  /** Bypass a still-fresh remote cache. Concurrent refreshes are still deduped. */
+  forceRefresh?: boolean;
+}
+
+export function isIceServerCacheFresh(
+  cachedAt: number,
+  now = Date.now(),
+  ttlMs = REMOTE_ICE_CACHE_TTL_MS,
+): boolean {
+  return cachedAt > 0 && now >= cachedAt && now - cachedAt < ttlMs;
 }
 
 export function urlsOfIceServer(server: RTCIceServer): string[] {
@@ -70,10 +95,6 @@ export function hasTurnRelay(servers: RTCIceServer[]): boolean {
   return servers.some((server) => urlsOfIceServer(server).some(isTurnUrl));
 }
 
-/**
- * Relay policy is exported for deterministic regression testing. Production
- * callers use TURN unless it has been explicitly disabled by environment.
- */
 export function applyRelayPolicy(
   servers: RTCIceServer[],
   relayEnabled = TURN_RELAY_ENABLED,
@@ -124,10 +145,6 @@ function dedupeIceServers(servers: RTCIceServer[]): RTCIceServer[] {
   for (const server of servers) {
     const credentialKey = iceServerCredentialKey(server);
     const uniqueUrls = urlsOfIceServer(server).filter((url) => {
-      // Credentials are part of the key on purpose. During TURN credential
-      // rotation the same endpoint may temporarily exist with old and new
-      // credentials. Keeping both is safer than allowing one source to hide
-      // the other.
       const key = `${url}|${credentialKey}`;
       if (seen.has(key)) return false;
       seen.add(key);
@@ -144,11 +161,6 @@ function dedupeIceServers(servers: RTCIceServer[]): RTCIceServer[] {
   return result;
 }
 
-/**
- * Merge independent ICE sources without allowing one source to replace the
- * others. This is especially important in production where database TURN
- * credentials can rotate independently from deployment environment values.
- */
 export function mergeIceServerSources(
   ...sources: Array<RTCIceServer[] | null | undefined>
 ): RTCIceServer[] {
@@ -157,10 +169,6 @@ export function mergeIceServerSources(
   );
 }
 
-/**
- * Keep only TURN/TURNS URLs while preserving the credentials belonging to the
- * original RTCIceServer entry. Used by the relay-only operational probe.
- */
 export function getTurnIceServers(servers: RTCIceServer[]): RTCIceServer[] {
   return servers.flatMap((server) => {
     const turnUrls = urlsOfIceServer(server).filter(isTurnUrl);
@@ -220,14 +228,6 @@ export function getIceServers(): RTCIceServer[] {
 
 export const ICE_SERVERS = getIceServers();
 
-/**
- * Prove that the browser can actually allocate a TURN relay candidate.
- *
- * This deliberately uses iceTransportPolicy='relay': a host or srflx candidate
- * cannot produce a false positive. No microphone/camera permission is needed;
- * a data channel is enough to trigger ICE gathering. The probe is diagnostic
- * and never forces the real call to use TURN when direct P2P works.
- */
 export async function probeTurnRelay(
   servers: RTCIceServer[],
   timeoutMs = 8_000,
@@ -271,10 +271,6 @@ export async function probeTurnRelay(
           settle(true);
           return;
         }
-
-        // A null candidate marks completion of ICE gathering. If no relay was
-        // observed before this point, the configured TURN service did not
-        // produce an allocation for this browser/network.
         if (!event.candidate) settle(false);
       };
 
@@ -328,9 +324,34 @@ export async function probeTurnRelay(
   }
 }
 
-function verifyRelayOperationally(servers: RTCIceServer[]) {
-  if (!TURN_RELAY_ENABLED || !hasTurnRelay(servers) || relayProbePromise) return;
+function relayConfigFingerprint(servers: RTCIceServer[]) {
+  // Never log this value: credentials deliberately participate so credential
+  // rotation triggers a new operational probe.
+  return getTurnIceServers(servers)
+    .map((server) => `${urlsOfIceServer(server).join(",")}|${iceServerCredentialKey(server)}`)
+    .sort()
+    .join(";");
+}
 
+function invalidateCachedRemoteIceServers() {
+  cachedRemoteAt = 0;
+}
+
+function verifyRelayOperationally(servers: RTCIceServer[]) {
+  if (!TURN_RELAY_ENABLED || !hasTurnRelay(servers)) return;
+
+  const now = Date.now();
+  const configKey = relayConfigFingerprint(servers);
+  if (
+    relayProbePromise ||
+    (relayProbeConfigKey === configKey &&
+      isIceServerCacheFresh(relayProbeAt, now, RELAY_PROBE_TTL_MS))
+  ) {
+    return;
+  }
+
+  relayProbeConfigKey = configKey;
+  relayProbeAt = now;
   relayProbePromise = probeTurnRelay(servers)
     .then((result) => {
       if (result.relayCandidateGathered) {
@@ -338,6 +359,9 @@ function verifyRelayOperationally(servers: RTCIceServer[]) {
           "[ICE] TURN relay operational check passed: a relay candidate was gathered.",
         );
       } else {
+        // Do not keep a potentially expired remote credential for the rest of
+        // the SPA lifetime. The next call/recovery gets a fresh DB value.
+        invalidateCachedRemoteIceServers();
         console.error(
           "[ICE] TURN relay operational check FAILED: configured TURN did not produce a relay candidate.",
           result.error ?? "Unknown TURN allocation failure",
@@ -346,6 +370,7 @@ function verifyRelayOperationally(servers: RTCIceServer[]) {
       return result;
     })
     .catch((error) => {
+      invalidateCachedRemoteIceServers();
       const result: TurnRelayProbeResult = {
         configured: true,
         relayCandidateGathered: false,
@@ -353,25 +378,32 @@ function verifyRelayOperationally(servers: RTCIceServer[]) {
       };
       console.error("[ICE] TURN relay operational check failed", result.error);
       return result;
+    })
+    .finally(() => {
+      relayProbePromise = null;
     });
 }
-
-let cachedRemote: RTCIceServer[] | null = null;
-let inflight: Promise<RTCIceServer[]> | null = null;
 
 /**
  * Load rotatable production ICE configuration.
  *
- * Critical reliability rule: the remote database source is additive, not a
- * replacement. A broken/stale remote TURN entry must not suppress a valid
- * deployment environment fallback, and a missing deployment value must not
- * suppress remotely rotated credentials.
+ * Remote TURN credentials are cached only briefly. `inflight` is request
+ * deduplication, not a permanent cache: it MUST be cleared after resolution.
  */
-export async function loadIceServers(): Promise<RTCIceServer[]> {
-  if (cachedRemote) return cachedRemote;
+export async function loadIceServers(
+  options: LoadIceServersOptions = {},
+): Promise<RTCIceServer[]> {
+  const now = Date.now();
+  if (
+    !options.forceRefresh &&
+    cachedRemote &&
+    isIceServerCacheFresh(cachedRemoteAt, now)
+  ) {
+    return cachedRemote;
+  }
   if (inflight) return inflight;
 
-  inflight = (async () => {
+  const request = (async () => {
     const environmentServers = getEnvironmentIceServers();
     let remoteServers: RTCIceServer[] = [];
 
@@ -387,8 +419,6 @@ export async function loadIceServers(): Promise<RTCIceServer[]> {
 
       const value = (data as { value?: unknown } | null)?.value;
       if (Array.isArray(value)) {
-        // The table is remotely editable, so defensively ignore malformed
-        // entries instead of handing invalid URLs to RTCPeerConnection.
         remoteServers = value.filter(
           (entry): entry is RTCIceServer =>
             Boolean(entry) &&
@@ -403,14 +433,21 @@ export async function loadIceServers(): Promise<RTCIceServer[]> {
       );
     }
 
-    cachedRemote = mergeIceServerSources(
+    const merged = mergeIceServerSources(
       applyRelayPolicy(environmentServers),
       applyRelayPolicy(remoteServers),
     );
-    reportRelayConfiguration(cachedRemote);
-    verifyRelayOperationally(cachedRemote);
-    return cachedRemote;
+    cachedRemote = merged;
+    cachedRemoteAt = Date.now();
+    reportRelayConfiguration(merged);
+    verifyRelayOperationally(merged);
+    return merged;
   })();
 
-  return inflight;
+  inflight = request;
+  try {
+    return await request;
+  } finally {
+    if (inflight === request) inflight = null;
+  }
 }

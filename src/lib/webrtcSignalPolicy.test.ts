@@ -52,10 +52,15 @@ describe('native WebRTC signaling policy', () => {
     expect(isFreshNativeSignal(Date.now())).toBe(true);
   });
 
-  it('never applies a stale answer to a newer ICE restart offer', () => {
+  it('never applies a stale or id-less answer/candidate to an established ICE generation', () => {
     expect(negotiationMatches('offer-2', 'offer-2')).toBe(true);
     expect(negotiationMatches('offer-2', 'offer-1')).toBe(false);
-    expect(negotiationMatches('offer-2', undefined)).toBe(true);
+    expect(negotiationMatches('offer-2', undefined)).toBe(false);
+
+    // Before any local/remote generation exists, an early legacy candidate may
+    // still be queued. Once the generation is known, id-less frames are stale.
+    expect(negotiationMatches(undefined, undefined)).toBe(true);
+    expect(negotiationMatches(undefined, 'offer-1')).toBe(true);
   });
 
   it('only lets an authoritative newer ready frame replace a browser session', () => {

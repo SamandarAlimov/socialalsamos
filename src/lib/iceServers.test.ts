@@ -4,7 +4,9 @@ import {
   getIceServers,
   getTurnIceServers,
   hasTurnRelay,
+  isIceServerCacheFresh,
   mergeIceServerSources,
+  REMOTE_ICE_CACHE_TTL_MS,
   urlsOfIceServer,
 } from './iceServers';
 
@@ -110,5 +112,16 @@ describe('native WebRTC ICE policy', () => {
     ]);
     expect(result[0]?.username).toBe('user');
     expect(result[0]?.credential).toBe('secret');
+  });
+
+  it('expires rotatable remote TURN credentials instead of caching them for the SPA lifetime', () => {
+    const cachedAt = 1_000_000;
+    expect(isIceServerCacheFresh(cachedAt, cachedAt + 1)).toBe(true);
+    expect(
+      isIceServerCacheFresh(cachedAt, cachedAt + REMOTE_ICE_CACHE_TTL_MS - 1),
+    ).toBe(true);
+    expect(
+      isIceServerCacheFresh(cachedAt, cachedAt + REMOTE_ICE_CACHE_TTL_MS),
+    ).toBe(false);
   });
 });

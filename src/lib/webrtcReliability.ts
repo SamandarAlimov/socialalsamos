@@ -62,7 +62,8 @@ export function negotiationMatches(
   expectedNegotiationId?: string | null,
   incomingNegotiationId?: string | null,
 ): boolean {
-  if (!expectedNegotiationId || !incomingNegotiationId) return true;
+  if (!expectedNegotiationId) return true;
+  if (!incomingNegotiationId) return false;
   return expectedNegotiationId === incomingNegotiationId;
 }
 
