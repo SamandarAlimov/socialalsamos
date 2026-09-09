@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -39,19 +39,19 @@ interface PostLikesDialogProps {
 export function PostLikesDialog({ postId, open, onOpenChange, likesCount }: PostLikesDialogProps) {
   const { user } = useAuth();
   const [users, setUsers] = useState<LikeUser[]>([]);
+  const [canonicalLikesCount, setCanonicalLikesCount] = useState(likesCount);
   const [isLoading, setIsLoading] = useState(false);
   const [followLoading, setFollowLoading] = useState<string | null>(null);
 
   useEffect(() => {
-    if (open && postId) {
-      fetchLikes();
-    }
-  }, [open, postId]);
+    if (!open) setCanonicalLikesCount(likesCount);
+  }, [likesCount, open]);
 
-  const fetchLikes = async () => {
+  const fetchLikes = useCallback(async () => {
+    if (!postId) return;
     setIsLoading(true);
     try {
-      const { data, error } = await supabase
+      const { data, count, error } = await supabase
         .from('post_likes')
         .select(`
           id,
@@ -64,23 +64,25 @@ export function PostLikesDialog({ postId, open, onOpenChange, likesCount }: Post
             avatar_url,
             is_verified
           )
-        `)
+        `, { count: 'exact' })
         .eq('post_id', postId)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
+      setCanonicalLikesCount(Math.max(0, Number(count ?? 0)));
 
-      // Check follow status if user is logged in
       if (user && data) {
         const userIds = data.map(l => l.user_id);
-        const { data: followsData } = await supabase
-          .from('follows')
-          .select('following_id')
-          .eq('follower_id', user.id)
-          .in('following_id', userIds);
+        const { data: followsData } = userIds.length > 0
+          ? await supabase
+              .from('follows')
+              .select('following_id')
+              .eq('follower_id', user.id)
+              .in('following_id', userIds)
+          : { data: [] };
 
         const followingSet = new Set(followsData?.map(f => f.following_id) || []);
-        
+
         setUsers(data.map(l => ({
           ...l,
           is_following: followingSet.has(l.user_id)
@@ -93,7 +95,25 @@ export function PostLikesDialog({ postId, open, onOpenChange, likesCount }: Post
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [postId, user]);
+
+  useEffect(() => {
+    if (!open || !postId) return;
+    void fetchLikes();
+
+    const channel = supabase
+      .channel(`post-likes-dialog-${postId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'post_likes', filter: `post_id=eq.${postId}` },
+        () => void fetchLikes(),
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [fetchLikes, open, postId]);
 
   const handleFollow = async (targetUserId: string, isFollowing: boolean) => {
     if (!user) return;
@@ -106,8 +126,8 @@ export function PostLikesDialog({ postId, open, onOpenChange, likesCount }: Post
           .delete()
           .eq('follower_id', user.id)
           .eq('following_id', targetUserId);
-        
-        setUsers(prev => prev.map(u => 
+
+        setUsers(prev => prev.map(u =>
           u.user_id === targetUserId ? { ...u, is_following: false } : u
         ));
         toast.success('Unfollowed');
@@ -115,8 +135,8 @@ export function PostLikesDialog({ postId, open, onOpenChange, likesCount }: Post
         await supabase
           .from('follows')
           .insert({ follower_id: user.id, following_id: targetUserId });
-        
-        setUsers(prev => prev.map(u => 
+
+        setUsers(prev => prev.map(u =>
           u.user_id === targetUserId ? { ...u, is_following: true } : u
         ));
         toast.success('Following');
@@ -136,7 +156,7 @@ export function PostLikesDialog({ postId, open, onOpenChange, likesCount }: Post
           <DialogTitle className="flex items-center gap-2">
             <Heart className="h-5 w-5 text-red-500 fill-current" />
             <span>Likes</span>
-            <span className="text-muted-foreground font-normal">({likesCount})</span>
+            <span className="text-muted-foreground font-normal">({canonicalLikesCount})</span>
           </DialogTitle>
         </DialogHeader>
 
@@ -182,11 +202,11 @@ export function PostLikesDialog({ postId, open, onOpenChange, likesCount }: Post
                       )}
                     </div>
                   </Link>
-                  
+
                   {user && user.id !== like.user_id && (
                     <Button
                       size="sm"
-                      variant={like.is_following ? "outline" : "default"}
+                      variant={like.is_following ? 'outline' : 'default'}
                       disabled={followLoading === like.user_id}
                       onClick={() => handleFollow(like.user_id, !!like.is_following)}
                       className="h-8 text-xs"
