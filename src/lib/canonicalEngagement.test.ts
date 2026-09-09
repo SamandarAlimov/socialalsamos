@@ -1,8 +1,9 @@
 import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 function source(path: string) {
-  return readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
+  return readFileSync(resolve(process.cwd(), 'src', path), 'utf8');
 }
 
 describe('canonical public engagement counters', () => {
