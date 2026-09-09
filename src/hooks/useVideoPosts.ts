@@ -34,20 +34,10 @@ export interface VideoPost {
   is_following?: boolean;
 }
 
-/**
- * Bir sahifada nechta video yuklanadi.
- *
- * Ilgari `.limit(50)` edi va pagination yo'q edi: birinchi ochilishda 50 ta
- * post metadatasi kelardi, sahifa esa 50 ta <video> element yaratardi.
- * Endi kichik sahifalar bilan ishlaymiz va foydalanuvchi oxiriga
- * yaqinlashganda keyingisi yuklanadi.
- */
 const PAGE_SIZE = 12;
 const QUALITY_POOL_SIZE = 14;
 const GLOBAL_POOL_SIZE = 20;
 
-// `posts_user_id_fkey` nomi bazada bo'lmasa PostgREST butun so'rovni rad etadi
-// va Videolar sahifasi bo'sh qoladi. Shuning uchun embedsiz variant ham bor.
 const VIDEO_SELECT_WITH_PROFILE = `
   *,
   profile:profiles!posts_user_id_fkey (
@@ -60,22 +50,11 @@ const VIDEO_SELECT_WITH_PROFILE = `
 `;
 
 const VIDEO_SELECT_PLAIN = '*';
-
 const videoEmbedGuard = createProfileEmbedGuard();
-
 type PostRow = Record<string, unknown>;
 
-/**
- * Deep-link qilingan post ID sini URL dan o'qiydi.
- *
- * Discover va qidiruv natijalari `/videos?v=<id>` ga o'tadi. Ilgari sahifa
- * har doim eng yangi videodan boshlanar edi, ya'ni tugma bosilgani bilan
- * boshqa video ochilardi. Shu sababli deep-link videosini ro'yxat boshiga
- * chiqaramiz.
- */
 function readDeepLinkVideoId(): string | null {
   if (typeof window === 'undefined') return null;
-
   try {
     const params = new URLSearchParams(window.location.search);
     const raw = params.get('v') || params.get('post') || params.get('id');
@@ -86,6 +65,19 @@ function readDeepLinkVideoId(): string | null {
   }
 }
 
+async function fetchExactPostLikeCount(postId: string): Promise<number | null> {
+  const { count, error } = await supabase
+    .from('post_likes')
+    .select('id', { count: 'exact', head: true })
+    .eq('post_id', postId);
+
+  if (error) {
+    console.warn('Video like count reconciliation failed:', error);
+    return null;
+  }
+  return Math.max(0, count ?? 0);
+}
+
 export function useVideoPosts() {
   const [videos, setVideos] = useState<VideoPost[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -94,25 +86,21 @@ export function useVideoPosts() {
   const { user } = useAuth();
   const userId = user?.id ?? null;
 
-  /** Keyset pagination kursori: oxirgi yuklangan videoning created_at qiymati. */
   const cursorRef = useRef<string | null>(null);
   const loadingMoreRef = useRef(false);
   const hasLoadedOnceRef = useRef(false);
 
-  /** Like / bookmark holatini bir sahifa uchun to'ldiradi. */
   const attachUserState = useCallback(
     async (rows: VideoPost[]): Promise<VideoPost[]> => {
       if (!userId || rows.length === 0) return rows;
 
       const postIds = rows.map((post) => post.id);
-
       const { data: likesData } = await supabase
         .from('post_likes')
         .select('post_id')
         .eq('user_id', userId)
         .in('post_id', postIds);
-
-      const likedPostIds = new Set(likesData?.map((l) => l.post_id) || []);
+      const likedPostIds = new Set(likesData?.map((row) => row.post_id) || []);
 
       const creatorIds = Array.from(
         new Set(
@@ -129,18 +117,13 @@ export function useVideoPosts() {
           .select('following_id')
           .eq('follower_id', userId)
           .in('following_id', creatorIds);
-
         if (followingError) {
           console.warn('Video follow holatini yuklab bo‘lmadi:', followingError);
         } else {
-          followingIds = new Set(
-            (followingData ?? []).map((row) => String(row.following_id)),
-          );
+          followingIds = new Set((followingData ?? []).map((row) => String(row.following_id)));
         }
       }
 
-      // Saqlanganlar (bookmark) holati: jadval mavjud bo'lmasa yoki ruxsat
-      // bo'lmasa sahifa ishlashda davom etadi, faqat holat bo'sh qoladi.
       let bookmarkedPostIds = new Set<string>();
       try {
         const { data: bookmarksData, error: bookmarksError } = await db
@@ -148,7 +131,6 @@ export function useVideoPosts() {
           .select('post_id')
           .eq('user_id', userId)
           .in('post_id', postIds);
-
         if (!bookmarksError) {
           bookmarkedPostIds = new Set(
             (bookmarksData ?? []).map((row: any) => row.post_id as string),
@@ -162,14 +144,12 @@ export function useVideoPosts() {
         ...post,
         is_liked: likedPostIds.has(post.id),
         is_bookmarked: bookmarkedPostIds.has(post.id),
-        is_following:
-          post.user_id === userId ? false : followingIds.has(post.user_id),
+        is_following: post.user_id === userId ? false : followingIds.has(post.user_id),
       }));
     },
     [userId],
   );
 
-  /** Bitta sahifani oladi. `before` - kursor (undan eskirog'i olinadi). */
   const fetchPage = useCallback(async (before: string | null): Promise<VideoPost[]> => {
     const { data: rows, error } = await runWithProfileEmbedFallback<PostRow>(
       videoEmbedGuard,
@@ -179,27 +159,19 @@ export function useVideoPosts() {
           .select(select)
           .eq('media_type', 'video')
           .eq('visibility', 'public');
-
         const filtered = before ? base.lt('created_at', before) : base;
-
         return filtered
           .order('created_at', { ascending: false })
           .limit(PAGE_SIZE) as unknown as PromiseLike<EmbedQueryResult<PostRow>>;
       },
-      {
-        embedSelect: VIDEO_SELECT_WITH_PROFILE,
-        plainSelect: VIDEO_SELECT_PLAIN,
-      },
+      { embedSelect: VIDEO_SELECT_WITH_PROFILE, plainSelect: VIDEO_SELECT_PLAIN },
     );
-
     if (error) throw error;
-
     return (rows ?? []) as unknown as VideoPost[];
   }, []);
 
   const fetchQualityCandidates = useCallback(async (): Promise<VideoPost[]> => {
     const cutoff = new Date(Date.now() - 45 * 24 * 60 * 60 * 1000).toISOString();
-
     const { data: rows, error } = await runWithProfileEmbedFallback<PostRow>(
       videoEmbedGuard,
       (select) =>
@@ -213,15 +185,9 @@ export function useVideoPosts() {
           .order('comments_count', { ascending: false })
           .order('views_count', { ascending: false })
           .order('created_at', { ascending: false })
-          .limit(QUALITY_POOL_SIZE) as unknown as PromiseLike<
-            EmbedQueryResult<PostRow>
-          >,
-      {
-        embedSelect: VIDEO_SELECT_WITH_PROFILE,
-        plainSelect: VIDEO_SELECT_PLAIN,
-      },
+          .limit(QUALITY_POOL_SIZE) as unknown as PromiseLike<EmbedQueryResult<PostRow>>,
+      { embedSelect: VIDEO_SELECT_WITH_PROFILE, plainSelect: VIDEO_SELECT_PLAIN },
     );
-
     if (error) return [];
     return (rows ?? []) as unknown as VideoPost[];
   }, []);
@@ -234,7 +200,6 @@ export function useVideoPosts() {
         .eq('content_mode', 'video')
         .order('score', { ascending: false })
         .limit(GLOBAL_POOL_SIZE);
-
       if (rankingError || !rankingRows?.length) return [];
 
       const ids = rankingRows.map((row: any) => String(row.post_id)).filter(Boolean);
@@ -248,31 +213,21 @@ export function useVideoPosts() {
             .select(select)
             .in('id', ids)
             .eq('media_type', 'video')
-            .eq('visibility', 'public') as unknown as PromiseLike<
-              EmbedQueryResult<PostRow>
-            >,
-        {
-          embedSelect: VIDEO_SELECT_WITH_PROFILE,
-          plainSelect: VIDEO_SELECT_PLAIN,
-        },
+            .eq('visibility', 'public') as unknown as PromiseLike<EmbedQueryResult<PostRow>>,
+        { embedSelect: VIDEO_SELECT_WITH_PROFILE, plainSelect: VIDEO_SELECT_PLAIN },
       );
-
       if (error) return [];
 
       const byId = new Map(
         ((rows ?? []) as unknown as VideoPost[]).map((video) => [video.id, video]),
       );
-      return ids
-        .map((id) => byId.get(id))
-        .filter((video): video is VideoPost => Boolean(video));
+      return ids.map((id) => byId.get(id)).filter((video): video is VideoPost => Boolean(video));
     } catch {
       return [];
     }
   }, []);
 
   const fetchVideos = useCallback(async () => {
-    // Faqat birinchi bootstrapda skeleton ko'rsatamiz. Auth token refresh,
-    // manual refresh yoki background reconciliation player DOMini unmount qilmaydi.
     if (!hasLoadedOnceRef.current) setIsLoading(true);
     cursorRef.current = null;
 
@@ -283,7 +238,6 @@ export function useVideoPosts() {
         fetchGlobalRankCandidates(),
       ]);
 
-      // Kursor faqat chronological pool bo'yicha yuradi.
       const last = page[page.length - 1];
       cursorRef.current = last ? last.created_at : null;
       setHasMore(page.length === PAGE_SIZE);
@@ -294,34 +248,25 @@ export function useVideoPosts() {
       }
       let data = Array.from(merged.values());
 
-      // ── Deep-link: aynan so'ralgan video birinchi bo'lib ko'rsatiladi ──
       const deepLinkId = readDeepLinkVideoId();
       if (deepLinkId) {
         const existing = data.find((video) => video.id === deepLinkId);
-
         if (existing) {
           data = [existing, ...data.filter((video) => video.id !== deepLinkId)];
         } else {
-          // Birinchi sahifaga tushmagan (eski) video ham ochilishi kerak.
-          const { data: singleRows, error: singleError } =
-            await runWithProfileEmbedFallback<PostRow>(
-              videoEmbedGuard,
-              (select) =>
-                supabase
-                  .from('posts')
-                  .select(select)
-                  .eq('id', deepLinkId)
-                  .limit(1) as unknown as PromiseLike<EmbedQueryResult<PostRow>>,
-              {
-                embedSelect: VIDEO_SELECT_WITH_PROFILE,
-                plainSelect: VIDEO_SELECT_PLAIN,
-              },
-            );
-
+          const { data: singleRows, error: singleError } = await runWithProfileEmbedFallback<PostRow>(
+            videoEmbedGuard,
+            (select) =>
+              supabase
+                .from('posts')
+                .select(select)
+                .eq('id', deepLinkId)
+                .limit(1) as unknown as PromiseLike<EmbedQueryResult<PostRow>>,
+            { embedSelect: VIDEO_SELECT_WITH_PROFILE, plainSelect: VIDEO_SELECT_PLAIN },
+          );
           const single = !singleError
             ? ((singleRows ?? [])[0] as unknown as VideoPost | undefined)
             : undefined;
-
           if (single?.media_urls?.length) {
             data = [single, ...data.filter((video) => video.id !== single.id)];
           }
@@ -335,36 +280,25 @@ export function useVideoPosts() {
       hasLoadedOnceRef.current = true;
       setIsLoading(false);
     }
-  }, [
-    fetchPage,
-    fetchQualityCandidates,
-    fetchGlobalRankCandidates,
-    attachUserState,
-  ]);
+  }, [attachUserState, fetchGlobalRankCandidates, fetchPage, fetchQualityCandidates]);
 
-  /** Keyingi sahifa. Foydalanuvchi ro'yxat oxiriga yaqinlashganda chaqiriladi. */
   const loadMore = useCallback(async () => {
     if (loadingMoreRef.current || !hasMore) return;
-
     const cursor = cursorRef.current;
     if (!cursor) return;
 
     loadingMoreRef.current = true;
     setIsLoadingMore(true);
-
     try {
       const page = await fetchPage(cursor);
-
       if (page.length < PAGE_SIZE) setHasMore(false);
-
       if (page.length > 0) {
         cursorRef.current = page[page.length - 1].created_at;
         const decorated = await attachUserState(page);
-
-        setVideos((prev) => {
-          const seen = new Set(prev.map((video) => video.id));
+        setVideos((previous) => {
+          const seen = new Set(previous.map((video) => video.id));
           const fresh = decorated.filter((video) => !seen.has(video.id));
-          return fresh.length > 0 ? [...prev, ...fresh] : prev;
+          return fresh.length > 0 ? [...previous, ...fresh] : previous;
         });
       }
     } catch (error) {
@@ -373,54 +307,73 @@ export function useVideoPosts() {
       loadingMoreRef.current = false;
       setIsLoadingMore(false);
     }
-  }, [hasMore, fetchPage, attachUserState]);
+  }, [attachUserState, fetchPage, hasMore]);
+
+  const reconcileLikeCount = useCallback(async (postId: string) => {
+    const exactCount = await fetchExactPostLikeCount(postId);
+    if (exactCount === null) return;
+    setVideos((previous) =>
+      previous.map((video) =>
+        video.id === postId ? { ...video, likes_count: exactCount } : video,
+      ),
+    );
+  }, []);
 
   const likeVideo = useCallback(async (postId: string) => {
     if (!userId) return;
-
-    const video = videos.find(v => v.id === postId);
+    const video = videos.find((item) => item.id === postId);
     if (!video) return;
 
+    const wasLiked = Boolean(video.is_liked);
+    const previousCount = Math.max(0, video.likes_count || 0);
+    setVideos((previous) =>
+      previous.map((item) =>
+        item.id === postId
+          ? {
+              ...item,
+              is_liked: !wasLiked,
+              likes_count: Math.max(0, previousCount + (wasLiked ? -1 : 1)),
+            }
+          : item,
+      ),
+    );
+
     try {
-      if (video.is_liked) {
-        await supabase
+      if (wasLiked) {
+        const { error } = await supabase
           .from('post_likes')
           .delete()
           .eq('post_id', postId)
           .eq('user_id', userId);
-
-        setVideos(prev => prev.map(v => 
-          v.id === postId 
-            ? { ...v, is_liked: false, likes_count: v.likes_count - 1 }
-            : v
-        ));
+        if (error) throw error;
       } else {
-        await supabase
+        const { error } = await supabase
           .from('post_likes')
           .insert({ post_id: postId, user_id: userId });
-
-        setVideos(prev => prev.map(v => 
-          v.id === postId 
-            ? { ...v, is_liked: true, likes_count: v.likes_count + 1 }
-            : v
-        ));
+        if (error) throw error;
       }
+      await reconcileLikeCount(postId);
     } catch (error) {
       console.error('Error toggling like:', error);
+      setVideos((previous) =>
+        previous.map((item) =>
+          item.id === postId
+            ? { ...item, is_liked: wasLiked, likes_count: previousCount }
+            : item,
+        ),
+      );
+      void reconcileLikeCount(postId);
     }
-  }, [userId, videos]);
+  }, [reconcileLikeCount, userId, videos]);
 
   const toggleFollow = useCallback(async (targetUserId: string) => {
     if (!userId || !targetUserId || targetUserId === userId) return;
-
     const targetVideo = videos.find((video) => video.user_id === targetUserId);
     const wasFollowing = Boolean(targetVideo?.is_following);
 
     setVideos((previous) =>
       previous.map((video) =>
-        video.user_id === targetUserId
-          ? { ...video, is_following: !wasFollowing }
-          : video,
+        video.user_id === targetUserId ? { ...video, is_following: !wasFollowing } : video,
       ),
     );
 
@@ -442,27 +395,22 @@ export function useVideoPosts() {
       console.error('Video follow holatini o‘zgartirib bo‘lmadi:', error);
       setVideos((previous) =>
         previous.map((video) =>
-          video.user_id === targetUserId
-            ? { ...video, is_following: wasFollowing }
-            : video,
+          video.user_id === targetUserId ? { ...video, is_following: wasFollowing } : video,
         ),
       );
     }
   }, [userId, videos]);
 
   const toggleBookmark = useCallback(async (postId: string) => {
-    const video = videos.find(v => v.id === postId);
+    const video = videos.find((item) => item.id === postId);
     if (!video) return;
+    const wasBookmarked = Boolean(video.is_bookmarked);
 
-    const wasBookmarked = !!video.is_bookmarked;
-
-    // Optimistik UI: tugma darhol javob beradi.
-    setVideos(prev => prev.map(v =>
-      v.id === postId
-        ? { ...v, is_bookmarked: !wasBookmarked }
-        : v
-    ));
-
+    setVideos((previous) =>
+      previous.map((item) =>
+        item.id === postId ? { ...item, is_bookmarked: !wasBookmarked } : item,
+      ),
+    );
     if (!userId) return;
 
     try {
@@ -480,40 +428,30 @@ export function useVideoPosts() {
         if (error) throw error;
       }
     } catch (error) {
-      // Jadval hali yaratilmagan bo'lsa foydalanuvchini bezovta qilmaymiz,
-      // lekin holatni ham yolg'on ko'rsatmaslik uchun konsolga yozamiz.
       console.warn('Bookmark saqlanmadi:', error);
     }
   }, [userId, videos]);
 
   const refresh = useCallback(() => {
     setHasMore(true);
-    fetchVideos();
+    void fetchVideos();
   }, [fetchVideos]);
 
   useEffect(() => {
-    fetchVideos();
+    void fetchVideos();
   }, [fetchVideos]);
 
-  // Real-time subscription for new videos, likes, and comments
   useEffect(() => {
-    const hasVideos = videos.length > 0;
-    if (!hasVideos) return;
+    if (videos.length === 0) return;
 
     const channel = supabase
       .channel('video-posts-realtime')
       .on(
         'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'posts',
-          filter: 'media_type=eq.video',
-        },
+        { event: 'INSERT', schema: 'public', table: 'posts', filter: 'media_type=eq.video' },
         async (payload) => {
           const newId = (payload.new as { id?: string } | null)?.id;
           if (!newId) return;
-
           const { data: rows, error } = await runWithProfileEmbedFallback<PostRow>(
             videoEmbedGuard,
             (select) =>
@@ -522,56 +460,48 @@ export function useVideoPosts() {
                 .select(select)
                 .eq('id', newId)
                 .limit(1) as unknown as PromiseLike<EmbedQueryResult<PostRow>>,
-            {
-              embedSelect: VIDEO_SELECT_WITH_PROFILE,
-              plainSelect: VIDEO_SELECT_PLAIN,
-            },
+            { embedSelect: VIDEO_SELECT_WITH_PROFILE, plainSelect: VIDEO_SELECT_PLAIN },
           );
-
           if (error) {
             console.error('Error loading new video:', error);
             return;
           }
-
           const data = (rows ?? [])[0] as unknown as VideoPost | undefined;
-
           if (data && data.user_id !== userId) {
-            setVideos(prev => (prev.some(v => v.id === data.id) ? prev : [data, ...prev]));
+            setVideos((previous) =>
+              previous.some((video) => video.id === data.id) ? previous : [data, ...previous],
+            );
           }
-        }
+        },
       )
       .on(
         'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'post_likes',
-        },
+        { event: '*', schema: 'public', table: 'post_likes' },
         (payload) => {
           const newData = payload.new as { post_id?: string; user_id?: string } | null;
           const oldData = payload.old as { post_id?: string; user_id?: string } | null;
           const postId = newData?.post_id || oldData?.post_id;
           if (!postId) return;
 
-          setVideos(prev => prev.map(v => {
-            if (v.id !== postId) return v;
-            
-            if (payload.eventType === 'INSERT') {
-              return {
-                ...v,
-                likes_count: v.likes_count + 1,
-                is_liked: newData?.user_id === userId ? true : v.is_liked
-              };
-            } else if (payload.eventType === 'DELETE') {
-              return {
-                ...v,
-                likes_count: Math.max(0, v.likes_count - 1),
-                is_liked: oldData?.user_id === userId ? false : v.is_liked
-              };
-            }
-            return v;
-          }));
-        }
+          if (userId) {
+            setVideos((previous) =>
+              previous.map((video) => {
+                if (video.id !== postId) return video;
+                if (payload.eventType === 'INSERT' && newData?.user_id === userId) {
+                  return { ...video, is_liked: true };
+                }
+                if (payload.eventType === 'DELETE' && oldData?.user_id === userId) {
+                  return { ...video, is_liked: false };
+                }
+                return video;
+              }),
+            );
+          }
+
+          // Never add/subtract from a possibly stale local base. Re-read the
+          // canonical row count so realtime ordering cannot double-count likes.
+          void reconcileLikeCount(postId);
+        },
       )
       .on(
         'postgres_changes',
@@ -583,19 +513,10 @@ export function useVideoPosts() {
         },
         (payload) => {
           if (!userId) return;
-
-          const inserted = payload.new as {
-            follower_id?: string;
-            following_id?: string;
-          } | null;
-          const removed = payload.old as {
-            follower_id?: string;
-            following_id?: string;
-          } | null;
+          const inserted = payload.new as { follower_id?: string; following_id?: string } | null;
+          const removed = payload.old as { follower_id?: string; following_id?: string } | null;
           const row = inserted?.following_id ? inserted : removed;
-
           if (!row?.following_id || row.follower_id !== userId) return;
-
           const isFollowing = payload.eventType === 'INSERT';
           setVideos((previous) =>
             previous.map((video) =>
@@ -608,58 +529,59 @@ export function useVideoPosts() {
       )
       .on(
         'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'comments',
-        },
+        { event: '*', schema: 'public', table: 'comments' },
         (payload) => {
           const newData = payload.new as { post_id?: string } | null;
           const oldData = payload.old as { post_id?: string } | null;
           const postId = newData?.post_id || oldData?.post_id;
           if (!postId) return;
-
-          setVideos(prev => prev.map(v => {
-            if (v.id !== postId) return v;
-            
-            if (payload.eventType === 'INSERT') {
-              return { ...v, comments_count: v.comments_count + 1 };
-            } else if (payload.eventType === 'DELETE') {
-              return { ...v, comments_count: Math.max(0, v.comments_count - 1) };
-            }
-            return v;
-          }));
-        }
+          setVideos((previous) =>
+            previous.map((video) => {
+              if (video.id !== postId) return video;
+              if (payload.eventType === 'INSERT') {
+                return { ...video, comments_count: video.comments_count + 1 };
+              }
+              if (payload.eventType === 'DELETE') {
+                return { ...video, comments_count: Math.max(0, video.comments_count - 1) };
+              }
+              return video;
+            }),
+          );
+        },
       )
       .on(
         'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'posts',
-        },
+        { event: 'UPDATE', schema: 'public', table: 'posts' },
         (payload) => {
-          const newData = payload.new as { id?: string; likes_count?: number; comments_count?: number; shares_count?: number; bookmarks_count?: number } | null;
+          const newData = payload.new as {
+            id?: string;
+            likes_count?: number;
+            comments_count?: number;
+            shares_count?: number;
+            bookmarks_count?: number;
+          } | null;
           if (!newData?.id) return;
-
-          setVideos(prev => prev.map(v => {
-            if (v.id !== newData.id) return v;
-            return {
-              ...v,
-              likes_count: newData.likes_count ?? v.likes_count,
-              comments_count: newData.comments_count ?? v.comments_count,
-              shares_count: newData.shares_count ?? v.shares_count,
-              bookmarks_count: newData.bookmarks_count ?? v.bookmarks_count,
-            };
-          }));
-        }
+          setVideos((previous) =>
+            previous.map((video) =>
+              video.id === newData.id
+                ? {
+                    ...video,
+                    likes_count: newData.likes_count ?? video.likes_count,
+                    comments_count: newData.comments_count ?? video.comments_count,
+                    shares_count: newData.shares_count ?? video.shares_count,
+                    bookmarks_count: newData.bookmarks_count ?? video.bookmarks_count,
+                  }
+                : video,
+            ),
+          );
+        },
       )
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [userId, videos.length]);
+  }, [reconcileLikeCount, userId, videos.length]);
 
   return {
     videos,
