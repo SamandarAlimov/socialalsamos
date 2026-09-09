@@ -19,7 +19,9 @@ describe('video comments measured geometry', () => {
     expect(Math.round(scaled.initialSheetTop + VIDEO_COMMENTS_REFERENCE.viewportTop)).toBe(819);
     expect(Math.round(scaled.expandedSheetTop + VIDEO_COMMENTS_REFERENCE.viewportTop)).toBe(111);
     expect(Math.round(VIDEO_COMMENTS_REFERENCE.screenHeight - scaled.footerHeight)).toBe(1714);
+    expect(Math.round(scaled.sheetCornerRadius)).toBe(81);
     expect(Math.round(scaled.handleWidth)).toBe(84);
+    expect(Math.round(scaled.handleHeight)).toBe(6);
     expect(
       Math.round(
         VIDEO_COMMENTS_REFERENCE.sheet.initialTop + scaled.handleTopWithinSheet,
