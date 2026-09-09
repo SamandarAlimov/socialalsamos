@@ -21,7 +21,8 @@
   background: #000 !important;
   box-shadow: none !important;
   z-index: 5990 !important;
-  pointer-events: none !important;
+  pointer-events: auto !important;
+  touch-action: manipulation !important;
   overflow: hidden !important;
 }
 
@@ -37,6 +38,7 @@
   transform: none !important;
   transform-origin: center center !important;
   border-radius: inherit !important;
+  pointer-events: none !important;
 }
 
 .video-comments-premium [data-comments-section='true'] {
