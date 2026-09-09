@@ -51,6 +51,10 @@ export function isReelPostKind(value?: string | null): boolean {
   return normalized === 'reel' || normalized === 'short';
 }
 
+function isStoryPostKind(value?: string | null): boolean {
+  return (value ?? '').trim().toLowerCase() === 'story';
+}
+
 export function isVideoLikeUrl(value?: string | null): boolean {
   const clean = cleanUrlForDetection(value);
   if (!clean) return false;
@@ -67,6 +71,8 @@ export function isPotentialVideoPost(
   post: VideoPostMediaSource,
   structuredRows: StoredPostMediaRow[] = [],
 ): boolean {
+  // Story video is a different surface/lifecycle and must never leak into Reels.
+  if (isStoryPostKind(post.post_kind)) return false;
   if (isVideoMediaType(post.media_type) || isReelPostKind(post.post_kind)) return true;
   if ((post.media_urls ?? []).some(isVideoLikeUrl)) return true;
   return structuredRows.some((row) => inferStoredMediaKind(row) === 'video');
