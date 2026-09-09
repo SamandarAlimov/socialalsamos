@@ -31,7 +31,7 @@ jobs:
         run: npm run test:messages
 
       - name: Native WebRTC transport regression
-        run: npx vitest run src/lib/iceServers.test.ts
+        run: npx vitest run src/lib/iceServers.test.ts src/lib/webrtcSignalPolicy.test.ts
 
       - name: Media regression tests
         run: npx vitest run src/lib/mediaRecovery.test.ts src/lib/mediaRefs.test.ts
