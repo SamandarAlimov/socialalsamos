@@ -4,6 +4,7 @@ import App from "./App.tsx";
 import "./index.css";
 import "./styles/native-interactions.css";
 import "./styles/video-watch.css";
+import "./styles/video-feed.css";
 import "./i18n";
 import { installMediaUploadFetchFallback } from "./lib/mediaUploadFetchFallback";
 import { installNativeInteractionPolicy } from "./lib/nativeInteractionPolicy";
