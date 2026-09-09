@@ -241,7 +241,7 @@ export function EnhancedMessageBubble({
       const now = Date.now();
       if (now - lastTapRef.current < DOUBLE_TAP_MS) {
         lastTapRef.current = 0;
-        addReaction('\u2764\ufe0f');
+        addReaction('❤️');
         successFeedback();
         return;
       }
@@ -418,7 +418,7 @@ export function EnhancedMessageBubble({
       if (parsed.type && parsed.status) return parsed as CallHistoryData;
     } catch {}
     const content = message.content;
-    if (content.startsWith('\ud83d\udcde')) {
+    if (content.startsWith('📞')) {
       const isVideo = content.toLowerCase().includes('video');
       const durationMatch = content.match(/(\d+):(\d+)(?::(\d+))?/);
       let duration: number | undefined;
@@ -961,7 +961,7 @@ export function EnhancedMessageBubble({
                 </AvatarFallback>
               </Avatar>
             ))}
-          {!isMine && !showAvatar && <div className="w-8 flex-shrink-0" />}
+          {!isMine && !showAvatar && isGroup && <div className="w-8 flex-shrink-0" />}
 
           <div className="flex min-w-0 max-w-full flex-col">
             {renderBubbleContent()}
