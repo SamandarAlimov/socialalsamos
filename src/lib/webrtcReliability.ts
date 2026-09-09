@@ -1,106 +1,99 @@
-export const WEBRTC_PRESENCE_LEAVE_GRACE_MS = 6_000;
-export const WEBRTC_PEER_CONNECTION_TIMEOUT_MS = 25_000;
+export const WEBRTC_PRESENCE_LEAVE_GRACE_MS = 6000;
+export const WEBRTC_PEER_CONNECTION_TIMEOUT_MS = 25000;
 
-export function expandIceServersForReliability(
-  servers: RTCIceServer[],
-): RTCIceServer[] {
+export type PeerSessionDecision = 'accept' | 'replace' | 'reject';
+
+function urlsOf(server: RTCIceServer): string[] {
+  return (Array.isArray(server.urls) ? server.urls : [server.urls])
+    .map((url) => String(url || '').trim())
+    .filter(Boolean);
+}
+
+function isTurnUrl(url: string): boolean {
+  const normalized = url.toLowerCase();
+  return normalized.startsWith('turn:') || normalized.startsWith('turns:');
+}
+
+function withTransport(url: string, transport: 'udp' | 'tcp'): string {
+  if (/([?&])transport=/i.test(url)) return url;
+  return `${url}${url.includes('?') ? '&' : '?'}transport=${transport}`;
+}
+
+export function expandIceServersForReliability(servers: RTCIceServer[]): RTCIceServer[] {
   const seen = new Set<string>();
-  const expanded: RTCIceServer[] = [];
+  const result: RTCIceServer[] = [];
 
   for (const server of servers) {
-    const urls = Array.isArray(server.urls) ? server.urls : [server.urls];
-    const nextUrls: string[] = [];
-
-    for (const raw of urls) {
-      if (!raw) continue;
-      const url = String(raw).trim();
-      if (!url) continue;
-      if (!seen.has(url)) {
-        seen.add(url);
-        nextUrls.push(url);
-      }
-
-      const lower = url.toLowerCase();
-      if (lower.startsWith('turn:') && !/[?&]transport=/i.test(url)) {
-        const tcp = `${url}${url.includes('?') ? '&' : '?'}transport=tcp`;
-        if (!seen.has(tcp)) {
-          seen.add(tcp);
-          nextUrls.push(tcp);
-        }
+    const expandedUrls: string[] = [];
+    for (const url of urlsOf(server)) {
+      const normalized = url.toLowerCase();
+      if (!isTurnUrl(url) || /([?&])transport=/i.test(url)) {
+        expandedUrls.push(url);
+      } else if (normalized.startsWith('turns:')) {
+        expandedUrls.push(withTransport(url, 'tcp'));
+      } else {
+        expandedUrls.push(withTransport(url, 'udp'));
+        expandedUrls.push(withTransport(url, 'tcp'));
       }
     }
 
-    if (nextUrls.length === 0) continue;
-    expanded.push({
+    const uniqueUrls = expandedUrls.filter((url) => {
+      const key = `${url}|${server.username ?? ''}|${String(server.credential ?? '')}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    if (uniqueUrls.length === 0) continue;
+    result.push({
       ...server,
-      urls: Array.isArray(server.urls) ? nextUrls : nextUrls[0],
+      urls: Array.isArray(server.urls) ? uniqueUrls : uniqueUrls.length === 1 ? uniqueUrls[0] : uniqueUrls,
     });
   }
 
-  return expanded;
+  return result;
 }
 
 export function hasConfiguredTurnRelay(servers: RTCIceServer[]): boolean {
-  return servers.some((server) => {
-    const urls = Array.isArray(server.urls) ? server.urls : [server.urls];
-    return urls.some((url) => /^(turn|turns):/i.test(String(url ?? '').trim()));
-  });
+  return servers.some((server) => urlsOf(server).some(isTurnUrl));
 }
 
-/**
- * SDP/ICE belongs to exactly one negotiation generation once a local or remote
- * generation has been established. Older clients/persisted frames may omit the
- * id; those are safe only before a generation exists. Accepting an id-less ICE
- * candidate after an ICE restart can mix ufrags from different generations and
- * poison an otherwise valid reconnect.
- */
 export function negotiationMatches(
-  expectedNegotiationId?: string,
-  incomingNegotiationId?: string,
+  expectedNegotiationId?: string | null,
+  incomingNegotiationId?: string | null,
 ): boolean {
   if (!expectedNegotiationId) return true;
   if (!incomingNegotiationId) return false;
   return expectedNegotiationId === incomingNegotiationId;
 }
 
-export type PeerSessionDecision = 'accept' | 'replace' | 'reject';
-
 export function decidePeerSession(
-  currentSessionId?: string,
-  currentSeenAt?: number,
-  incomingSessionId?: string,
-  incomingSentAt?: number,
-  authoritative = false,
+  previousSessionId: string | null | undefined,
+  previousSeenAt: number | null | undefined,
+  incomingSessionId: string | null | undefined,
+  incomingSentAt: number | null | undefined,
+  authoritative: boolean,
 ): PeerSessionDecision {
   if (!incomingSessionId) return 'accept';
-  if (!currentSessionId) return 'replace';
-  if (currentSessionId === incomingSessionId) return 'accept';
-
-  // Presence/ready frames are authoritative because they describe the browser
-  // session that is currently online in the room. Persisted SDP/ICE frames are
-  // not authoritative and must not resurrect a superseded browser session.
-  if (authoritative) return 'replace';
-
+  if (!previousSessionId) return 'replace';
+  if (previousSessionId === incomingSessionId) return 'accept';
+  if (!authoritative) return 'reject';
   if (
     typeof incomingSentAt === 'number' &&
     Number.isFinite(incomingSentAt) &&
-    typeof currentSeenAt === 'number' &&
-    Number.isFinite(currentSeenAt) &&
-    incomingSentAt > currentSeenAt
+    typeof previousSeenAt === 'number' &&
+    Number.isFinite(previousSeenAt) &&
+    incomingSentAt < previousSeenAt
   ) {
-    return 'replace';
+    return 'reject';
   }
-
-  return 'reject';
+  return 'replace';
 }
-
-export type IceRestartReason = 'failed' | 'disconnected' | 'timeout' | 'remote-request';
 
 export function iceRestartDelayMs(
   attempt: number,
-  reason: IceRestartReason,
+  reason: 'failed' | 'disconnected' | 'timeout' | 'remote-request',
 ): number {
-  if (reason === 'disconnected') return Math.min(4_000, 1_200 + attempt * 900);
-  if (reason === 'remote-request') return Math.min(1_200, 200 + attempt * 250);
-  return Math.min(2_500, 400 + attempt * 650);
+  if (reason === 'disconnected') return Math.min(3000 + attempt * 1500, 8000);
+  return Math.min(900 * 2 ** Math.max(0, attempt), 8000);
 }
