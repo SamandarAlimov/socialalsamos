@@ -7,6 +7,7 @@ import {
   runWithProfileEmbedFallback,
   type EmbedQueryResult,
 } from '@/lib/profileEmbed';
+import { hydratePlayableVideoPosts } from '@/lib/videoPostMedia';
 
 export interface VideoPost {
   id: string;
@@ -14,6 +15,9 @@ export interface VideoPost {
   content: string | null;
   media_urls: string[];
   media_type: string;
+  media_candidates?: string[];
+  poster_url?: string | null;
+  poster_candidates?: string[];
   likes_count: number;
   comments_count: number;
   shares_count: number;
@@ -35,7 +39,10 @@ export interface VideoPost {
 }
 
 const PAGE_SIZE = 12;
+const SCAN_SIZE = 36;
+const MAX_SCAN_WINDOWS = 4;
 const QUALITY_POOL_SIZE = 14;
+const QUALITY_SCAN_SIZE = 48;
 const GLOBAL_POOL_SIZE = 20;
 
 const VIDEO_SELECT_WITH_PROFILE = `
@@ -52,6 +59,12 @@ const VIDEO_SELECT_WITH_PROFILE = `
 const VIDEO_SELECT_PLAIN = '*';
 const videoEmbedGuard = createProfileEmbedGuard();
 type PostRow = Record<string, unknown>;
+
+type VideoPageResult = {
+  videos: VideoPost[];
+  nextCursor: string | null;
+  hasMore: boolean;
+};
 
 function readDeepLinkVideoId(): string | null {
   if (typeof window === 'undefined') return null;
@@ -76,6 +89,13 @@ async function fetchExactPostLikeCount(postId: string): Promise<number | null> {
     return null;
   }
   return Math.max(0, count ?? 0);
+}
+
+async function hydrateRows(rows: PostRow[]): Promise<VideoPost[]> {
+  const hydrated = await hydratePlayableVideoPosts(
+    rows as Array<VideoPost & Record<string, unknown>>,
+  );
+  return hydrated as unknown as VideoPost[];
 }
 
 export function useVideoPosts() {
@@ -150,47 +170,97 @@ export function useVideoPosts() {
     [userId],
   );
 
-  const fetchPage = useCallback(async (before: string | null): Promise<VideoPost[]> => {
+  const fetchPostRows = useCallback(async (options: {
+    before?: string | null;
+    limit: number;
+    quality?: boolean;
+    cutoff?: string | null;
+  }): Promise<PostRow[]> => {
     const { data: rows, error } = await runWithProfileEmbedFallback<PostRow>(
       videoEmbedGuard,
       (select) => {
-        const base = supabase
+        let query = supabase
           .from('posts')
           .select(select)
-          .eq('media_type', 'video')
           .eq('visibility', 'public');
-        const filtered = before ? base.lt('created_at', before) : base;
-        return filtered
-          .order('created_at', { ascending: false })
-          .limit(PAGE_SIZE) as unknown as PromiseLike<EmbedQueryResult<PostRow>>;
+
+        if (options.before) query = query.lt('created_at', options.before);
+        if (options.cutoff) query = query.gte('created_at', options.cutoff);
+
+        if (options.quality) {
+          query = query
+            .order('likes_count', { ascending: false })
+            .order('comments_count', { ascending: false })
+            .order('views_count', { ascending: false })
+            .order('created_at', { ascending: false });
+        } else {
+          query = query.order('created_at', { ascending: false });
+        }
+
+        return query.limit(options.limit) as unknown as PromiseLike<EmbedQueryResult<PostRow>>;
       },
       { embedSelect: VIDEO_SELECT_WITH_PROFILE, plainSelect: VIDEO_SELECT_PLAIN },
     );
+
     if (error) throw error;
-    return (rows ?? []) as unknown as VideoPost[];
+    return (rows ?? []) as PostRow[];
   }, []);
+
+  const fetchPage = useCallback(async (before: string | null): Promise<VideoPageResult> => {
+    const collected: VideoPost[] = [];
+    let scanCursor = before;
+    let exhausted = false;
+
+    for (let windowIndex = 0; windowIndex < MAX_SCAN_WINDOWS; windowIndex += 1) {
+      const rows = await fetchPostRows({ before: scanCursor, limit: SCAN_SIZE });
+      if (rows.length === 0) {
+        exhausted = true;
+        break;
+      }
+
+      const hydrated = await hydrateRows(rows);
+      for (const video of hydrated) {
+        collected.push(video);
+        if (collected.length >= PAGE_SIZE) {
+          // Cursor the last returned VIDEO rather than the last scanned post.
+          // Otherwise videos that were already inside this scan window but came
+          // after PAGE_SIZE would be skipped forever on the next pagination call.
+          return {
+            videos: collected.slice(0, PAGE_SIZE),
+            nextCursor: collected[PAGE_SIZE - 1]?.created_at ?? null,
+            hasMore: true,
+          };
+        }
+      }
+
+      scanCursor = String(rows[rows.length - 1]?.created_at ?? '') || null;
+      if (rows.length < SCAN_SIZE || !scanCursor) {
+        exhausted = true;
+        break;
+      }
+    }
+
+    return {
+      videos: collected,
+      nextCursor: scanCursor,
+      hasMore: !exhausted && Boolean(scanCursor),
+    };
+  }, [fetchPostRows]);
 
   const fetchQualityCandidates = useCallback(async (): Promise<VideoPost[]> => {
     const cutoff = new Date(Date.now() - 45 * 24 * 60 * 60 * 1000).toISOString();
-    const { data: rows, error } = await runWithProfileEmbedFallback<PostRow>(
-      videoEmbedGuard,
-      (select) =>
-        supabase
-          .from('posts')
-          .select(select)
-          .eq('media_type', 'video')
-          .eq('visibility', 'public')
-          .gte('created_at', cutoff)
-          .order('likes_count', { ascending: false })
-          .order('comments_count', { ascending: false })
-          .order('views_count', { ascending: false })
-          .order('created_at', { ascending: false })
-          .limit(QUALITY_POOL_SIZE) as unknown as PromiseLike<EmbedQueryResult<PostRow>>,
-      { embedSelect: VIDEO_SELECT_WITH_PROFILE, plainSelect: VIDEO_SELECT_PLAIN },
-    );
-    if (error) return [];
-    return (rows ?? []) as unknown as VideoPost[];
-  }, []);
+    try {
+      const rows = await fetchPostRows({
+        limit: QUALITY_SCAN_SIZE,
+        quality: true,
+        cutoff,
+      });
+      return (await hydrateRows(rows)).slice(0, QUALITY_POOL_SIZE);
+    } catch (error) {
+      console.warn('Video quality candidate pool unavailable:', error);
+      return [];
+    }
+  }, [fetchPostRows]);
 
   const fetchGlobalRankCandidates = useCallback(async (): Promise<VideoPost[]> => {
     try {
@@ -212,19 +282,39 @@ export function useVideoPosts() {
             .from('posts')
             .select(select)
             .in('id', ids)
-            .eq('media_type', 'video')
             .eq('visibility', 'public') as unknown as PromiseLike<EmbedQueryResult<PostRow>>,
         { embedSelect: VIDEO_SELECT_WITH_PROFILE, plainSelect: VIDEO_SELECT_PLAIN },
       );
       if (error) return [];
 
-      const byId = new Map(
-        ((rows ?? []) as unknown as VideoPost[]).map((video) => [video.id, video]),
-      );
+      const hydrated = await hydrateRows((rows ?? []) as PostRow[]);
+      const byId = new Map(hydrated.map((video) => [video.id, video]));
       return ids.map((id) => byId.get(id)).filter((video): video is VideoPost => Boolean(video));
     } catch {
       return [];
     }
+  }, []);
+
+  const fetchSingleVideo = useCallback(async (
+    postId: string,
+    publicOnly = false,
+  ): Promise<VideoPost | null> => {
+    const { data: rows, error } = await runWithProfileEmbedFallback<PostRow>(
+      videoEmbedGuard,
+      (select) => {
+        let query = supabase
+          .from('posts')
+          .select(select)
+          .eq('id', postId);
+        if (publicOnly) query = query.eq('visibility', 'public');
+        return query.limit(1) as unknown as PromiseLike<EmbedQueryResult<PostRow>>;
+      },
+      { embedSelect: VIDEO_SELECT_WITH_PROFILE, plainSelect: VIDEO_SELECT_PLAIN },
+    );
+    if (error) return null;
+
+    const hydrated = await hydrateRows((rows ?? []) as PostRow[]);
+    return hydrated[0] ?? null;
   }, []);
 
   const fetchVideos = useCallback(async () => {
@@ -232,18 +322,17 @@ export function useVideoPosts() {
     cursorRef.current = null;
 
     try {
-      const [page, qualityPool, globalPool] = await Promise.all([
+      const [pageResult, qualityPool, globalPool] = await Promise.all([
         fetchPage(null),
         fetchQualityCandidates(),
         fetchGlobalRankCandidates(),
       ]);
 
-      const last = page[page.length - 1];
-      cursorRef.current = last ? last.created_at : null;
-      setHasMore(page.length === PAGE_SIZE);
+      cursorRef.current = pageResult.nextCursor;
+      setHasMore(pageResult.hasMore);
 
       const merged = new Map<string, VideoPost>();
-      for (const video of [...page, ...qualityPool, ...globalPool]) {
+      for (const video of [...pageResult.videos, ...qualityPool, ...globalPool]) {
         if (!merged.has(video.id)) merged.set(video.id, video);
       }
       let data = Array.from(merged.values());
@@ -254,20 +343,8 @@ export function useVideoPosts() {
         if (existing) {
           data = [existing, ...data.filter((video) => video.id !== deepLinkId)];
         } else {
-          const { data: singleRows, error: singleError } = await runWithProfileEmbedFallback<PostRow>(
-            videoEmbedGuard,
-            (select) =>
-              supabase
-                .from('posts')
-                .select(select)
-                .eq('id', deepLinkId)
-                .limit(1) as unknown as PromiseLike<EmbedQueryResult<PostRow>>,
-            { embedSelect: VIDEO_SELECT_WITH_PROFILE, plainSelect: VIDEO_SELECT_PLAIN },
-          );
-          const single = !singleError
-            ? ((singleRows ?? [])[0] as unknown as VideoPost | undefined)
-            : undefined;
-          if (single?.media_urls?.length) {
+          const single = await fetchSingleVideo(deepLinkId);
+          if (single) {
             data = [single, ...data.filter((video) => video.id !== single.id)];
           }
         }
@@ -280,7 +357,13 @@ export function useVideoPosts() {
       hasLoadedOnceRef.current = true;
       setIsLoading(false);
     }
-  }, [attachUserState, fetchGlobalRankCandidates, fetchPage, fetchQualityCandidates]);
+  }, [
+    attachUserState,
+    fetchGlobalRankCandidates,
+    fetchPage,
+    fetchQualityCandidates,
+    fetchSingleVideo,
+  ]);
 
   const loadMore = useCallback(async () => {
     if (loadingMoreRef.current || !hasMore) return;
@@ -290,11 +373,12 @@ export function useVideoPosts() {
     loadingMoreRef.current = true;
     setIsLoadingMore(true);
     try {
-      const page = await fetchPage(cursor);
-      if (page.length < PAGE_SIZE) setHasMore(false);
-      if (page.length > 0) {
-        cursorRef.current = page[page.length - 1].created_at;
-        const decorated = await attachUserState(page);
+      const pageResult = await fetchPage(cursor);
+      setHasMore(pageResult.hasMore);
+      cursorRef.current = pageResult.nextCursor;
+
+      if (pageResult.videos.length > 0) {
+        const decorated = await attachUserState(pageResult.videos);
         setVideos((previous) => {
           const seen = new Set(previous.map((video) => video.id));
           const fresh = decorated.filter((video) => !seen.has(video.id));
@@ -442,36 +526,43 @@ export function useVideoPosts() {
   }, [fetchVideos]);
 
   useEffect(() => {
-    if (videos.length === 0) return;
+    const upsertHydratedVideo = async (postId: string) => {
+      const loaded = await fetchSingleVideo(postId, true);
+      if (!loaded || loaded.user_id === userId) return;
+      const [decorated] = await attachUserState([loaded]);
+      if (!decorated) return;
+
+      setVideos((previous) => {
+        const index = previous.findIndex((video) => video.id === decorated.id);
+        if (index < 0) return [decorated, ...previous];
+        const next = [...previous];
+        next[index] = { ...next[index], ...decorated };
+        return next;
+      });
+    };
 
     const channel = supabase
       .channel('video-posts-realtime')
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'posts', filter: 'media_type=eq.video' },
-        async (payload) => {
-          const newId = (payload.new as { id?: string } | null)?.id;
-          if (!newId) return;
-          const { data: rows, error } = await runWithProfileEmbedFallback<PostRow>(
-            videoEmbedGuard,
-            (select) =>
-              supabase
-                .from('posts')
-                .select(select)
-                .eq('id', newId)
-                .limit(1) as unknown as PromiseLike<EmbedQueryResult<PostRow>>,
-            { embedSelect: VIDEO_SELECT_WITH_PROFILE, plainSelect: VIDEO_SELECT_PLAIN },
+        { event: 'INSERT', schema: 'public', table: 'posts' },
+        (payload) => {
+          const newId = (payload.new as { id?: string; visibility?: string | null } | null)?.id;
+          const visibility = (payload.new as { visibility?: string | null } | null)?.visibility;
+          if (!newId || (visibility && visibility !== 'public')) return;
+          void upsertHydratedVideo(newId);
+        },
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'post_media' },
+        (payload) => {
+          const postId = String(
+            (payload.new as { post_id?: string } | null)?.post_id ||
+              (payload.old as { post_id?: string } | null)?.post_id ||
+              '',
           );
-          if (error) {
-            console.error('Error loading new video:', error);
-            return;
-          }
-          const data = (rows ?? [])[0] as unknown as VideoPost | undefined;
-          if (data && data.user_id !== userId) {
-            setVideos((previous) =>
-              previous.some((video) => video.id === data.id) ? previous : [data, ...previous],
-            );
-          }
+          if (postId) void upsertHydratedVideo(postId);
         },
       )
       .on(
@@ -581,7 +672,7 @@ export function useVideoPosts() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [reconcileLikeCount, userId, videos.length]);
+  }, [attachUserState, fetchSingleVideo, reconcileLikeCount, userId]);
 
   return {
     videos,
