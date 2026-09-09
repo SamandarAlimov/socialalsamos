@@ -12,6 +12,9 @@ export const VIDEO_COMMENTS_REFERENCE = {
     initialTop: 819,
     expandedTop: 111,
     footerTop: 1714,
+    // Rounded-corner contour fit across both supplied Instagram states:
+    // ~80.5..81.5 physical screenshot pixels.
+    cornerRadius: 81,
   },
   handle: {
     left: 431,
@@ -47,8 +50,12 @@ export const VIDEO_COMMENTS_GEOMETRY = {
   footerHeightRatio:
     (VIDEO_COMMENTS_REFERENCE.screenHeight - VIDEO_COMMENTS_REFERENCE.sheet.footerTop) /
     VIDEO_COMMENTS_REFERENCE_VIEWPORT_HEIGHT,
+  sheetCornerRadiusRatio:
+    VIDEO_COMMENTS_REFERENCE.sheet.cornerRadius / VIDEO_COMMENTS_REFERENCE.screenWidth,
   handleWidthRatio:
     VIDEO_COMMENTS_REFERENCE.handle.width / VIDEO_COMMENTS_REFERENCE.screenWidth,
+  handleHeightRatio:
+    VIDEO_COMMENTS_REFERENCE.handle.height / VIDEO_COMMENTS_REFERENCE_VIEWPORT_HEIGHT,
   handleTopWithinSheetRatio:
     (VIDEO_COMMENTS_REFERENCE.handle.top - VIDEO_COMMENTS_REFERENCE.sheet.initialTop) /
     VIDEO_COMMENTS_REFERENCE_VIEWPORT_HEIGHT,
@@ -62,7 +69,9 @@ export function scaleVideoCommentsReference(width: number, height: number) {
     initialSheetTop: height * VIDEO_COMMENTS_GEOMETRY.initialSheetTopRatio,
     expandedSheetTop: height * VIDEO_COMMENTS_GEOMETRY.expandedSheetTopRatio,
     footerHeight: height * VIDEO_COMMENTS_GEOMETRY.footerHeightRatio,
+    sheetCornerRadius: width * VIDEO_COMMENTS_GEOMETRY.sheetCornerRadiusRatio,
     handleWidth: width * VIDEO_COMMENTS_GEOMETRY.handleWidthRatio,
+    handleHeight: height * VIDEO_COMMENTS_GEOMETRY.handleHeightRatio,
     handleTopWithinSheet: height * VIDEO_COMMENTS_GEOMETRY.handleTopWithinSheetRatio,
   };
 }
