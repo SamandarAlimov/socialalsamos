@@ -1,0 +1,45 @@
+name: Production TURN Probe
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  turn-probe:
+    if: github.head_ref == 'diagnose/prod-turn-20260909'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install TURN diagnostic client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends coturn
+
+      - name: Read production ICE configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          set -a
+          source .env
+          set +a
+          test -n "${SUPABASE_URL:-}"
+          test -n "${SUPABASE_PUBLISHABLE_KEY:-}"
+          curl --fail --silent --show-error \
+            --header "apikey: ${SUPABASE_PUBLISHABLE_KEY}" \
+            --header "Authorization: Bearer ${SUPABASE_PUBLISHABLE_KEY}" \
+            "${SUPABASE_URL}/rest/v1/call_webrtc_config?select=value&key=eq.ice_servers" \
+            --output /tmp/ice-config.json
+          python3 - <<'PY'
+          import json
+          rows = json.load(open('/tmp/ice-config.json'))
+          if not rows:
+              raise SystemExit('Production ice_servers config row is missing')
+          value = rows[0].get('value')
+          print('Production ICE config loaded:', {'entries': len(value) if isinstance(value, list) else 0})
+          PY
+
+      - name: Verify authenticated TURN relay allocation
+        run: python3 scripts/probe-production-turn.py /tmp/ice-config.json
