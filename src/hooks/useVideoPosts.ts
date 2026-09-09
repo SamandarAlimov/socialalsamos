@@ -182,7 +182,9 @@ export function useVideoPosts() {
         let query = supabase
           .from('posts')
           .select(select)
-          .eq('visibility', 'public');
+          // Historical rows used NULL as the default public visibility. Keep
+          // Videos aligned with Home; RLS remains the final visibility authority.
+          .or('visibility.eq.public,visibility.is.null');
 
         if (options.before) query = query.lt('created_at', options.before);
         if (options.cutoff) query = query.gte('created_at', options.cutoff);
@@ -282,7 +284,7 @@ export function useVideoPosts() {
             .from('posts')
             .select(select)
             .in('id', ids)
-            .eq('visibility', 'public') as unknown as PromiseLike<EmbedQueryResult<PostRow>>,
+            .or('visibility.eq.public,visibility.is.null') as unknown as PromiseLike<EmbedQueryResult<PostRow>>,
         { embedSelect: VIDEO_SELECT_WITH_PROFILE, plainSelect: VIDEO_SELECT_PLAIN },
       );
       if (error) return [];
@@ -306,7 +308,7 @@ export function useVideoPosts() {
           .from('posts')
           .select(select)
           .eq('id', postId);
-        if (publicOnly) query = query.eq('visibility', 'public');
+        if (publicOnly) query = query.or('visibility.eq.public,visibility.is.null');
         return query.limit(1) as unknown as PromiseLike<EmbedQueryResult<PostRow>>;
       },
       { embedSelect: VIDEO_SELECT_WITH_PROFILE, plainSelect: VIDEO_SELECT_PLAIN },
