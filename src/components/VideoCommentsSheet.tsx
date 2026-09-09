@@ -84,6 +84,24 @@ export function VideoCommentsSheet({
     };
   }, [isOpen]);
 
+  useEffect(() => {
+    if (!isOpen || !isMobile || typeof document === 'undefined') return;
+
+    // Comments own the mobile viewport, so hidden feed media must not keep
+    // playing audio or wasting decode/battery behind the opaque sheet.
+    const playingVideos = Array.from(document.querySelectorAll<HTMLVideoElement>('video')).filter(
+      (video) => !video.paused && !video.ended,
+    );
+    playingVideos.forEach((video) => video.pause());
+
+    return () => {
+      playingVideos.forEach((video) => {
+        if (!video.isConnected || video.ended) return;
+        void video.play().catch(() => undefined);
+      });
+    };
+  }, [isMobile, isOpen]);
+
   if (isMobile) {
     return (
       <Drawer
