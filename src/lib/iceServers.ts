@@ -114,7 +114,7 @@ export function applyRelayPolicy(
 function iceServerCredentialKey(server: RTCIceServer): string {
   const credential =
     typeof server.credential === "string" ? server.credential : "";
-  return `${server.username ?? ""}|${credential}|${server.credentialType ?? ""}`;
+  return `${server.username ?? ""}|${credential}`;
 }
 
 function dedupeIceServers(servers: RTCIceServer[]): RTCIceServer[] {
