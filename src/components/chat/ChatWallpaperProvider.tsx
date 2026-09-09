@@ -11,9 +11,9 @@ import { ChatAppearanceProvider } from './ChatAppearanceProvider';
  * yoki virtualizer elementlarining `position` qiymatiga tegilmaydi.
  *
  * Chat scroll konteyneri overflow holatiga qarab aniqlanadi. History hali qisqa
- * bo'lsa ham `overflow-y:auto|scroll` konteynerning o'zi haqiqiy chat surface
- * hisoblanadi — scrollHeight tekshirilmaydi. Bu wallpaper noto'g'ri message
- * wrapperga yopishib qolishining oldini oladi.
+ * yoki umuman bo'sh bo'lsa ham `overflow-y:auto|scroll` konteynerning o'zi
+ * haqiqiy chat surface hisoblanadi — scrollHeight tekshirilmaydi. Bu wallpaper
+ * noto'g'ri message wrapperga yopishib qolishining oldini oladi.
  *
  * Shu komponent chat ko'rinishi sozlamalarini (matn o'lchami, burchaklar,
  * energiya tejash) qo'llovchi ChatAppearanceProvider'ni ham ishga tushiradi.
@@ -66,6 +66,17 @@ function findChatSurface(): HTMLElement | null {
   const explicit = document.querySelector<HTMLElement>('[data-chat-surface]');
   if (explicit) return explicit;
 
+  // MessagesPage o'ng paneli `.chat-shell` bilan scope qilingan. Avval shu
+  // panel ichidagi haqiqiy scroll container olinadi. Bu usul empty chatda ham
+  // ishlaydi va chapdagi chat-list scrollini tasodifan tanlamaydi.
+  const chatShell = document.querySelector<HTMLElement>('.chat-shell');
+  if (chatShell) {
+    const descendants = Array.from(chatShell.querySelectorAll<HTMLElement>('*'));
+    const scrollSurface = descendants.find(isScrollContainer);
+    if (scrollSurface) return scrollSurface;
+  }
+
+  // Legacy/fallback: eski layoutlarda message anchor bo'yicha yuqoriga yuramiz.
   const anchor = document.querySelector<HTMLElement>('[id^="message-"]');
   if (!anchor) return null;
 
