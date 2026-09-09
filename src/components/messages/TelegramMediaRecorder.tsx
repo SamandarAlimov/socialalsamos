@@ -43,13 +43,29 @@ const HOLD_TO_RECORD_MS = 220;
 const MIN_DURATION_MS = 650;
 const CANCEL_DISTANCE = 92;
 const LOCK_DISTANCE = 72;
-const VIDEO_RING_RADIUS = 47;
-const VIDEO_RING_CIRCUMFERENCE = 2 * Math.PI * VIDEO_RING_RADIUS;
 const LIVE_BARS = 28;
 const PREVIEW_BARS = 42;
+const VIDEO_RING_RADIUS = 47;
+const VIDEO_RING_CIRCUMFERENCE = 2 * Math.PI * VIDEO_RING_RADIUS;
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
+}
+
+function formatDuration(seconds: number) {
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
+
+function formatLiveDuration(milliseconds: number) {
+  const safeMs = Math.max(0, milliseconds);
+  const mins = Math.floor(safeMs / 60000);
+  const secs = Math.floor((safeMs % 60000) / 1000);
+  const centiseconds = Math.floor((safeMs % 1000) / 10);
+  return `${mins}:${secs.toString().padStart(2, '0')},${centiseconds
+    .toString()
+    .padStart(2, '0')}`;
 }
 
 export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorderProps) {
@@ -65,7 +81,9 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
   const [playbackProgress, setPlaybackProgress] = useState(0);
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
   const [audioLevels, setAudioLevels] = useState<number[]>(Array(LIVE_BARS).fill(8));
-  const [recordedLevels, setRecordedLevels] = useState<number[]>(Array(PREVIEW_BARS).fill(0.22));
+  const [recordedLevels, setRecordedLevels] = useState<number[]>(
+    Array(PREVIEW_BARS).fill(0.22)
+  );
   const [isHolding, setIsHolding] = useState(false);
   const [isLocked, setIsLocked] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
@@ -83,9 +101,6 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
   const analyserRef = useRef<AnalyserNode | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const holdTriggeredRef = useRef(false);
-  const holdActiveRef = useRef(false);
-  const releaseBeforeRecorderRef = useRef(false);
   const mediaUrlRef = useRef<string | null>(null);
   const mimeTypeRef = useRef('audio/webm');
   const modeRef = useRef<RecordingMode>('voice');
@@ -96,26 +111,12 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
   const autoSendRef = useRef(false);
   const lockedRef = useRef(false);
   const cancelledRef = useRef(false);
+  const holdActiveRef = useRef(false);
+  const holdTriggeredRef = useRef(false);
+  const releaseBeforeRecorderRef = useRef(false);
   const pointerStartRef = useRef({ x: 0, y: 0 });
   const waveformHistoryRef = useRef<number[]>([]);
   const lastVisualizerCommitRef = useRef(0);
-
-  const stopVisualization = useCallback(() => {
-    if (animationFrameRef.current != null) {
-      cancelAnimationFrame(animationFrameRef.current);
-      animationFrameRef.current = null;
-    }
-    analyserRef.current = null;
-    if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
-      void audioContextRef.current.close();
-    }
-    audioContextRef.current = null;
-  }, []);
-
-  const stopTracks = useCallback(() => {
-    streamRef.current?.getTracks().forEach((track) => track.stop());
-    streamRef.current = null;
-  }, []);
 
   const clearTimer = useCallback(() => {
     if (timerRef.current) {
@@ -131,6 +132,23 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
     }
   }, []);
 
+  const stopTracks = useCallback(() => {
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+  }, []);
+
+  const stopVisualization = useCallback(() => {
+    if (animationFrameRef.current != null) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
+    analyserRef.current = null;
+    if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+      void audioContextRef.current.close();
+    }
+    audioContextRef.current = null;
+  }, []);
+
   const revokeUrl = useCallback(() => {
     if (mediaUrlRef.current) {
       URL.revokeObjectURL(mediaUrlRef.current);
@@ -138,19 +156,9 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
     }
   }, []);
 
-  const getRecordedElapsedMs = useCallback(() => {
-    if (!startedAtRef.current) return 0;
-    const now = Date.now();
-    const activePauseMs =
-      isPausedRef.current && pausedStartedAtRef.current
-        ? now - pausedStartedAtRef.current
-        : 0;
-    return Math.max(0, now - startedAtRef.current - pausedTotalMsRef.current - activePauseMs);
-  }, []);
-
-  const cleanup = useCallback(() => {
-    stopTracks();
+  const cleanupResources = useCallback(() => {
     clearTimer();
+    stopTracks();
     stopVisualization();
     revokeUrl();
     mediaRecorderRef.current = null;
@@ -158,15 +166,15 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
   }, [clearTimer, revokeUrl, stopTracks, stopVisualization]);
 
   const resetGesture = useCallback(() => {
-    setGestureDx(0);
-    setGestureDy(0);
     holdActiveRef.current = false;
     holdTriggeredRef.current = false;
     setIsHolding(false);
+    setGestureDx(0);
+    setGestureDy(0);
   }, []);
 
   const resetAll = useCallback(() => {
-    cleanup();
+    cleanupResources();
     clearHoldTimer();
     setState('idle');
     setMediaUrl(null);
@@ -184,35 +192,39 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
     pausedStartedAtRef.current = 0;
     pausedTotalMsRef.current = 0;
     isPausedRef.current = false;
-    lockedRef.current = false;
     autoSendRef.current = false;
+    lockedRef.current = false;
     cancelledRef.current = false;
     releaseBeforeRecorderRef.current = false;
     resetGesture();
-  }, [cleanup, clearHoldTimer, resetGesture]);
+  }, [cleanupResources, clearHoldTimer, resetGesture]);
 
   useEffect(() => {
     return () => {
-      cleanup();
+      const recorder = mediaRecorderRef.current;
+      if (recorder && recorder.state !== 'inactive') {
+        recorder.ondataavailable = null;
+        recorder.onstop = null;
+        try {
+          recorder.stop();
+        } catch {
+          // Component is already leaving; resource cleanup below is enough.
+        }
+      }
+      cleanupResources();
       clearHoldTimer();
     };
-  }, [cleanup, clearHoldTimer]);
+  }, [cleanupResources, clearHoldTimer]);
 
-  const formatDuration = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  const formatLiveDuration = (milliseconds: number) => {
-    const safeMs = Math.max(0, milliseconds);
-    const mins = Math.floor(safeMs / 60000);
-    const secs = Math.floor((safeMs % 60000) / 1000);
-    const centiseconds = Math.floor((safeMs % 1000) / 10);
-    return `${mins}:${secs.toString().padStart(2, '0')},${centiseconds
-      .toString()
-      .padStart(2, '0')}`;
-  };
+  const getRecordedElapsedMs = useCallback(() => {
+    if (!startedAtRef.current) return 0;
+    const now = Date.now();
+    const activePause =
+      isPausedRef.current && pausedStartedAtRef.current
+        ? now - pausedStartedAtRef.current
+        : 0;
+    return Math.max(0, now - startedAtRef.current - pausedTotalMsRef.current - activePause);
+  }, []);
 
   const getSupportedMimeType = (isVideo: boolean) => {
     const candidates = isVideo
@@ -285,36 +297,35 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
 
       const source = audioContext.createMediaStreamSource(stream);
       source.connect(analyser);
+      const data = new Uint8Array(analyser.frequencyBinCount);
 
-      const dataArray = new Uint8Array(analyser.frequencyBinCount);
-
-      const updateLevels = (timestamp: number) => {
+      const update = (timestamp: number) => {
         if (!analyserRef.current) return;
-        analyserRef.current.getByteFrequencyData(dataArray);
+        analyserRef.current.getByteFrequencyData(data);
 
         if (timestamp - lastVisualizerCommitRef.current >= 55) {
           lastVisualizerCommitRef.current = timestamp;
           const bars = Array.from({ length: LIVE_BARS }, (_, index) => {
-            const position = Math.min(
-              dataArray.length - 1,
-              Math.floor((index / Math.max(1, LIVE_BARS - 1)) * (dataArray.length - 1))
+            const dataIndex = Math.min(
+              data.length - 1,
+              Math.floor((index / Math.max(1, LIVE_BARS - 1)) * (data.length - 1))
             );
-            const normalized = (dataArray[position] || 0) / 255;
-            return clamp(10 + normalized * 90, 10, 100);
+            return clamp(10 + ((data[dataIndex] || 0) / 255) * 90, 10, 100);
           });
           setAudioLevels(bars);
 
           const average =
             bars.reduce((sum, value) => sum + value, 0) / Math.max(1, bars.length) / 100;
-          const history = waveformHistoryRef.current;
-          history.push(clamp(average, 0.18, 1));
-          if (history.length > PREVIEW_BARS) history.shift();
+          waveformHistoryRef.current.push(clamp(average, 0.18, 1));
+          if (waveformHistoryRef.current.length > PREVIEW_BARS) {
+            waveformHistoryRef.current.shift();
+          }
         }
 
-        animationFrameRef.current = requestAnimationFrame(updateLevels);
+        animationFrameRef.current = requestAnimationFrame(update);
       };
 
-      animationFrameRef.current = requestAnimationFrame(updateLevels);
+      animationFrameRef.current = requestAnimationFrame(update);
     } catch (error) {
       console.error('Failed to start audio visualization:', error);
     }
@@ -326,19 +337,10 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
     if (recorder && recorder.state !== 'inactive') recorder.stop();
   }, [clearTimer]);
 
-  const cancelRecording = useCallback(() => {
-    cancelledRef.current = true;
-    autoSendRef.current = false;
-    const recorder = mediaRecorderRef.current;
-    if (recorder && recorder.state !== 'inactive') recorder.stop();
-    resetAll();
-    onCancel?.();
-  }, [onCancel, resetAll]);
-
   const startRecording = useCallback(
     async (recordMode: RecordingMode) => {
       try {
-        cleanup();
+        cleanupResources();
         cancelledRef.current = false;
         autoSendRef.current = false;
         modeRef.current = recordMode;
@@ -379,7 +381,6 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
 
         const stream = await navigator.mediaDevices.getUserMedia(constraints);
         streamRef.current = stream;
-
         if (!isVideo) startAudioVisualization(stream);
 
         if (isVideo) {
@@ -411,21 +412,22 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
         };
 
         recorder.onstop = () => {
-          const elapsedAtStop = Math.max(1, getRecordedElapsedMs());
           stopTracks();
           stopVisualization();
-          setElapsedMs(elapsedAtStop);
-          setRecordedLevels(() => {
-            const history = waveformHistoryRef.current;
-            if (!history.length) return Array(PREVIEW_BARS).fill(0.22);
-            if (history.length >= PREVIEW_BARS) return history.slice(-PREVIEW_BARS);
-            return [...Array(PREVIEW_BARS - history.length).fill(0.18), ...history];
-          });
 
           if (cancelledRef.current) {
-            chunksRef.current = [];
+            resetAll();
             return;
           }
+
+          const elapsedAtStop = Math.max(1, getRecordedElapsedMs());
+          setElapsedMs(elapsedAtStop);
+          const history = waveformHistoryRef.current;
+          setRecordedLevels(
+            history.length >= PREVIEW_BARS
+              ? history.slice(-PREVIEW_BARS)
+              : [...Array(PREVIEW_BARS - history.length).fill(0.18), ...history]
+          );
 
           const blob = new Blob(chunksRef.current, { type: mimeTypeRef.current });
           chunksRef.current = [];
@@ -451,14 +453,13 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
 
         recorder.start(100);
         startedAtRef.current = Date.now();
-
         if (!isVideo) setState('recording');
 
         if (!isVideo && releaseBeforeRecorderRef.current) {
           releaseBeforeRecorderRef.current = false;
           cancelledRef.current = true;
+          setState('idle');
           recorder.stop();
-          resetAll();
           toast({
             title: 'Juda qisqa',
             description: 'Mikrofonga ruxsat berilgach, yozish uchun qayta bosib turing.',
@@ -483,7 +484,7 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
         }, 50);
       } catch (error) {
         console.error('Failed to start recording:', error);
-        cleanup();
+        cleanupResources();
         setState('idle');
         setIsLocked(false);
         setIsPaused(false);
@@ -503,7 +504,7 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
       }
     },
     [
-      cleanup,
+      cleanupResources,
       clearTimer,
       facingMode,
       getRecordedElapsedMs,
@@ -519,18 +520,44 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
     ]
   );
 
+  const cancelRecording = useCallback(() => {
+    cancelledRef.current = true;
+    autoSendRef.current = false;
+    clearTimer();
+    stopVisualization();
+    resetGesture();
+    setState('idle');
+    setIsLocked(false);
+    setIsPaused(false);
+    lockedRef.current = false;
+    isPausedRef.current = false;
+
+    const recorder = mediaRecorderRef.current;
+    if (recorder && recorder.state !== 'inactive') {
+      recorder.stop();
+    } else {
+      resetAll();
+    }
+    onCancel?.();
+  }, [clearTimer, onCancel, resetAll, resetGesture, stopVisualization]);
+
   const finishAndSend = useCallback(() => {
     const elapsed = getRecordedElapsedMs();
     if (elapsed < MIN_DURATION_MS) {
       cancelledRef.current = true;
+      autoSendRef.current = false;
+      setState('idle');
+      resetGesture();
       stopRecorder();
-      resetAll();
-      toast({ title: 'Juda qisqa', description: 'Yozish uchun mikrofonni biroz uzoqroq bosib turing.' });
+      toast({
+        title: 'Juda qisqa',
+        description: 'Yozish uchun mikrofonni biroz uzoqroq bosib turing.',
+      });
       return;
     }
     autoSendRef.current = true;
     stopRecorder();
-  }, [getRecordedElapsedMs, resetAll, stopRecorder, toast]);
+  }, [getRecordedElapsedMs, resetGesture, stopRecorder, toast]);
 
   const stopToPreview = useCallback(() => {
     autoSendRef.current = false;
@@ -568,12 +595,8 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
   const togglePlayback = useCallback(() => {
     const element = mode === 'video' ? videoPlaybackRef.current : audioPlaybackRef.current;
     if (!element) return;
-
-    if (element.paused) {
-      void element.play();
-    } else {
-      element.pause();
-    }
+    if (element.paused) void element.play();
+    else element.pause();
   }, [mode]);
 
   const switchCamera = useCallback(async () => {
@@ -612,8 +635,8 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
       event.preventDefault();
       pointerStartRef.current = { x: event.clientX, y: event.clientY };
       holdActiveRef.current = true;
-      releaseBeforeRecorderRef.current = false;
       holdTriggeredRef.current = false;
+      releaseBeforeRecorderRef.current = false;
       setIsHolding(true);
       setGestureDx(0);
       setGestureDy(0);
@@ -628,7 +651,9 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
 
   const handleHoldMove = useCallback(
     (clientX: number, clientY: number) => {
-      if (!holdActiveRef.current || !holdTriggeredRef.current || modeRef.current !== 'voice') return;
+      if (!holdActiveRef.current || !holdTriggeredRef.current || modeRef.current !== 'voice') {
+        return;
+      }
       if (lockedRef.current) return;
 
       const dx = clientX - pointerStartRef.current.x;
@@ -642,7 +667,6 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
         cancelRecording();
         return;
       }
-
       if (dy <= -LOCK_DISTANCE) lockRecording();
     },
     [cancelRecording, lockRecording]
@@ -662,11 +686,8 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
 
     if (modeRef.current === 'voice' && !lockedRef.current) {
       const recorder = mediaRecorderRef.current;
-      if (recorder && recorder.state !== 'inactive') {
-        finishAndSend();
-      } else {
-        releaseBeforeRecorderRef.current = true;
-      }
+      if (recorder && recorder.state !== 'inactive') finishAndSend();
+      else releaseBeforeRecorderRef.current = true;
     }
 
     holdTriggeredRef.current = false;
@@ -676,14 +697,15 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
 
   const handleHoldCancel = useCallback(() => {
     if (!holdActiveRef.current) return;
-    const wasRecording = holdTriggeredRef.current && modeRef.current === 'voice' && !lockedRef.current;
+    const shouldDiscard =
+      holdTriggeredRef.current && modeRef.current === 'voice' && !lockedRef.current;
     holdActiveRef.current = false;
     setIsHolding(false);
     clearHoldTimer();
     holdTriggeredRef.current = false;
     setGestureDx(0);
     setGestureDy(0);
-    if (wasRecording) cancelRecording();
+    if (shouldDiscard) cancelRecording();
   }, [cancelRecording, clearHoldTimer]);
 
   useEffect(() => {
@@ -704,10 +726,10 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
     };
   }, [handleHoldCancel, handleHoldEnd, handleHoldMove, isHolding]);
 
-  const videoRingProgress = getVideoNoteProgress(
+  const videoProgress = getVideoNoteProgress(
     state === 'recording' ? elapsedMs : duration * 1000
   );
-  const videoRingOffset = VIDEO_RING_CIRCUMFERENCE * (1 - videoRingProgress);
+  const videoRingOffset = VIDEO_RING_CIRCUMFERENCE * (1 - videoProgress);
 
   if (state === 'sending') {
     return (
@@ -749,26 +771,14 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
               onEnded={() => setIsPlaying(false)}
             />
           </div>
-
           <svg
             className="pointer-events-none absolute inset-0 h-full w-full -rotate-90 text-foreground"
             viewBox="0 0 100 100"
             aria-hidden="true"
           >
             <circle cx="50" cy="50" r={VIDEO_RING_RADIUS} fill="none" stroke="currentColor" strokeOpacity="0.18" strokeWidth="2.5" />
-            <circle
-              cx="50"
-              cy="50"
-              r={VIDEO_RING_RADIUS}
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeDasharray={VIDEO_RING_CIRCUMFERENCE}
-              strokeDashoffset={videoRingOffset}
-            />
+            <circle cx="50" cy="50" r={VIDEO_RING_RADIUS} fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeDasharray={VIDEO_RING_CIRCUMFERENCE} strokeDashoffset={videoRingOffset} />
           </svg>
-
           <button
             type="button"
             onClick={togglePlayback}
@@ -778,14 +788,11 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
             {isPlaying ? <Pause className="h-6 w-6" /> : <Play className="ml-0.5 h-6 w-6" fill="currentColor" />}
           </button>
         </div>
-
         <div className="flex items-center justify-center gap-2 rounded-full border border-border/70 bg-background/90 p-1.5 shadow-lg backdrop-blur">
           <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full text-destructive" onClick={cancelRecording} aria-label="O‘chirish">
             <Trash2 className="h-4 w-4" />
           </Button>
-          <span className="min-w-[54px] text-center text-[11px] tabular-nums text-muted-foreground">
-            {formatDuration(duration)}
-          </span>
+          <span className="min-w-[54px] text-center text-[11px] tabular-nums text-muted-foreground">{formatDuration(duration)}</span>
           <Button variant="default" size="icon" className="h-9 w-9 rounded-full" onClick={handleSendFromPreview} aria-label="Jo‘natish">
             <Send className="h-4 w-4" />
           </Button>
@@ -816,33 +823,18 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
               autoPlay
             />
           </div>
-
           <svg className="pointer-events-none absolute inset-0 h-full w-full -rotate-90 text-foreground" viewBox="0 0 100 100" aria-hidden="true">
             <circle cx="50" cy="50" r={VIDEO_RING_RADIUS} fill="none" stroke="currentColor" strokeOpacity="0.18" strokeWidth="2.5" />
-            <motion.circle
-              cx="50"
-              cy="50"
-              r={VIDEO_RING_RADIUS}
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeDasharray={VIDEO_RING_CIRCUMFERENCE}
-              animate={{ strokeDashoffset: videoRingOffset }}
-              transition={{ duration: 0.2, ease: 'linear' }}
-            />
+            <motion.circle cx="50" cy="50" r={VIDEO_RING_RADIUS} fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeDasharray={VIDEO_RING_CIRCUMFERENCE} animate={{ strokeDashoffset: videoRingOffset }} transition={{ duration: 0.2, ease: 'linear' }} />
           </svg>
-
           <div className="absolute left-1/2 top-3 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-black/60 px-2.5 py-1 text-[11px] font-medium tabular-nums text-white backdrop-blur-sm">
             <span className="h-2 w-2 animate-pulse rounded-full bg-destructive" />
             {formatDuration(duration)}
           </div>
-
           <Button variant="ghost" size="icon" className="absolute right-3 top-3 h-9 w-9 rounded-full bg-black/55 text-white hover:bg-black/70 hover:text-white" onClick={switchCamera} aria-label="Kamerani almashtirish">
             <SwitchCamera className="h-4 w-4" />
           </Button>
         </div>
-
         <div className="flex items-center justify-center gap-2 rounded-full border border-border/70 bg-background/90 p-1.5 shadow-lg backdrop-blur">
           <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full text-destructive" onClick={cancelRecording} aria-label="Bekor qilish">
             <X className="h-4 w-4" />
@@ -873,7 +865,9 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
           onPause={() => setIsPlaying(false)}
           onTimeUpdate={(event) => {
             const element = event.currentTarget;
-            setPlaybackProgress(element.duration ? clamp(element.currentTime / element.duration, 0, 1) : 0);
+            setPlaybackProgress(
+              element.duration ? clamp(element.currentTime / element.duration, 0, 1) : 0
+            );
           }}
           onEnded={(event) => {
             event.currentTarget.currentTime = 0;
@@ -882,55 +876,32 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
           }}
         />
 
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-11 w-11 shrink-0 rounded-full border border-border bg-background text-destructive shadow-sm hover:bg-destructive/10"
-          onClick={cancelRecording}
-          aria-label="O‘chirish"
-        >
+        <Button variant="ghost" size="icon" className="h-11 w-11 shrink-0 rounded-full border border-border bg-background text-destructive shadow-sm hover:bg-destructive/10" onClick={cancelRecording} aria-label="O‘chirish">
           <Trash2 className="h-5 w-5" />
         </Button>
 
         <div className="flex h-11 min-w-0 flex-1 items-center gap-2 rounded-full bg-primary px-2.5 text-primary-foreground shadow-sm">
-          <button
-            type="button"
-            onClick={togglePlayback}
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary-foreground/18 transition-transform active:scale-95"
-            aria-label={isPlaying ? 'Pauza' : 'Eshitish'}
-          >
+          <button type="button" onClick={togglePlayback} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary-foreground/20 transition-transform active:scale-95" aria-label={isPlaying ? 'Pauza' : 'Eshitish'}>
             {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="ml-0.5 h-4 w-4" fill="currentColor" />}
           </button>
-
           <div className="flex h-7 min-w-0 flex-1 items-center gap-[2px] overflow-hidden">
-            {recordedLevels.map((level, index) => {
-              const barProgress = (index + 1) / recordedLevels.length;
-              const played = barProgress <= playbackProgress;
-              return (
-                <span
-                  key={index}
-                  className={cn(
-                    'w-[2px] shrink-0 rounded-full bg-current transition-opacity',
-                    played ? 'opacity-100' : 'opacity-55'
-                  )}
-                  style={{ height: `${clamp(5 + level * 20, 5, 25)}px` }}
-                />
-              );
-            })}
+            {recordedLevels.map((level, index) => (
+              <span
+                key={index}
+                className={cn(
+                  'w-[2px] shrink-0 rounded-full bg-current transition-opacity',
+                  (index + 1) / recordedLevels.length <= playbackProgress
+                    ? 'opacity-100'
+                    : 'opacity-55'
+                )}
+                style={{ height: `${clamp(5 + level * 20, 5, 25)}px` }}
+              />
+            ))}
           </div>
-
-          <span className="shrink-0 text-xs font-medium tabular-nums">
-            {formatDuration(duration)}
-          </span>
+          <span className="shrink-0 text-xs font-medium tabular-nums">{formatDuration(duration)}</span>
         </div>
 
-        <Button
-          variant="default"
-          size="icon"
-          className="h-11 w-11 shrink-0 rounded-full shadow-md"
-          onClick={handleSendFromPreview}
-          aria-label="Jo‘natish"
-        >
+        <Button variant="default" size="icon" className="h-11 w-11 shrink-0 rounded-full shadow-md" onClick={handleSendFromPreview} aria-label="Jo‘natish">
           <Send className="h-5 w-5" />
         </Button>
       </motion.div>
@@ -945,22 +916,13 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
         className="pointer-events-auto absolute inset-x-0 bottom-0 z-40 flex h-14 items-center gap-2 bg-card px-2"
         data-voice-recorder="locked"
       >
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-11 w-11 shrink-0 rounded-full border border-border bg-background text-destructive shadow-sm hover:bg-destructive/10"
-          onClick={cancelRecording}
-          aria-label="Bekor qilish"
-        >
+        <Button variant="ghost" size="icon" className="h-11 w-11 shrink-0 rounded-full border border-border bg-background text-destructive shadow-sm hover:bg-destructive/10" onClick={cancelRecording} aria-label="Bekor qilish">
           <Trash2 className="h-5 w-5" />
         </Button>
 
         <div className="flex h-11 min-w-0 flex-1 items-center gap-2 rounded-full bg-muted px-2.5">
           <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-destructive" />
-          <span className="w-[62px] shrink-0 text-xs font-medium tabular-nums text-foreground">
-            {formatLiveDuration(elapsedMs)}
-          </span>
-
+          <span className="w-[62px] shrink-0 text-xs font-medium tabular-nums text-foreground">{formatLiveDuration(elapsedMs)}</span>
           <div className="flex h-7 min-w-0 flex-1 items-center gap-[2px] overflow-hidden">
             {audioLevels.map((level, index) => (
               <motion.span
@@ -971,24 +933,12 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
               />
             ))}
           </div>
-
-          <button
-            type="button"
-            onClick={togglePause}
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-background text-foreground shadow-sm transition-transform active:scale-95"
-            aria-label={isPaused ? 'Davom ettirish' : 'Pauza'}
-          >
+          <button type="button" onClick={togglePause} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-background text-foreground shadow-sm transition-transform active:scale-95" aria-label={isPaused ? 'Davom ettirish' : 'Pauza'}>
             {isPaused ? <Play className="ml-0.5 h-4 w-4" fill="currentColor" /> : <Pause className="h-4 w-4" />}
           </button>
         </div>
 
-        <Button
-          variant="default"
-          size="icon"
-          className="h-11 w-11 shrink-0 rounded-full shadow-md"
-          onClick={finishAndSend}
-          aria-label="Jo‘natish"
-        >
+        <Button variant="default" size="icon" className="h-11 w-11 shrink-0 rounded-full shadow-md" onClick={finishAndSend} aria-label="Jo‘natish">
           <Send className="h-5 w-5" />
         </Button>
       </motion.div>
@@ -1008,17 +958,12 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
       >
         <div className="flex shrink-0 items-center gap-2">
           <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-destructive" />
-          <span className="w-[68px] text-xs font-medium tabular-nums text-foreground">
-            {formatLiveDuration(elapsedMs)}
-          </span>
+          <span className="w-[68px] text-xs font-medium tabular-nums text-foreground">{formatLiveDuration(elapsedMs)}</span>
         </div>
 
         <motion.div
           className="flex min-w-0 flex-1 items-center justify-center gap-1 text-sm text-muted-foreground"
-          animate={{
-            x: Math.max(-34, gestureDx * 0.32),
-            opacity: 1 - cancelProgress * 0.35,
-          }}
+          animate={{ x: Math.max(-34, gestureDx * 0.32), opacity: 1 - cancelProgress * 0.35 }}
           transition={{ duration: 0.06 }}
         >
           <ChevronLeft className="h-4 w-4 shrink-0" />
@@ -1026,15 +971,10 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
         </motion.div>
 
         <div className="relative ml-2 flex h-11 w-11 shrink-0 items-center justify-center">
-          <motion.div
-            className="absolute inset-0 rounded-full bg-primary/18"
-            animate={{ scale: [1, 1.28, 1], opacity: [0.7, 0.18, 0.7] }}
-            transition={{ duration: 1.15, repeat: Infinity }}
-          />
+          <motion.div className="absolute inset-0 rounded-full bg-primary/18" animate={{ scale: [1, 1.28, 1], opacity: [0.7, 0.18, 0.7] }} transition={{ duration: 1.15, repeat: Infinity }} />
           <div className="relative flex h-11 w-11 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-md">
             <Mic className="h-5 w-5" />
           </div>
-
           <motion.div
             className="absolute bottom-[52px] right-0 flex w-11 flex-col items-center gap-0.5 rounded-full border border-border bg-background/95 py-2 text-muted-foreground shadow-lg backdrop-blur"
             animate={{ y: Math.max(-8, gestureDy * 0.18), scale: 1 + lockProgress * 0.08 }}
@@ -1065,22 +1005,11 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
           isHolding && 'bg-muted text-foreground'
         )}
       >
-        <motion.span
-          key={mode}
-          initial={{ y: 8, opacity: 0, scale: 0.8 }}
-          animate={{ y: 0, opacity: 1, scale: 1 }}
-          className="absolute inset-0 flex items-center justify-center"
-        >
+        <motion.span key={mode} initial={{ y: 8, opacity: 0, scale: 0.8 }} animate={{ y: 0, opacity: 1, scale: 1 }} className="absolute inset-0 flex items-center justify-center">
           {mode === 'voice' ? <Mic className="h-5 w-5" /> : <Video className="h-5 w-5" />}
         </motion.span>
-
         {isHolding && (
-          <motion.span
-            initial={{ scale: 0.7, opacity: 0.5 }}
-            animate={{ scale: 1.7, opacity: 0 }}
-            transition={{ duration: 0.7, repeat: Infinity }}
-            className="pointer-events-none absolute inset-0 rounded-full bg-foreground/12"
-          />
+          <motion.span initial={{ scale: 0.7, opacity: 0.5 }} animate={{ scale: 1.7, opacity: 0 }} transition={{ duration: 0.7, repeat: Infinity }} className="pointer-events-none absolute inset-0 rounded-full bg-foreground/10" />
         )}
       </button>
     </div>
