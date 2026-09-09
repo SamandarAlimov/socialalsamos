@@ -92,6 +92,7 @@ export function PostLikesViewsDialog({
   const [loadingLikes, setLoadingLikes] = useState(false);
   const [loadingViews, setLoadingViews] = useState(false);
   const [followLoading, setFollowLoading] = useState<string | null>(null);
+  const [activeSnapPoint, setActiveSnapPoint] = useState<number | string | null>(0.82);
 
   const applyFollowingState = useCallback(async <T extends { user_id: string }>(rows: T[]) => {
     if (!user || !rows.length) return rows.map((row) => ({ ...row, is_following: false }));
@@ -164,6 +165,7 @@ export function PostLikesViewsDialog({
     if (!open || !postId) return;
     setTab(defaultTab);
     setQuery('');
+    setActiveSnapPoint(0.82);
   }, [open, defaultTab, postId]);
 
   useEffect(() => {
@@ -245,8 +247,18 @@ export function PostLikesViewsDialog({
 
   if (isMobile) {
     return (
-      <Drawer open={open} onOpenChange={onOpenChange} shouldScaleBackground={false}>
-        <DrawerContent className="h-[82dvh] max-h-[88dvh] overflow-hidden rounded-t-[30px] border-x-0 border-b-0 p-0 shadow-[0_-20px_60px_rgba(0,0,0,0.22)]">
+      <Drawer
+        open={open}
+        onOpenChange={onOpenChange}
+        shouldScaleBackground={false}
+        snapPoints={[0.82, 0.96]}
+        activeSnapPoint={activeSnapPoint}
+        setActiveSnapPoint={setActiveSnapPoint}
+      >
+        <DrawerContent
+          className="h-[96dvh] max-h-[96dvh] overflow-hidden rounded-t-[26px] border-x-0 border-b-0 p-0 shadow-[0_-20px_60px_rgba(0,0,0,0.22)]"
+          handleClassName="mt-3 h-1.5 w-14"
+        >
           {content}
         </DrawerContent>
       </Drawer>
@@ -302,8 +314,8 @@ function AudiencePanel({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-background md:bg-gradient-to-b md:from-background md:via-background md:to-muted/20">
-      <div className="flex-none px-5 pb-4 pt-2 md:px-8 md:pb-5 md:pt-7">
-        <h2 className="text-center text-[20px] font-bold tracking-[-0.02em] md:text-[24px]">
+      <div className="flex-none px-4 pb-2 pt-1 md:px-8 md:pb-5 md:pt-7">
+        <h2 className="text-center text-[18px] font-bold tracking-[-0.02em] md:text-[24px]">
           {t('post.likesAndViews', 'Likes and views')}
         </h2>
         <p className="mx-auto mt-1 hidden max-w-md text-center text-[13px] text-muted-foreground md:block">
@@ -313,18 +325,18 @@ function AudiencePanel({
         </p>
       </div>
 
-      <div className="flex-none border-y border-border/60 bg-background px-5 py-4 md:px-8 md:py-5">
-        <div className="grid grid-cols-2 gap-3 md:gap-4">
+      <div className="flex-none border-y border-border/60 bg-background px-4 py-2.5 md:px-8 md:py-5">
+        <div className="grid grid-cols-2 gap-2 md:gap-4">
           <MetricButton
             active={tab === 'likes'}
-            icon={<Heart className={cn('h-5 w-5 md:h-[22px] md:w-[22px]', tab === 'likes' && 'fill-current')} strokeWidth={2.1} />}
+            icon={<Heart className={cn('h-[18px] w-[18px] md:h-[22px] md:w-[22px]', tab === 'likes' && 'fill-current')} strokeWidth={2.1} />}
             value={formatCount(likesCount, locale)}
             label={t('common.likes', 'Likes')}
             onClick={() => setTab('likes')}
           />
           <MetricButton
             active={tab === 'views'}
-            icon={<Eye className="h-5 w-5 md:h-[22px] md:w-[22px]" strokeWidth={2.1} />}
+            icon={<Eye className="h-[18px] w-[18px] md:h-[22px] md:w-[22px]" strokeWidth={2.1} />}
             value={formatCount(viewsCount, locale)}
             label={t('post.views', 'Views')}
             onClick={() => setTab('views')}
@@ -333,25 +345,25 @@ function AudiencePanel({
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col px-4 md:px-8">
-        <div className="flex-none pb-3 pt-5 md:pb-4 md:pt-6">
-          <div className="mb-3 flex items-center justify-between px-1 md:mb-4">
-            <h3 className="text-[18px] font-bold tracking-[-0.02em] md:text-[20px]">
+        <div className="flex-none pb-2.5 pt-3 md:pb-4 md:pt-6">
+          <div className="mb-2 flex items-center justify-between px-1 md:mb-4">
+            <h3 className="text-[16px] font-bold tracking-[-0.02em] md:text-[20px]">
               {tab === 'likes' ? t('post.likedBy', 'Liked by') : t('post.viewedBy', 'Viewed by')}
             </h3>
             {!loading && activeRows.length > 0 && (
-              <span className="rounded-full bg-muted/70 px-2.5 py-1 text-xs font-semibold text-muted-foreground md:px-3">
+              <span className="rounded-full bg-muted/70 px-2 py-0.5 text-[11px] font-semibold text-muted-foreground md:px-3 md:py-1 md:text-xs">
                 {formatCount(activeRows.length, locale)}
               </span>
             )}
           </div>
 
           <div className="relative">
-            <Search className="pointer-events-none absolute left-3.5 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-muted-foreground md:left-4 md:h-5 md:w-5" strokeWidth={2} />
+            <Search className="pointer-events-none absolute left-3.5 top-1/2 h-[17px] w-[17px] -translate-y-1/2 text-muted-foreground md:left-4 md:h-5 md:w-5" strokeWidth={2} />
             <Input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder={t('common.search', 'Search')}
-              className="h-11 rounded-[14px] border-0 bg-muted/70 pl-10 pr-4 text-[15px] shadow-none placeholder:text-muted-foreground/85 focus-visible:ring-1 focus-visible:ring-ring/50 md:h-12 md:rounded-[16px] md:pl-12 md:text-[15px]"
+              className="h-10 rounded-[13px] border-0 bg-muted/70 pl-10 pr-4 text-[14px] shadow-none placeholder:text-muted-foreground/85 focus-visible:ring-1 focus-visible:ring-ring/50 md:h-12 md:rounded-[16px] md:pl-12 md:text-[15px]"
             />
           </div>
         </div>
@@ -419,16 +431,16 @@ function MetricButton({
       type="button"
       onClick={onClick}
       className={cn(
-        'relative flex min-h-[70px] items-center justify-center gap-2 rounded-[18px] border px-3 transition-all duration-200 active:scale-[0.985] md:min-h-[88px] md:gap-2.5 md:rounded-[22px] md:px-5',
+        'relative flex min-h-[52px] items-center justify-center gap-1.5 rounded-[15px] border px-2.5 transition-all duration-200 active:scale-[0.985] md:min-h-[88px] md:gap-2.5 md:rounded-[22px] md:px-5',
         active
-          ? 'border-primary/20 bg-primary/[0.08] text-foreground shadow-[0_8px_24px_rgba(0,0,0,0.05)] md:shadow-[0_14px_34px_rgba(0,0,0,0.07)]'
+          ? 'border-primary/20 bg-primary/[0.08] text-foreground shadow-[0_6px_18px_rgba(0,0,0,0.04)] md:shadow-[0_14px_34px_rgba(0,0,0,0.07)]'
           : 'border-transparent bg-muted/45 text-muted-foreground hover:bg-muted/65 md:bg-muted/55',
       )}
     >
       <span className={cn('transition-colors', active && 'text-primary')}>{icon}</span>
-      <span className="text-[18px] font-bold tabular-nums tracking-[-0.02em] md:text-[22px]">{value}</span>
-      <span className="text-[13px] font-medium md:text-[14px]">{label}</span>
-      {active && <span className="absolute bottom-0 left-1/2 h-[3px] w-8 -translate-x-1/2 rounded-full bg-primary md:w-10" />}
+      <span className="text-[16px] font-bold tabular-nums tracking-[-0.02em] md:text-[22px]">{value}</span>
+      <span className="text-[12px] font-medium md:text-[14px]">{label}</span>
+      {active && <span className="absolute bottom-0 left-1/2 h-0.5 w-7 -translate-x-1/2 rounded-full bg-primary md:h-[3px] md:w-10" />}
     </button>
   );
 }
