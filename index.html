@@ -25,7 +25,44 @@
     <meta name="twitter:description" content="Xabarlar, hamjamiyatlar, videolar, marketplace, xarita, to‘lovlar, AI va mini ilovalar — barchasi bitta superappda." />
     <meta name="twitter:image" content="https://www.alsamos.com/apple-touch-icon.png" />
 
-    <meta name="theme-color" content="#f97316" />
+    <!-- Android/PWA status bar follows the same neutral surface as the app header. -->
+    <meta name="theme-color" content="#ffffff" />
+    <script>
+      (() => {
+        const LIGHT_HEADER = '#ffffff';
+        const DARK_HEADER = '#0f1115';
+        const themeMeta = document.querySelector('meta[name="theme-color"]');
+        const darkMedia = window.matchMedia('(prefers-color-scheme: dark)');
+
+        const getStoredTheme = () => {
+          try {
+            return window.localStorage.getItem('theme');
+          } catch {
+            return null;
+          }
+        };
+
+        const syncThemeColor = () => {
+          if (!themeMeta) return;
+
+          const root = document.documentElement;
+          const storedTheme = getStoredTheme();
+          const hasResolvedClass = root.classList.contains('light') || root.classList.contains('dark');
+          const isDark = hasResolvedClass
+            ? root.classList.contains('dark')
+            : storedTheme === 'dark' || (storedTheme !== 'light' && darkMedia.matches);
+
+          themeMeta.setAttribute('content', isDark ? DARK_HEADER : LIGHT_HEADER);
+        };
+
+        syncThemeColor();
+        new MutationObserver(syncThemeColor).observe(document.documentElement, {
+          attributes: true,
+          attributeFilter: ['class'],
+        });
+        darkMedia.addEventListener?.('change', syncThemeColor);
+      })();
+    </script>
     <!-- Standart (deprecated bo'lmagan) PWA meta; apple- varianti faqat eski iOS uchun qoldirildi -->
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
