@@ -3,10 +3,14 @@
 
 /*
  * Measured Instagram mobile reference (945 x 2048 screenshot):
- * frame x=215..730, y=111..798 => 516 x 688.
- * The values arrive as CSS variables from VideoCommentsSheet so the original
- * pixel measurements remain the single source of truth while scaling to other
- * mobile viewports.
+ * - app viewport starts at screenshot y=111
+ * - frame x=215..730, y=111..798 => 516 x 688
+ * - initial sheet top y=819
+ * - footer divider y=1714
+ * - handle x=431..514, y=856..861 => 84 x 6
+ *
+ * Width/height variables are converted from those screenshot pixels using the
+ * viewport-local geometry in videoCommentsGeometry.ts.
  */
 .video-comments-preview-frame {
   position: fixed !important;
@@ -17,7 +21,7 @@
   max-width: none !important;
   max-height: none !important;
   transform: translateX(-50%) !important;
-  border-radius: 4.3% !important;
+  border-radius: 5% !important;
   background: #000 !important;
   box-shadow: none !important;
   z-index: 5990 !important;
@@ -39,6 +43,12 @@
   transform-origin: center center !important;
   border-radius: inherit !important;
   pointer-events: none !important;
+}
+
+.video-comments-measured-handle {
+  top: var(--video-comments-handle-top);
+  width: var(--video-comments-handle-width);
+  height: 2px;
 }
 
 .video-comments-premium [data-comments-section='true'] {
@@ -79,13 +89,10 @@
   padding-right: 42px;
 }
 
-/* Top-level metadata stays compact; the content gets the visual weight. */
 .video-comments-premium [data-comment-id] > div:first-child > div:last-child > div:first-child {
   column-gap: 6px;
 }
 
-/* Move the like affordance to the right edge, like a native short-video
-   conversation, while Reply remains below the comment text. */
 .video-comments-premium [data-comment-id] > div:first-child > div:last-child > div:last-child {
   min-height: 18px;
   margin-top: 6px;
@@ -108,7 +115,6 @@
   height: 19px;
 }
 
-/* Replies are indented, never boxed into a second card. */
 .video-comments-premium [data-comment-id] [data-comment-id] {
   margin-left: 36px;
   border: 0 !important;
@@ -116,8 +122,6 @@
   box-shadow: none !important;
 }
 
-/* Keep comment attachments substantial without allowing them to dominate the
-   entire sheet. Avatar images are outside this right-hand content column. */
 .video-comments-premium [data-comment-id] > div:first-child > div:last-child img,
 .video-comments-premium [data-comment-id] > div:first-child > div:last-child video {
   max-width: min(72vw, 300px);
@@ -125,14 +129,19 @@
   border-radius: 12px;
 }
 
-/* Composer is a real flex footer, not a child of the scrolling list. The list
-   consumes only remaining height, while this surface remains visible at the
-   bottom of the sheet before and after iOS keyboard transitions. */
+/*
+ * The supplied Instagram reference keeps the footer divider at screenshot
+ * y=1714 while the viewport starts at y=111. That makes the base composer
+ * height 334 / 1937 of the app viewport. The CSS variable is calculated from
+ * those exact pixels so the list ends at the same measured line.
+ */
 .video-comments-premium [data-comment-composer='true'] {
   position: relative !important;
   bottom: auto !important;
   z-index: 4;
   margin-top: auto;
+  min-height: var(--video-comments-footer-height);
+  box-sizing: border-box;
   flex: 0 0 auto;
   border-top-color: rgba(255, 255, 255, 0.08);
   background: rgba(24, 28, 31, 0.985) !important;
@@ -154,7 +163,7 @@
 }
 
 .video-comments-premium [data-comment-composer='true'] input {
-  font-size: 16px; /* prevents iOS Safari focus zoom */
+  font-size: 16px;
   line-height: 22px;
   caret-color: #fff;
 }
@@ -163,15 +172,72 @@
   color: rgba(255, 255, 255, 0.54);
 }
 
-/* Keep popovers/autocomplete above the composer rather than clipping behind the
-   independently scrolling conversation list. */
+/* The reference empty composer has no separate send circle. Once content is
+   entered the existing send action becomes available again. */
+.video-comments-premium [data-comment-composer='true'] button[type='submit']:disabled {
+  display: none;
+}
+
+/* Quick reactions already provide emoji access in this surface. Match the
+   supplied Instagram composer by keeping image + GIF as the inline controls. */
+.video-comments-premium [data-comment-composer='true'] input + div > button:first-child {
+  display: none;
+}
+
+.video-comments-premium [data-comment-composer='true'] input + div > button:last-child {
+  width: 30px;
+  height: 26px;
+  border: 2px solid currentColor;
+  border-radius: 6px;
+  padding: 0;
+}
+
+.video-comments-premium [data-comment-composer='true'] input + div > button:last-child svg {
+  display: none;
+}
+
+.video-comments-premium [data-comment-composer='true'] input + div > button:last-child::after {
+  content: 'GIF';
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.03em;
+}
+
 .video-comments-premium [data-comment-composer='true'] [role='listbox'] {
   z-index: 10;
 }
 
 @media (min-width: 768px) {
+  .video-comments-premium [data-comment-composer='true'] {
+    min-height: 0;
+  }
+
   .video-comments-premium [data-comment-composer='true'] input {
     font-size: 14px;
+  }
+
+  .video-comments-premium [data-comment-composer='true'] button[type='submit']:disabled {
+    display: inline-flex;
+  }
+
+  .video-comments-premium [data-comment-composer='true'] input + div > button:first-child {
+    display: inline-flex;
+  }
+
+  .video-comments-premium [data-comment-composer='true'] input + div > button:last-child {
+    width: 28px;
+    height: 28px;
+    border: 0;
+    border-radius: 9999px;
+  }
+
+  .video-comments-premium [data-comment-composer='true'] input + div > button:last-child svg {
+    display: block;
+  }
+
+  .video-comments-premium [data-comment-composer='true'] input + div > button:last-child::after {
+    content: none;
   }
 
   .video-comments-premium [data-comment-id] [data-comment-id] {
