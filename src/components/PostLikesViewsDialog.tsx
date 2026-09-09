@@ -89,6 +89,7 @@ export function PostLikesViewsDialog({
   const [query, setQuery] = useState('');
   const [likes, setLikes] = useState<LikeRow[]>([]);
   const [views, setViews] = useState<ViewRow[]>([]);
+  const [exactLikesCount, setExactLikesCount] = useState<number | null>(null);
   const [loadingLikes, setLoadingLikes] = useState(false);
   const [loadingViews, setLoadingViews] = useState(false);
   const [followLoading, setFollowLoading] = useState<string | null>(null);
@@ -109,6 +110,20 @@ export function PostLikesViewsDialog({
     const followingIds = new Set((follows || []).map((follow) => follow.following_id));
     return rows.map((row) => ({ ...row, is_following: followingIds.has(row.user_id) }));
   }, [user]);
+
+  const loadExactLikesCount = useCallback(async () => {
+    if (!postId) return;
+    const { count, error } = await supabase
+      .from('post_likes')
+      .select('id', { count: 'exact', head: true })
+      .eq('post_id', postId);
+
+    if (error) {
+      console.warn('Failed to load exact post like count:', error);
+      return;
+    }
+    setExactLikesCount(Math.max(0, count ?? 0));
+  }, [postId]);
 
   const loadLikes = useCallback(async () => {
     if (!postId) return;
@@ -157,6 +172,7 @@ export function PostLikesViewsDialog({
   useEffect(() => {
     setLikes([]);
     setViews([]);
+    setExactLikesCount(null);
     setQuery('');
     setTab(defaultTab);
   }, [postId, defaultTab]);
@@ -166,7 +182,8 @@ export function PostLikesViewsDialog({
     setTab(defaultTab);
     setQuery('');
     setActiveSnapPoint(0.82);
-  }, [open, defaultTab, postId]);
+    void loadExactLikesCount();
+  }, [open, defaultTab, postId, loadExactLikesCount]);
 
   useEffect(() => {
     if (!open || !postId) return;
@@ -225,6 +242,7 @@ export function PostLikesViewsDialog({
     else if (userId) navigate(`/user/${encodeURIComponent(userId)}`);
   }, [navigate, onOpenChange]);
 
+  const canonicalLikesCount = exactLikesCount ?? likesCount;
   const content = (
     <AudiencePanel
       tab={tab}
@@ -233,7 +251,7 @@ export function PostLikesViewsDialog({
       setQuery={setQuery}
       likes={filteredLikes}
       views={filteredViews}
-      likesCount={likesCount}
+      likesCount={canonicalLikesCount}
       viewsCount={viewsCount}
       loading={tab === 'likes' ? loadingLikes : loadingViews}
       followLoading={followLoading}
@@ -311,6 +329,7 @@ function AudiencePanel({
   t,
 }: AudiencePanelProps) {
   const activeRows = tab === 'likes' ? likes : views;
+  const activeCount = tab === 'likes' && !query.trim() ? likesCount : activeRows.length;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-background md:bg-gradient-to-b md:from-background md:via-background md:to-muted/20">
@@ -350,9 +369,9 @@ function AudiencePanel({
             <h3 className="text-[16px] font-bold tracking-[-0.02em] md:text-[20px]">
               {tab === 'likes' ? t('post.likedBy', 'Liked by') : t('post.viewedBy', 'Viewed by')}
             </h3>
-            {!loading && activeRows.length > 0 && (
+            {!loading && activeCount > 0 && (
               <span className="rounded-full bg-muted/70 px-2 py-0.5 text-[11px] font-semibold text-muted-foreground md:px-3 md:py-1 md:text-xs">
-                {formatCount(activeRows.length, locale)}
+                {formatCount(activeCount, locale)}
               </span>
             )}
           </div>
