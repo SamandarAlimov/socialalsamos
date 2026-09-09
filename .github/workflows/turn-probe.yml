@@ -1,12 +1,11 @@
 name: Production TURN Probe
 
 on:
-  pull_request:
-    branches: [main]
+  push:
+    branches: [diagnose/prod-turn-20260909]
 
 jobs:
   turn-probe:
-    if: github.head_ref == 'diagnose/prod-turn-20260909'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
