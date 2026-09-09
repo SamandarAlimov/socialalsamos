@@ -54,6 +54,7 @@ export interface FeedPostCardCounts {
   likes_count: number;
   comments_count: number;
   views_count: number;
+  reposts_count: number;
   is_liked?: boolean;
 }
 
@@ -72,10 +73,9 @@ interface FeedPostCardProps {
 /**
  * Canonical Alsamos feed card.
  *
- * Home'dagi professional post preview contracti shu komponentda saqlanadi va
- * Profile/UserProfile ham aynan shu controller/render yo'lidan foydalanishi
- * mumkin. Header va actionlar o'qish uchun gutterda qoladi; visual media esa
- * PostExtras orqali card chetigacha boradi.
+ * Public engagement numbers are read from source-of-truth interaction tables
+ * through `useRealtimePostCounts`. `posts.*_count` denormalized columns are not
+ * used for visible counts because historical rows can drift.
  */
 export function FeedPostCard({
   post,
@@ -95,8 +95,6 @@ export function FeedPostCard({
   const [showShareDialog, setShowShareDialog] = useState(false);
   const { recordView, markEngaged, markProfileClick } = usePostViews();
 
-  // Recommendation quality depends on true impressions. A mounted card is not
-  // automatically a view: it must be at least 55% visible for 900ms.
   useEffect(() => {
     const node = articleRef.current;
     if (!node) return;
@@ -137,6 +135,8 @@ export function FeedPostCard({
 
   const likesCount = realtimeCounts.likes_count;
   const commentsCount = realtimeCounts.comments_count;
+  const viewsCount = realtimeCounts.views_count;
+  const repostsCount = realtimeCounts.reposts_count;
   const isLiked = realtimeCounts.is_liked ?? post.is_liked;
   const hasStructuredPoll = Boolean(post.has_poll) || post.post_kind === 'poll';
 
@@ -299,23 +299,23 @@ export function FeedPostCard({
               markEngaged(post.id);
               setShowShareDialog(true);
             }}
-            className="flex items-center gap-1.5 text-muted-foreground transition-colors touch-feedback hover:text-foreground md:gap-2"
+            className="flex items-center text-muted-foreground transition-colors touch-feedback hover:text-foreground"
             aria-label="Ulashish"
+            title="Ulashish"
           >
             <Share2 className="h-5 w-5" />
-            <span className="text-xs font-medium md:text-sm">{post.shares_count ?? 0}</span>
           </button>
           <RepostButton
             postId={post.id}
             postUserId={post.user_id}
-            initialCount={post.reposts_count ?? 0}
+            initialCount={repostsCount}
             size="sm"
           />
         </div>
         <div className="flex items-center gap-3">
           <PostViewsDialog
             postId={post.id}
-            viewsCount={realtimeCounts.views_count || post.views_count || 0}
+            viewsCount={viewsCount}
             iconClassName="h-5 w-5"
             textClassName="text-xs md:text-sm"
           />
