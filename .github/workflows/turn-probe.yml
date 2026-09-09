@@ -8,10 +8,30 @@ jobs:
   turn-probe:
     if: github.head_ref == 'diagnose/prod-turn-20260909'
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 10
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      PROJECT_REF: mbhjganbihamoiqmankv
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Check production database access
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${SUPABASE_ACCESS_TOKEN:-}"
+          test -n "${SUPABASE_DB_PASSWORD:-}"
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Link production project
+        shell: bash
+        run: supabase link --project-ref "$PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
 
       - name: Install TURN diagnostic client
         run: |
@@ -22,23 +42,55 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          set -a
-          source .env
-          set +a
-          test -n "${SUPABASE_URL:-}"
-          test -n "${SUPABASE_PUBLISHABLE_KEY:-}"
-          curl --fail --silent --show-error \
-            --header "apikey: ${SUPABASE_PUBLISHABLE_KEY}" \
-            --header "Authorization: Bearer ${SUPABASE_PUBLISHABLE_KEY}" \
-            "${SUPABASE_URL}/rest/v1/call_webrtc_config?select=value&key=eq.ice_servers" \
-            --output /tmp/ice-config.json
+          cat >/tmp/read-turn.sql <<'SQL'
+          select value
+          from public.call_webrtc_config
+          where key = 'ice_servers'
+          limit 1;
+          SQL
+          supabase db query --linked --agent yes --output-format json -f /tmp/read-turn.sql > /tmp/turn-query.json
           python3 - <<'PY'
           import json
-          rows = json.load(open('/tmp/ice-config.json'))
-          if not rows:
-              raise SystemExit('Production ice_servers config row is missing')
-          value = rows[0].get('value')
-          print('Production ICE config loaded:', {'entries': len(value) if isinstance(value, list) else 0})
+          from pathlib import Path
+
+          raw = Path('/tmp/turn-query.json').read_text(errors='replace').strip()
+          doc = json.loads(raw)
+
+          def walk(value):
+              if isinstance(value, dict):
+                  candidate = value.get('value')
+                  if isinstance(candidate, list):
+                      return candidate
+                  if isinstance(candidate, str):
+                      try:
+                          parsed = json.loads(candidate)
+                          if isinstance(parsed, list):
+                              return parsed
+                      except Exception:
+                          pass
+                  for child in value.values():
+                      found = walk(child)
+                      if found is not None:
+                          return found
+              elif isinstance(value, list):
+                  for child in value:
+                      found = walk(child)
+                      if found is not None:
+                          return found
+              elif isinstance(value, str):
+                  try:
+                      parsed = json.loads(value)
+                  except Exception:
+                      return None
+                  return walk(parsed)
+              return None
+
+          ice = walk(doc)
+          if not isinstance(ice, list):
+              shape = list(doc.keys()) if isinstance(doc, dict) else type(doc).__name__
+              raise SystemExit(f'Could not extract ice_servers from Supabase query output; top-level={shape}')
+          Path('/tmp/ice-config.json').write_text(json.dumps([{'value': ice}]))
+          print('Production ICE config loaded:', {'entries': len(ice)})
           PY
 
       - name: Verify authenticated TURN relay allocation
