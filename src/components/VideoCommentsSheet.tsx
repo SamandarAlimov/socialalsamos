@@ -41,17 +41,18 @@ function DesktopHeader({ commentsCount }: { commentsCount: number }) {
 }
 
 /**
- * Video comments use a dedicated viewport surface:
- * - mobile: a fixed-height Instagram-style drawer. The video remains visibly
- *   separated above the rounded sheet instead of being covered by a full-height
- *   transformed drawer;
- * - desktop: a right panel that leaves the player visible.
+ * Video comments are intentionally isolated from the player.
  *
- * The previous mobile implementation used a 98dvh DrawerContent together with
- * fractional snap points. Vaul translated that full-height element downward for
- * the first snap, which also translated the composer below the viewport. A real
- * visible-height drawer keeps the list and composer in one stable flex layout,
- * so the input remains reachable before and after the keyboard opens.
+ * Mobile uses one viewport-height conversation surface. The player is never a
+ * layout sibling above the comments while the drawer is open: the dark overlay
+ * covers the feed and the drawer owns the usable viewport below the iOS safe
+ * area. The comment list is the only scrolling region and the composer remains
+ * a real flex footer, so opening the keyboard cannot push it below a snap-point
+ * translated drawer.
+ *
+ * There is deliberately no close icon on mobile. Native sheet dismissal is via
+ * swipe-down, backdrop, Escape/system back, matching the interaction users
+ * expect from short-video comment surfaces.
  */
 export function VideoCommentsSheet({
   isOpen,
@@ -69,12 +70,15 @@ export function VideoCommentsSheet({
     const previousBodyBackground = document.body.style.backgroundColor;
     const previousHtmlBackground = document.documentElement.style.backgroundColor;
 
-    themeMeta?.setAttribute('content', '#000000');
-    document.body.style.backgroundColor = '#000000';
-    document.documentElement.style.backgroundColor = '#000000';
+    themeMeta?.setAttribute('content', '#0a0a0b');
+    document.body.style.backgroundColor = '#0a0a0b';
+    document.documentElement.style.backgroundColor = '#0a0a0b';
 
     return () => {
-      if (themeMeta && previousThemeColor) themeMeta.setAttribute('content', previousThemeColor);
+      if (themeMeta) {
+        if (previousThemeColor === null) themeMeta.removeAttribute('content');
+        else themeMeta.setAttribute('content', previousThemeColor);
+      }
       document.body.style.backgroundColor = previousBodyBackground;
       document.documentElement.style.backgroundColor = previousHtmlBackground;
     };
@@ -89,20 +93,17 @@ export function VideoCommentsSheet({
       >
         <DrawerContent
           data-video-comments-sheet="true"
-          overlayClassName="bg-transparent"
-          handleClassName="mt-2 h-[3px] w-11 bg-white/45"
-          className="video-comments-premium dark flex h-[66dvh] min-h-[380px] max-h-[calc(100dvh-max(76px,env(safe-area-inset-top,0px)))] flex-col overflow-hidden rounded-t-[28px] border-x-0 border-b-0 border-t border-white/10 bg-[#0b0b0c] text-white shadow-[0_-16px_54px_rgba(0,0,0,.42)]"
+          overlayClassName="bg-[#0a0a0b]"
+          handleClassName="mt-2.5 h-[3px] w-10 bg-white/35"
+          className="video-comments-premium dark flex h-[calc(100dvh-env(safe-area-inset-top,0px))] max-h-none flex-col overflow-hidden rounded-t-[24px] border-x-0 border-b-0 border-t border-white/[0.08] bg-[#0a0a0b] text-white shadow-[0_-14px_52px_rgba(0,0,0,.38)]"
         >
-          <DrawerHeader className="shrink-0 border-b border-white/[0.07] px-4 pb-2 pt-1 text-center">
+          <DrawerHeader className="shrink-0 border-b border-white/[0.07] px-4 pb-2.5 pt-1 text-center">
             <DrawerTitle className="text-[15px] font-semibold leading-6 tracking-[-0.01em] text-white">
-              Izohlar
+              {commentsCount > 0 ? `Izohlar · ${commentsCount}` : 'Izohlar'}
             </DrawerTitle>
-            {commentsCount > 0 && (
-              <span className="sr-only">{commentsCount} ta izoh</span>
-            )}
           </DrawerHeader>
 
-          <div className="dark min-h-0 flex-1 overflow-hidden bg-[#0b0b0c] text-white [color-scheme:dark]">
+          <div className="dark min-h-0 flex-1 overflow-hidden bg-[#0a0a0b] text-white [color-scheme:dark]">
             <CommentsSection
               postId={postId}
               layout="panel"
