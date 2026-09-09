@@ -34,7 +34,7 @@ jobs:
         run: npx vitest run src/lib/iceServers.test.ts src/lib/webrtcSignalPolicy.test.ts
 
       - name: Media regression tests
-        run: npx vitest run src/lib/mediaRecovery.test.ts src/lib/mediaRefs.test.ts
+        run: npx vitest run src/lib/mediaRecovery.test.ts src/lib/mediaRefs.test.ts src/hooks/useVideoSurfaceTap.test.tsx
 
       - name: Create regression tests
         run: npx vitest run src/lib/videoPipeline.test.ts src/lib/storyPublishing.test.ts

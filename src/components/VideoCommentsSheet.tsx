@@ -119,6 +119,11 @@ function DesktopHeader({ commentsCount }: { commentsCount: number }) {
  * viewport-stable flex footer while the handle changes the sheet height. The
  * active video frame is temporarily constrained to the measured Instagram
  * preview rectangle and restored automatically when comments close.
+ *
+ * Mobile is deliberately non-modal: the compact video above the sheet remains
+ * interactive for play/pause while the comments conversation is open. The
+ * transparent overlay never consumes pointer input; dragging/dismissal remains
+ * owned by the sheet handle itself.
  */
 export function VideoCommentsSheet({
   isOpen,
@@ -249,14 +254,15 @@ export function VideoCommentsSheet({
 
   if (isMobile) {
     return (
-      <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <Sheet modal={false} open={isOpen} onOpenChange={(open) => !open && onClose()}>
         <SheetContent
           side="bottom"
           hideDefaultClose
           data-video-comments-sheet="true"
-          overlayClassName="bg-transparent"
+          overlayClassName="pointer-events-none bg-transparent"
           aria-describedby="video-comments-mobile-description"
           onOpenAutoFocus={(event) => event.preventDefault()}
+          onInteractOutside={(event) => event.preventDefault()}
           style={{
             top: `max(env(safe-area-inset-top, 0px), ${Math.round(mobileTop)}px)`,
             bottom: 0,
