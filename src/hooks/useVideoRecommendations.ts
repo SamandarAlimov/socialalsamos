@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useAuth } from '@/contexts/AuthContext';
+import { useRealtimePostCounts } from '@/hooks/useRealtimePostCounts';
 import type { VideoPost } from '@/hooks/useVideoPosts';
 import db from '@/lib/supabaseAny';
 import {
@@ -344,6 +345,27 @@ export function useVideoRecommendations(candidates: VideoPost[]) {
   const [feedOrderIds, setFeedOrderIds] = useState<string[]>([]);
   const profileKeyRef = useRef<string | null>(null);
 
+  const candidateIds = useMemo(() => candidates.map((video) => video.id), [candidates]);
+  const { counts: canonicalCounts } = useRealtimePostCounts(candidateIds, userId);
+  const canonicalCountsReady = useMemo(
+    () => candidateIds.length === 0 || candidateIds.every((id) => canonicalCounts.has(id)),
+    [candidateIds, canonicalCounts],
+  );
+  const canonicalCandidates = useMemo(
+    () => candidates.map((video) => {
+      const count = canonicalCounts.get(video.id);
+      if (!count) return video;
+      return {
+        ...video,
+        likes_count: count.likes_count,
+        comments_count: count.comments_count,
+        views_count: count.views_count,
+        is_liked: count.is_liked ?? video.is_liked,
+      };
+    }),
+    [candidates, canonicalCounts],
+  );
+
   useEffect(() => {
     const key = userId ?? '__anonymous__';
     let active = true;
@@ -372,23 +394,23 @@ export function useVideoRecommendations(candidates: VideoPost[]) {
   }, [userId]);
 
   const rankedSnapshot = useMemo(
-    () => rankVideoRecommendations(candidates, profile, userId),
-    [candidates, profile, userId],
+    () => rankVideoRecommendations(canonicalCandidates, profile, userId),
+    [canonicalCandidates, profile, userId],
   );
 
   // Once a session has started, do not reshuffle already-present items when
   // loadMore/realtime adds candidates. Only newly arrived candidates are ranked
   // and appended, preventing active video jumps.
   useEffect(() => {
-    if (!isReady || candidates.length === 0) return;
+    if (!isReady || !canonicalCountsReady || canonicalCandidates.length === 0) return;
 
     setFeedOrderIds((previous) => {
       if (previous.length === 0) return rankedSnapshot.map((video) => video.id);
 
-      const available = new Set(candidates.map((video) => video.id));
+      const available = new Set(canonicalCandidates.map((video) => video.id));
       const kept = previous.filter((id) => available.has(id));
       const known = new Set(kept);
-      const newcomers = candidates.filter((video) => !known.has(video.id));
+      const newcomers = canonicalCandidates.filter((video) => !known.has(video.id));
 
       if (newcomers.length === 0) return kept;
 
@@ -400,12 +422,12 @@ export function useVideoRecommendations(candidates: VideoPost[]) {
 
       return [...kept, ...rankedNewcomers];
     });
-  }, [candidates, isReady, profile, rankedSnapshot, userId]);
+  }, [canonicalCandidates, canonicalCountsReady, isReady, profile, rankedSnapshot, userId]);
 
   const feedVideos = useMemo(() => {
-    if (!isReady || feedOrderIds.length === 0) return rankedSnapshot;
+    if (!isReady || !canonicalCountsReady || feedOrderIds.length === 0) return rankedSnapshot;
 
-    const byId = new Map(candidates.map((video) => [video.id, video]));
+    const byId = new Map(canonicalCandidates.map((video) => [video.id, video]));
     const ordered = feedOrderIds
       .map((id) => byId.get(id))
       .filter((video): video is VideoPost => Boolean(video));
@@ -413,13 +435,13 @@ export function useVideoRecommendations(candidates: VideoPost[]) {
     const missing = rankedSnapshot.filter((video) => !orderedIds.has(video.id));
 
     return [...ordered, ...missing];
-  }, [candidates, feedOrderIds, isReady, rankedSnapshot]);
+  }, [canonicalCandidates, canonicalCountsReady, feedOrderIds, isReady, rankedSnapshot]);
 
   const rankForContext = useCallback(
     (activeVideoId: string | null) => {
-      const active = candidates.find((video) => video.id === activeVideoId) ?? null;
+      const active = canonicalCandidates.find((video) => video.id === activeVideoId) ?? null;
       const ranked = rankVideoRecommendations(
-        candidates,
+        canonicalCandidates,
         profile,
         userId,
         active,
@@ -428,7 +450,7 @@ export function useVideoRecommendations(candidates: VideoPost[]) {
       if (!active) return ranked;
       return [active, ...ranked.filter((video) => video.id !== active.id)];
     },
-    [candidates, profile, userId],
+    [canonicalCandidates, profile, userId],
   );
 
   const refreshProfile = useCallback(async () => {
@@ -446,7 +468,7 @@ export function useVideoRecommendations(candidates: VideoPost[]) {
     feedVideos,
     rankForContext,
     profile,
-    isReady,
+    isReady: isReady && canonicalCountsReady,
     refreshProfile,
   };
 }
