@@ -1,0 +1,16 @@
+/*
+ * Public engagement numbers must come from canonical interaction rows.
+ *
+ * Likes/comments/views/reposts have source-of-truth tables and are rendered
+ * from exact counts. Shares currently do not have a `post_shares` event table,
+ * so legacy `posts.shares_count` values can drift and must not be presented as
+ * authoritative numbers. Keep the share action available, hide only its stale
+ * numeric label on feed-style post cards until canonical share tracking exists.
+ */
+@supports selector(button:has(> svg)) {
+  article.animate-fade-in
+    button.touch-feedback:has(> svg.lucide-share-2)
+    > span {
+    display: none !important;
+  }
+}
