@@ -6,15 +6,14 @@ import { ChatAppearanceProvider } from './ChatAppearanceProvider';
 /**
  * Tanlangan chat fonini haqiqiy chat oynasiga qo'llaydi.
  *
- * Nega DOM orqali? Chat ro'yxati va xabarlar oynasi bitta katta sahifada
- * joylashgan. Fonni faqat xabarlar (scroll) qismiga qo'yish kerak — shuning
- * uchun komponent xabar elementlari (`#message-<id>`) bo'yicha scroll
- * konteynerini topadi va unga `chat-wallpaper-surface` klassini beradi.
- * CSS esa shu yerda bir marta <style> sifatida qo'shiladi, ya'ni global
- * stylesheet o'zgartirilmaydi.
+ * Muhim qoida: wallpaper hech qachon chat history layoutini o'zgartirmasligi
+ * kerak. Shu sabab fon alohida pseudo-layerlarda chiziladi; xabarlar wrapperlari
+ * yoki virtualizer elementlarining `position` qiymatiga tegilmaydi.
  *
- * Fon `background-attachment: fixed` bilan chiziladi — Telegramdagidek scroll
- * paytida joyida turadi. Xabar puffaklari o'z ranglarini saqlaydi.
+ * Chat scroll konteyneri overflow holatiga qarab aniqlanadi. History hali qisqa
+ * bo'lsa ham `overflow-y:auto|scroll` konteynerning o'zi haqiqiy chat surface
+ * hisoblanadi — scrollHeight tekshirilmaydi. Bu wallpaper noto'g'ri message
+ * wrapperga yopishib qolishining oldini oladi.
  *
  * Shu komponent chat ko'rinishi sozlamalarini (matn o'lchami, burchaklar,
  * energiya tejash) qo'llovchi ChatAppearanceProvider'ni ham ishga tushiradi.
@@ -24,14 +23,19 @@ const STYLE_ID = 'chat-wallpaper-style';
 const SURFACE_CLASS = 'chat-wallpaper-surface';
 
 const CSS = [
-  '.' + SURFACE_CLASS + '{position:relative;isolation:isolate;background-color:var(--cw-color,transparent)!important;}',
-  '.' + SURFACE_CLASS + '::before{content:"";position:absolute;inset:0;z-index:0;pointer-events:none;',
+  '.' +
+    SURFACE_CLASS +
+    '{position:relative;isolation:isolate;background-color:var(--cw-color,transparent)!important;}',
+  '.' +
+    SURFACE_CLASS +
+    '::before{content:"";position:absolute;inset:0;z-index:-2;pointer-events:none;',
   'background-color:var(--cw-color,transparent);background-image:var(--cw-image,none);',
   'background-size:var(--cw-size,cover);background-repeat:var(--cw-repeat,no-repeat);',
   'background-position:center;background-attachment:fixed;filter:blur(var(--cw-blur,0px));}',
-  '.' + SURFACE_CLASS + '::after{content:"";position:absolute;inset:0;z-index:0;pointer-events:none;',
+  '.' +
+    SURFACE_CLASS +
+    '::after{content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;',
   'background-color:rgba(0,0,0,var(--cw-dim,0));}',
-  '.' + SURFACE_CLASS + '>*{position:relative;z-index:1;}',
 ].join('');
 
 function ensureStyleTag() {
@@ -44,16 +48,21 @@ function ensureStyleTag() {
   document.head.appendChild(style);
 }
 
-function isScrollable(element: HTMLElement): boolean {
+/**
+ * Element hozircha real overflow qilmasa ham overflow-y:auto|scroll bo'lsa,
+ * aynan shu scroll konteyner hisoblanadi. Oldingi scrollHeight tekshiruvi qisqa
+ * historyda noto'g'ri fallback tanlanishiga sabab bo'lar edi.
+ */
+function isScrollContainer(element: HTMLElement): boolean {
   const overflowY = window.getComputedStyle(element).overflowY;
-  if (overflowY !== 'auto' && overflowY !== 'scroll') return false;
-  return element.scrollHeight > element.clientHeight - 1;
+  return overflowY === 'auto' || overflowY === 'scroll';
 }
 
 /** Xabarlar ro'yxatining scroll konteynerini topish */
 function findChatSurface(): HTMLElement | null {
   if (typeof document === 'undefined') return null;
 
+  // Kelajakdagi/aniq integratsiya uchun explicit surface har doim ustun.
   const explicit = document.querySelector<HTMLElement>('[data-chat-surface]');
   if (explicit) return explicit;
 
@@ -64,7 +73,7 @@ function findChatSurface(): HTMLElement | null {
   let fallback: HTMLElement | null = null;
 
   while (node && node !== document.body) {
-    if (isScrollable(node)) return node;
+    if (isScrollContainer(node)) return node;
     if (!fallback && node.clientHeight > 200) fallback = node;
     node = node.parentElement;
   }
@@ -79,7 +88,8 @@ export function ChatWallpaperProvider() {
     ensureStyleTag();
   }, []);
 
-  // CSS o'zgaruvchilarini yangilash
+  // CSS o'zgaruvchilarini yangilash. Wallpaper almashtirish faqat paint qiladi;
+  // chat DOM, virtualizer yoki scroll positionga tegmaydi.
   useEffect(() => {
     const root = document.documentElement;
     const vars = wallpaperCssVars(wallpaper);
@@ -94,7 +104,9 @@ export function ChatWallpaperProvider() {
     root.setAttribute('data-chat-wallpaper', wallpaper.id);
   }, [wallpaper, isActive]);
 
-  // Chat oynasiga klass qo'shish / olib tashlash
+  // Chat oynasiga klass faqat surface paydo/yo'qolganda qo'shiladi.
+  // Wallpaper id/dim/blur o'zgarishi bu effectni qayta yaratmaydi, shuning uchun
+  // history va scroll holati saqlanadi.
   useEffect(() => {
     let current: HTMLElement | null = null;
 
@@ -127,16 +139,11 @@ export function ChatWallpaperProvider() {
     const observer = new MutationObserver(() => sync());
     observer.observe(document.body, { childList: true, subtree: true });
 
-    // Ba'zi holatlarda (masalan chat almashganda) DOM o'zgarishi kuzatilmasligi
-    // mumkin — yengil interval zaxira sifatida ishlaydi.
-    const interval = window.setInterval(sync, 1500);
-
     return () => {
       observer.disconnect();
-      window.clearInterval(interval);
       detach();
     };
-  }, [isActive, wallpaper.id]);
+  }, [isActive]);
 
   return <ChatAppearanceProvider />;
 }
