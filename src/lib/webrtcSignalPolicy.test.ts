@@ -4,6 +4,12 @@ import {
   isFreshNativeSignal,
   shouldInitiateNativePeer,
 } from './webrtcSignalPolicy';
+import {
+  decidePeerSession,
+  expandIceServersForReliability,
+  iceRestartDelayMs,
+  negotiationMatches,
+} from './webrtcReliability';
 
 describe('native WebRTC signaling policy', () => {
   it('assigns exactly one deterministic initiator in mesh calls', () => {
@@ -44,5 +50,40 @@ describe('native WebRTC signaling policy', () => {
 
   it('accepts live realtime frames without a persistence timestamp', () => {
     expect(isFreshNativeSignal(Date.now())).toBe(true);
+  });
+
+  it('never applies a stale answer to a newer ICE restart offer', () => {
+    expect(negotiationMatches('offer-2', 'offer-2')).toBe(true);
+    expect(negotiationMatches('offer-2', 'offer-1')).toBe(false);
+    expect(negotiationMatches('offer-2', undefined)).toBe(true);
+  });
+
+  it('only lets an authoritative newer ready frame replace a browser session', () => {
+    expect(decidePeerSession('session-a', 2000, 'session-b', 2100, false)).toBe('reject');
+    expect(decidePeerSession('session-a', 2000, 'session-b', 1900, true)).toBe('reject');
+    expect(decidePeerSession('session-a', 2000, 'session-b', 2100, true)).toBe('replace');
+  });
+
+  it('adds explicit TCP fallback to plain TURN URLs without changing STUN', () => {
+    const expanded = expandIceServersForReliability([
+      { urls: 'stun:stun.example.com:3478' },
+      {
+        urls: 'turn:turn.example.com:3478',
+        username: 'user',
+        credential: 'secret',
+      },
+    ]);
+    const urls = expanded.flatMap((server) =>
+      (Array.isArray(server.urls) ? server.urls : [server.urls]).map(String),
+    );
+
+    expect(urls).toContain('stun:stun.example.com:3478');
+    expect(urls).toContain('turn:turn.example.com:3478?transport=udp');
+    expect(urls).toContain('turn:turn.example.com:3478?transport=tcp');
+  });
+
+  it('waits before restarting transient disconnected ICE', () => {
+    expect(iceRestartDelayMs(0, 'disconnected')).toBeGreaterThanOrEqual(3000);
+    expect(iceRestartDelayMs(0, 'failed')).toBeLessThan(iceRestartDelayMs(0, 'disconnected'));
   });
 });
