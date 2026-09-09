@@ -10,13 +10,19 @@
  * providing TURN does NOT force every call through a relay; it only makes a
  * relay candidate available when direct connectivity cannot be established.
  *
- * TURN may be configured either through Vite environment variables:
+ * Preferred production TURN configuration:
  *   VITE_TURN_URLS="turn:turn.example.com:3478,turns:turn.example.com:5349"
  *   VITE_TURN_USERNAME
  *   VITE_TURN_CREDENTIAL
  *
- * or through public.call_webrtc_config(key='ice_servers'), which is the existing
- * rotatable production configuration path.
+ * The existing public.call_webrtc_config(key='ice_servers') record is also read
+ * so credentials/endpoints can be rotated without rebuilding the web client.
+ *
+ * If neither environment nor remote config supplies TURN, Alsamos temporarily
+ * falls back to the same OpenRelay endpoints historically used by this project.
+ * This keeps calls functional on restrictive networks while a dedicated TURN
+ * deployment is provisioned. A dedicated Alsamos-controlled TURN remains the
+ * recommended production target.
  *
  * Emergency/debug opt-out only:
  *   VITE_WEBRTC_ALLOW_TURN_RELAY=false
@@ -30,6 +36,24 @@ const STUN_SERVERS: RTCIceServer[] = [
   { urls: "stun:stun4.l.google.com:19302" },
 ];
 
+const EMERGENCY_TURN_SERVERS: RTCIceServer[] = [
+  {
+    urls: "turn:openrelay.metered.ca:80",
+    username: "openrelayproject",
+    credential: "openrelayproject",
+  },
+  {
+    urls: "turn:openrelay.metered.ca:443",
+    username: "openrelayproject",
+    credential: "openrelayproject",
+  },
+  {
+    urls: "turn:openrelay.metered.ca:443?transport=tcp",
+    username: "openrelayproject",
+    credential: "openrelayproject",
+  },
+];
+
 // Reliability is the production default. Setting the flag explicitly to false
 // is the only way to strip TURN from the candidate set.
 const TURN_RELAY_ENABLED =
@@ -38,7 +62,7 @@ const TURN_RELAY_ENABLED =
     .toLowerCase() !== "false";
 
 let warnedTurnDisabled = false;
-let warnedTurnMissing = false;
+let warnedEmergencyTurn = false;
 let loggedTurnAvailable = false;
 
 export function urlsOfIceServer(server: RTCIceServer): string[] {
@@ -119,23 +143,29 @@ function dedupeIceServers(servers: RTCIceServer[]): RTCIceServer[] {
   return result;
 }
 
-function reportRelayAvailability(servers: RTCIceServer[]) {
-  if (!TURN_RELAY_ENABLED) return;
+export function ensureTurnFallback(
+  servers: RTCIceServer[],
+  relayEnabled = TURN_RELAY_ENABLED,
+): RTCIceServer[] {
+  const filtered = dedupeIceServers(applyRelayPolicy(servers, relayEnabled));
+  if (!relayEnabled || hasTurnRelay(filtered)) return filtered;
 
-  if (hasTurnRelay(servers)) {
-    if (!loggedTurnAvailable) {
-      loggedTurnAvailable = true;
-      console.info(
-        "[ICE] TURN relay fallback is available; direct P2P remains preferred when reachable.",
-      );
-    }
-    return;
+  if (!warnedEmergencyTurn) {
+    warnedEmergencyTurn = true;
+    console.warn(
+      "[ICE] Dedicated TURN is not configured; using emergency OpenRelay fallback. Configure Alsamos TURN for production SLA.",
+    );
   }
 
-  if (!warnedTurnMissing) {
-    warnedTurnMissing = true;
-    console.warn(
-      "[ICE] No TURN relay is configured. Direct calls can fail on CGNAT/symmetric NAT/restrictive firewalls.",
+  return dedupeIceServers([...filtered, ...EMERGENCY_TURN_SERVERS]);
+}
+
+function reportRelayAvailability(servers: RTCIceServer[]) {
+  if (!TURN_RELAY_ENABLED || !hasTurnRelay(servers)) return;
+  if (!loggedTurnAvailable) {
+    loggedTurnAvailable = true;
+    console.info(
+      "[ICE] TURN relay fallback is available; direct P2P remains preferred when reachable.",
     );
   }
 }
@@ -155,7 +185,7 @@ export function getIceServers(): RTCIceServer[] {
     });
   }
 
-  return dedupeIceServers(applyRelayPolicy(configured));
+  return ensureTurnFallback(configured);
 }
 
 export const ICE_SERVERS = getIceServers();
@@ -185,10 +215,10 @@ export async function loadIceServers(): Promise<RTCIceServer[]> {
 
       const value = (data as { value?: unknown } | null)?.value;
       if (Array.isArray(value) && value.length > 0) {
-        const merged = dedupeIceServers(
-          applyRelayPolicy([...STUN_SERVERS, ...(value as RTCIceServer[])]),
-        );
-        cachedRemote = merged;
+        cachedRemote = ensureTurnFallback([
+          ...STUN_SERVERS,
+          ...(value as RTCIceServer[]),
+        ]);
         reportRelayAvailability(cachedRemote);
         return cachedRemote;
       }
