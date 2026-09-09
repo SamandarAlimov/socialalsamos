@@ -1,18 +1,25 @@
 /**
  * Centralised ICE server configuration for Alsamos native WebRTC.
  *
- * The production default is direct peer-to-peer media. STUN is used only for
- * NAT candidate discovery; media is never relayed through the public demo TURN
- * services that used to be configured here.
+ * Reliable internet calling needs two paths:
+ *   1) direct P2P (host/srflx candidates) whenever NAT traversal succeeds;
+ *   2) TURN relay as a fallback when CGNAT, symmetric NAT, corporate Wi-Fi,
+ *      mobile carrier NAT, VPNs or firewalls block the direct path.
  *
- * TURN can be enabled deliberately later (for an Alsamos-controlled relay) via:
- *   VITE_WEBRTC_ALLOW_TURN_RELAY=true
- *   VITE_TURN_URLS="turn:alsamos.com:3478,turns:alsamos.com:5349"
+ * Browsers still prefer the best/direct candidate pair automatically. Merely
+ * providing TURN does NOT force every call through a relay; it only makes a
+ * relay candidate available when direct connectivity cannot be established.
+ *
+ * TURN may be configured either through Vite environment variables:
+ *   VITE_TURN_URLS="turn:turn.example.com:3478,turns:turn.example.com:5349"
  *   VITE_TURN_USERNAME
  *   VITE_TURN_CREDENTIAL
  *
- * Keeping TURN opt-in is important: a stale database/env value must not silently
- * move call media through a third-party relay when Alsamos is in native mode.
+ * or through public.call_webrtc_config(key='ice_servers'), which is the existing
+ * rotatable production configuration path.
+ *
+ * Emergency/debug opt-out only:
+ *   VITE_WEBRTC_ALLOW_TURN_RELAY=false
  */
 
 const STUN_SERVERS: RTCIceServer[] = [
@@ -23,36 +30,47 @@ const STUN_SERVERS: RTCIceServer[] = [
   { urls: "stun:stun4.l.google.com:19302" },
 ];
 
+// Reliability is the production default. Setting the flag explicitly to false
+// is the only way to strip TURN from the candidate set.
 const TURN_RELAY_ENABLED =
-  String(import.meta.env.VITE_WEBRTC_ALLOW_TURN_RELAY ?? "")
+  String(import.meta.env.VITE_WEBRTC_ALLOW_TURN_RELAY ?? "true")
     .trim()
-    .toLowerCase() === "true";
+    .toLowerCase() !== "false";
 
 let warnedTurnDisabled = false;
+let warnedTurnMissing = false;
+let loggedTurnAvailable = false;
 
-function urlsOf(server: RTCIceServer): string[] {
+export function urlsOfIceServer(server: RTCIceServer): string[] {
   return (Array.isArray(server.urls) ? server.urls : [server.urls])
     .map((url) => String(url).trim())
     .filter(Boolean);
 }
 
-function isTurnUrl(url: string): boolean {
-  return url.startsWith("turn:") || url.startsWith("turns:");
+export function isTurnUrl(url: string): boolean {
+  const normalized = url.trim().toLowerCase();
+  return normalized.startsWith("turn:") || normalized.startsWith("turns:");
+}
+
+export function hasTurnRelay(servers: RTCIceServer[]): boolean {
+  return servers.some((server) => urlsOfIceServer(server).some(isTurnUrl));
 }
 
 /**
- * Remove TURN endpoints while native direct-media mode is active. A server may
- * contain a mixed URL array, so keep any STUN entries instead of dropping the
- * whole object.
+ * Relay policy is exported for deterministic regression testing. Production
+ * callers use TURN unless it has been explicitly disabled by environment.
  */
-function applyRelayPolicy(servers: RTCIceServer[]): RTCIceServer[] {
-  if (TURN_RELAY_ENABLED) return servers;
+export function applyRelayPolicy(
+  servers: RTCIceServer[],
+  relayEnabled = TURN_RELAY_ENABLED,
+): RTCIceServer[] {
+  if (relayEnabled) return servers;
 
   let removedTurn = false;
   const directOnly: RTCIceServer[] = [];
 
   for (const server of servers) {
-    const urls = urlsOf(server);
+    const urls = urlsOfIceServer(server);
     const allowedUrls = urls.filter((url) => {
       if (isTurnUrl(url)) {
         removedTurn = true;
@@ -71,12 +89,55 @@ function applyRelayPolicy(servers: RTCIceServer[]): RTCIceServer[] {
 
   if (removedTurn && !warnedTurnDisabled) {
     warnedTurnDisabled = true;
-    console.info(
-      "[ICE] TURN relay is disabled in native Alsamos mode; call media stays peer-to-peer.",
+    console.warn(
+      "[ICE] TURN relay was explicitly disabled. Calls may fail behind restrictive NAT/firewalls.",
     );
   }
 
   return directOnly;
+}
+
+function dedupeIceServers(servers: RTCIceServer[]): RTCIceServer[] {
+  const seen = new Set<string>();
+  const result: RTCIceServer[] = [];
+
+  for (const server of servers) {
+    const uniqueUrls = urlsOfIceServer(server).filter((url) => {
+      const key = `${url}|${server.username ?? ""}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    if (uniqueUrls.length === 0) continue;
+    result.push({
+      ...server,
+      urls: Array.isArray(server.urls) ? uniqueUrls : uniqueUrls[0],
+    });
+  }
+
+  return result;
+}
+
+function reportRelayAvailability(servers: RTCIceServer[]) {
+  if (!TURN_RELAY_ENABLED) return;
+
+  if (hasTurnRelay(servers)) {
+    if (!loggedTurnAvailable) {
+      loggedTurnAvailable = true;
+      console.info(
+        "[ICE] TURN relay fallback is available; direct P2P remains preferred when reachable.",
+      );
+    }
+    return;
+  }
+
+  if (!warnedTurnMissing) {
+    warnedTurnMissing = true;
+    console.warn(
+      "[ICE] No TURN relay is configured. Direct calls can fail on CGNAT/symmetric NAT/restrictive firewalls.",
+    );
+  }
 }
 
 export function getIceServers(): RTCIceServer[] {
@@ -94,7 +155,7 @@ export function getIceServers(): RTCIceServer[] {
     });
   }
 
-  return applyRelayPolicy(configured);
+  return dedupeIceServers(applyRelayPolicy(configured));
 }
 
 export const ICE_SERVERS = getIceServers();
@@ -103,9 +164,9 @@ let cachedRemote: RTCIceServer[] | null = null;
 let inflight: Promise<RTCIceServer[]> | null = null;
 
 /**
- * Load rotatable ICE configuration from the existing Alsamos/Supabase config
- * table. The same direct-media relay policy is applied to remote values, so an
- * old OpenRelay/third-party TURN entry cannot silently become the media path.
+ * Load rotatable production ICE configuration. STUN defaults are always kept,
+ * while configured TURN servers are preserved so the browser can fall back to
+ * relay when direct ICE candidate pairs fail.
  */
 export async function loadIceServers(): Promise<RTCIceServer[]> {
   if (cachedRemote) return cachedRemote;
@@ -114,29 +175,29 @@ export async function loadIceServers(): Promise<RTCIceServer[]> {
   inflight = (async () => {
     try {
       const { supabase } = await import("@/integrations/supabase/client");
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("call_webrtc_config")
         .select("value")
         .eq("key", "ice_servers")
         .maybeSingle();
 
+      if (error) throw error;
+
       const value = (data as { value?: unknown } | null)?.value;
       if (Array.isArray(value) && value.length > 0) {
-        const servers = applyRelayPolicy(value as RTCIceServer[]);
-        const hasStun = servers.some((server) =>
-          urlsOf(server).some((url) => url.startsWith("stun:")),
+        const merged = dedupeIceServers(
+          applyRelayPolicy([...STUN_SERVERS, ...(value as RTCIceServer[])]),
         );
-
-        cachedRemote = hasStun
-          ? servers
-          : [...STUN_SERVERS, ...servers];
+        cachedRemote = merged;
+        reportRelayAvailability(cachedRemote);
         return cachedRemote;
       }
     } catch (error) {
-      console.warn("[ICE] remote config unavailable, using direct-media defaults", error);
+      console.warn("[ICE] remote ICE config unavailable, using environment/defaults", error);
     }
 
     cachedRemote = getIceServers();
+    reportRelayAvailability(cachedRemote);
     return cachedRemote;
   })();
 
