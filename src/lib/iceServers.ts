@@ -1,17 +1,18 @@
 /**
- * Centralised ICE server configuration.
+ * Centralised ICE server configuration for Alsamos native WebRTC.
  *
- * TURN credentials are environment-configurable so the public/demo relay can be
- * swapped for a production TURN deployment without touching call code.
+ * The production default is direct peer-to-peer media. STUN is used only for
+ * NAT candidate discovery; media is never relayed through the public demo TURN
+ * services that used to be configured here.
  *
- * Env vars (optional):
- *   VITE_TURN_URLS       comma separated, e.g. "turn:turn.example.com:3478,turns:turn.example.com:5349"
+ * TURN can be enabled deliberately later (for an Alsamos-controlled relay) via:
+ *   VITE_WEBRTC_ALLOW_TURN_RELAY=true
+ *   VITE_TURN_URLS="turn:alsamos.com:3478,turns:alsamos.com:5349"
  *   VITE_TURN_USERNAME
  *   VITE_TURN_CREDENTIAL
  *
- * WARNING: when no VITE_TURN_* vars are provided we fall back to the public
- * OpenRelay demo TURN service. That is best-effort only and is NOT production
- * viable (no SLA, rate limited, shared credentials).
+ * Keeping TURN opt-in is important: a stale database/env value must not silently
+ * move call media through a third-party relay when Alsamos is in native mode.
  */
 
 const STUN_SERVERS: RTCIceServer[] = [
@@ -22,50 +23,78 @@ const STUN_SERVERS: RTCIceServer[] = [
   { urls: "stun:stun4.l.google.com:19302" },
 ];
 
-const FALLBACK_TURN: RTCIceServer[] = [
-  {
-    urls: "turn:openrelay.metered.ca:80",
-    username: "openrelayproject",
-    credential: "openrelayproject",
-  },
-  {
-    urls: "turn:openrelay.metered.ca:443",
-    username: "openrelayproject",
-    credential: "openrelayproject",
-  },
-  {
-    urls: "turn:openrelay.metered.ca:443?transport=tcp",
-    username: "openrelayproject",
-    credential: "openrelayproject",
-  },
-];
+const TURN_RELAY_ENABLED =
+  String(import.meta.env.VITE_WEBRTC_ALLOW_TURN_RELAY ?? "")
+    .trim()
+    .toLowerCase() === "true";
 
-let warned = false;
+let warnedTurnDisabled = false;
+
+function urlsOf(server: RTCIceServer): string[] {
+  return (Array.isArray(server.urls) ? server.urls : [server.urls])
+    .map((url) => String(url).trim())
+    .filter(Boolean);
+}
+
+function isTurnUrl(url: string): boolean {
+  return url.startsWith("turn:") || url.startsWith("turns:");
+}
+
+/**
+ * Remove TURN endpoints while native direct-media mode is active. A server may
+ * contain a mixed URL array, so keep any STUN entries instead of dropping the
+ * whole object.
+ */
+function applyRelayPolicy(servers: RTCIceServer[]): RTCIceServer[] {
+  if (TURN_RELAY_ENABLED) return servers;
+
+  let removedTurn = false;
+  const directOnly: RTCIceServer[] = [];
+
+  for (const server of servers) {
+    const urls = urlsOf(server);
+    const allowedUrls = urls.filter((url) => {
+      if (isTurnUrl(url)) {
+        removedTurn = true;
+        return false;
+      }
+      return true;
+    });
+
+    if (allowedUrls.length === 0) continue;
+
+    directOnly.push({
+      ...server,
+      urls: Array.isArray(server.urls) ? allowedUrls : allowedUrls[0],
+    });
+  }
+
+  if (removedTurn && !warnedTurnDisabled) {
+    warnedTurnDisabled = true;
+    console.info(
+      "[ICE] TURN relay is disabled in native Alsamos mode; call media stays peer-to-peer.",
+    );
+  }
+
+  return directOnly;
+}
 
 export function getIceServers(): RTCIceServer[] {
   const urls = (import.meta.env.VITE_TURN_URLS as string | undefined)?.trim();
   const username = import.meta.env.VITE_TURN_USERNAME as string | undefined;
   const credential = import.meta.env.VITE_TURN_CREDENTIAL as string | undefined;
 
+  const configured: RTCIceServer[] = [...STUN_SERVERS];
+
   if (urls) {
-    return [
-      ...STUN_SERVERS,
-      {
-        urls: urls.split(",").map((u) => u.trim()).filter(Boolean),
-        ...(username ? { username } : {}),
-        ...(credential ? { credential } : {}),
-      },
-    ];
+    configured.push({
+      urls: urls.split(",").map((url) => url.trim()).filter(Boolean),
+      ...(username ? { username } : {}),
+      ...(credential ? { credential } : {}),
+    });
   }
 
-  if (!warned) {
-    warned = true;
-    console.warn(
-      "[ICE] Using public demo TURN (OpenRelay). Not production viable — set VITE_TURN_URLS / VITE_TURN_USERNAME / VITE_TURN_CREDENTIAL.",
-    );
-  }
-
-  return [...STUN_SERVERS, ...FALLBACK_TURN];
+  return applyRelayPolicy(configured);
 }
 
 export const ICE_SERVERS = getIceServers();
@@ -74,9 +103,9 @@ let cachedRemote: RTCIceServer[] | null = null;
 let inflight: Promise<RTCIceServer[]> | null = null;
 
 /**
- * Production ICE configuration. TURN credentials are stored server-side in
- * `public.call_webrtc_config` so they can be rotated without a redeploy, and
- * they are shared with the Flutter client. Falls back to the static config.
+ * Load rotatable ICE configuration from the existing Alsamos/Supabase config
+ * table. The same direct-media relay policy is applied to remote values, so an
+ * old OpenRelay/third-party TURN entry cannot silently become the media path.
  */
 export async function loadIceServers(): Promise<RTCIceServer[]> {
   if (cachedRemote) return cachedRemote;
@@ -93,15 +122,18 @@ export async function loadIceServers(): Promise<RTCIceServer[]> {
 
       const value = (data as { value?: unknown } | null)?.value;
       if (Array.isArray(value) && value.length > 0) {
-        const servers = value as RTCIceServer[];
-        const hasStun = servers.some((s) =>
-          (Array.isArray(s.urls) ? s.urls : [s.urls]).some((u) => String(u).startsWith("stun:")),
+        const servers = applyRelayPolicy(value as RTCIceServer[]);
+        const hasStun = servers.some((server) =>
+          urlsOf(server).some((url) => url.startsWith("stun:")),
         );
-        cachedRemote = hasStun ? servers : [...STUN_SERVERS, ...servers];
+
+        cachedRemote = hasStun
+          ? servers
+          : [...STUN_SERVERS, ...servers];
         return cachedRemote;
       }
-    } catch (e) {
-      console.warn("[ICE] remote config unavailable, using defaults", e);
+    } catch (error) {
+      console.warn("[ICE] remote config unavailable, using direct-media defaults", error);
     }
 
     cachedRemote = getIceServers();
