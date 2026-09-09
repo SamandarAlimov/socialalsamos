@@ -58,6 +58,7 @@ import {
   formatMediaTime,
   resolveAspectKind,
 } from '@/lib/videoFormat';
+import { resolveVideoHoldIntent, type VideoHoldIntent } from '@/lib/videoHoldGesture';
 import { resolveTouchAxis, type TouchAxis } from '@/lib/touchGesture';
 
 const HOLD_TO_SPEED_MS = 300;
@@ -113,11 +114,12 @@ function VideoCard({
   const videoRef = useRef<HTMLVideoElement>(null);
   const frameRef = useRef<HTMLDivElement>(null);
   const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const holdActiveRef = useRef(false);
+  const holdIntentRef = useRef<VideoHoldIntent | null>(null);
+  const holdStartedPausedRef = useRef(false);
   const userPausedRef = useRef(false);
   const likeBurstTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const playFlashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const surfacePointerRef = useRef<{ pointerId: number; x: number; y: number; moved: boolean } | null>(null);
+  const surfacePointerRef = useRef<{ pointerId: number; x: number; y: number; moved: boolean; intent: VideoHoldIntent } | null>(null);
   const wasActiveRef = useRef(false);
   const resumeAppliedRef = useRef(false);
   const resumePlaybackRef = useRef<VideoPlaybackSnapshot | null>(resumePlayback);
@@ -134,7 +136,7 @@ function VideoCard({
   const [currentTime, setCurrentTime] = useState(0);
   const [buffered, setBuffered] = useState(0);
   const [speed, setSpeed] = useState(1);
-  const [isHolding, setIsHolding] = useState(false);
+  const [holdIntent, setHoldIntent] = useState<VideoHoldIntent | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   const { t } = useTranslation();
@@ -158,7 +160,7 @@ function VideoCard({
     const el = videoRef.current;
     if (!el || !isActive || userPausedRef.current) return;
     el.muted = globalMuted;
-    el.playbackRate = holdActiveRef.current ? 2 : speed;
+    el.playbackRate = holdIntentRef.current === 'speed' ? 2 : speed;
     void el.play().catch(() => setIsPlaying(false));
   }, [globalMuted, isActive, speed]);
 
@@ -185,6 +187,13 @@ function VideoCard({
     const el = videoRef.current;
 
     if (becameInactive) {
+      if (holdTimerRef.current) {
+        clearTimeout(holdTimerRef.current);
+        holdTimerRef.current = null;
+      }
+      holdIntentRef.current = null;
+      holdStartedPausedRef.current = false;
+      setHoldIntent(null);
       if (el) {
         onPlaybackChange({
           time: Number.isFinite(el.currentTime) ? el.currentTime : currentTime,
@@ -286,35 +295,70 @@ function VideoCard({
     onDoubleTap: doubleTapLike,
   });
 
-  const startHold = useCallback(() => {
+  const startHold = useCallback((intent: VideoHoldIntent) => {
     if (holdTimerRef.current) clearTimeout(holdTimerRef.current);
     holdTimerRef.current = setTimeout(() => {
       const el = videoRef.current;
       if (!el) return;
       tapIntent.clearPending();
-      holdActiveRef.current = true;
-      setIsHolding(true);
-      el.playbackRate = 2;
-      if (el.paused) {
-        userPausedRef.current = false;
-        onPlaybackChange({ time: el.currentTime, paused: false });
-        void el.play().catch(() => setIsPlaying(false));
+
+      const startedPaused = el.paused || userPausedRef.current;
+      holdStartedPausedRef.current = startedPaused;
+      holdIntentRef.current = intent;
+      setHoldIntent(intent);
+
+      if (intent === 'speed') {
+        el.playbackRate = 2;
+        if (el.paused) {
+          userPausedRef.current = false;
+          onPlaybackChange({ time: el.currentTime, paused: false });
+          void el.play().catch(() => setIsPlaying(false));
+        }
+      } else {
+        el.playbackRate = speed;
+        if (!el.paused) {
+          el.pause();
+          onPlaybackChange({ time: el.currentTime, paused: true });
+        }
       }
       mediumTap();
     }, HOLD_TO_SPEED_MS);
-  }, [mediumTap, onPlaybackChange, tapIntent]);
+  }, [mediumTap, onPlaybackChange, speed, tapIntent]);
 
   const endHold = useCallback(() => {
     if (holdTimerRef.current) {
       clearTimeout(holdTimerRef.current);
       holdTimerRef.current = null;
     }
-    if (!holdActiveRef.current) return false;
-    holdActiveRef.current = false;
-    setIsHolding(false);
-    if (videoRef.current) videoRef.current.playbackRate = speed;
+
+    const intent = holdIntentRef.current;
+    if (!intent) return false;
+
+    const startedPaused = holdStartedPausedRef.current;
+    holdIntentRef.current = null;
+    holdStartedPausedRef.current = false;
+    setHoldIntent(null);
+
+    const el = videoRef.current;
+    if (!el) return true;
+    el.playbackRate = speed;
+
+    if (intent === 'speed') {
+      if (startedPaused) {
+        userPausedRef.current = true;
+        el.pause();
+        onPlaybackChange({ time: el.currentTime, paused: true });
+      }
+      return true;
+    }
+
+    if (!startedPaused) {
+      userPausedRef.current = false;
+      onPlaybackChange({ time: el.currentTime, paused: false });
+      void el.play().catch(() => setIsPlaying(false));
+    }
     return true;
-  }, [speed]);
+  }, [onPlaybackChange, speed]);
 
   const cancelSurfacePointer = useCallback(() => {
     surfacePointerRef.current = null;
@@ -322,19 +366,26 @@ function VideoCard({
       clearTimeout(holdTimerRef.current);
       holdTimerRef.current = null;
     }
-    if (holdActiveRef.current) endHold();
+    if (holdIntentRef.current) endHold();
     tapIntent.clearPending();
   }, [endHold, tapIntent]);
 
   const handleSurfacePointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     if (!event.isPrimary || (event.pointerType === 'mouse' && event.button !== 0)) return;
+
+    const frameRect = frameRef.current?.getBoundingClientRect();
+    const intent = frameRect
+      ? resolveVideoHoldIntent(event.clientX, frameRect.left, frameRect.width)
+      : 'pause';
+
     surfacePointerRef.current = {
       pointerId: event.pointerId,
       x: event.clientX,
       y: event.clientY,
       moved: false,
+      intent,
     };
-    startHold();
+    startHold(intent);
   }, [startHold]);
 
   const handleSurfacePointerMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
@@ -347,7 +398,7 @@ function VideoCard({
       clearTimeout(holdTimerRef.current);
       holdTimerRef.current = null;
     }
-    if (holdActiveRef.current) endHold();
+    if (holdIntentRef.current) endHold();
     tapIntent.clearPending();
   }, [endHold, tapIntent]);
 
@@ -380,7 +431,7 @@ function VideoCard({
     setSpeed((current) => {
       const index = PLAYBACK_RATES.indexOf(current as (typeof PLAYBACK_RATES)[number]);
       const next = PLAYBACK_RATES[(Math.max(index, 0) + 1) % PLAYBACK_RATES.length];
-      if (videoRef.current && !holdActiveRef.current) videoRef.current.playbackRate = next;
+      if (videoRef.current && holdIntentRef.current !== 'speed') videoRef.current.playbackRate = next;
       return next;
     });
     lightTap();
@@ -598,7 +649,7 @@ function VideoCard({
           </button>
         )}
 
-        <div className={cn('pointer-events-none absolute inset-0 z-20 flex items-center justify-center transition-opacity', showPlayFeedback || (!isPlaying && isActive) ? 'opacity-100' : 'opacity-0')}>
+        <div className={cn('pointer-events-none absolute inset-0 z-20 flex items-center justify-center transition-opacity', showPlayFeedback || (!isPlaying && isActive && holdIntent !== 'pause') ? 'opacity-100' : 'opacity-0')}>
           <div className="flex h-20 w-20 items-center justify-center rounded-full bg-black/40 backdrop-blur-sm">
             {isPlaying ? <Pause className="h-10 w-10 text-white" /> : <Play className="ml-1 h-10 w-10 fill-white text-white" />}
           </div>
@@ -610,9 +661,17 @@ function VideoCard({
           </div>
         )}
 
-        {isHolding && (
+        {holdIntent === 'speed' && (
           <div className="pointer-events-none absolute left-1/2 top-[15%] z-30 -translate-x-1/2 rounded-full bg-black/60 px-3 py-1.5 text-xs font-bold text-white backdrop-blur-xl">
             <span className="flex items-center gap-1.5"><Gauge className="h-3.5 w-3.5" />2x</span>
+          </div>
+        )}
+
+        {holdIntent === 'pause' && (
+          <div className="pointer-events-none absolute inset-0 z-[31] flex items-center justify-center">
+            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-black/35 backdrop-blur-sm">
+              <Pause className="h-8 w-8 fill-white text-white" />
+            </div>
           </div>
         )}
 
