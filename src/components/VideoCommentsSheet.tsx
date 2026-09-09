@@ -29,8 +29,23 @@ type MobileDragState = {
   velocityY: number;
 };
 
-const MOBILE_INITIAL_TOP_RATIO = 0.4;
-const MOBILE_MIN_TOP_RATIO = 0.055;
+/**
+ * Instagram reference captured by the product team on a 945 x 2048 viewport.
+ * These are measured pixels from that screenshot, not guessed percentages:
+ * - compact video frame: x=215..730, y=111..798 => 516 x 688
+ * - compact sheet top: y=819
+ * - expanded sheet top: y=111
+ *
+ * Ratios keep the same geometry on other mobile viewport sizes while preserving
+ * the exact reference proportions on 945 x 2048.
+ */
+const MOBILE_REFERENCE_WIDTH = 945;
+const MOBILE_REFERENCE_HEIGHT = 2048;
+const MOBILE_PREVIEW_WIDTH_RATIO = 516 / MOBILE_REFERENCE_WIDTH;
+const MOBILE_PREVIEW_HEIGHT_RATIO = 688 / MOBILE_REFERENCE_HEIGHT;
+const MOBILE_PREVIEW_TOP_RATIO = 111 / MOBILE_REFERENCE_HEIGHT;
+const MOBILE_INITIAL_TOP_RATIO = 819 / MOBILE_REFERENCE_HEIGHT;
+const MOBILE_MIN_TOP_RATIO = 111 / MOBILE_REFERENCE_HEIGHT;
 const MOBILE_MAX_TOP_RATIO = 0.78;
 const MOBILE_DISMISS_TOP_RATIO = 0.72;
 const MOBILE_DISMISS_VELOCITY = 0.85;
@@ -55,6 +70,32 @@ function clampMobileTop(value: number) {
   return Math.min(maxTop, Math.max(minTop, value));
 }
 
+function visibleViewportArea(element: Element) {
+  const rect = element.getBoundingClientRect();
+  const left = Math.max(0, rect.left);
+  const right = Math.min(window.innerWidth, rect.right);
+  const top = Math.max(0, rect.top);
+  const bottom = Math.min(window.innerHeight, rect.bottom);
+  return Math.max(0, right - left) * Math.max(0, bottom - top);
+}
+
+function findActiveVideoFrame() {
+  if (typeof document === 'undefined') return null;
+
+  let bestVideo: HTMLVideoElement | null = null;
+  let bestArea = 0;
+
+  document.querySelectorAll<HTMLVideoElement>('video').forEach((video) => {
+    if (!video.isConnected || video.closest('[data-video-comments-sheet="true"]')) return;
+    const area = visibleViewportArea(video);
+    if (area <= bestArea) return;
+    bestArea = area;
+    bestVideo = video;
+  });
+
+  return bestVideo?.parentElement ?? null;
+}
+
 function DesktopHeader({ commentsCount }: { commentsCount: number }) {
   return (
     <div className="flex items-center gap-2.5">
@@ -72,18 +113,12 @@ function DesktopHeader({ commentsCount }: { commentsCount: number }) {
 }
 
 /**
- * Video comments use a dedicated Instagram-style mobile surface.
+ * Video comments use a measured Instagram-style mobile surface.
  *
- * Mobile intentionally does not use Vaul's translated full-height drawer. A
- * translated ancestor also translates a fixed composer, which is why the input
- * used to disappear when the sheet was dragged down. Instead the Radix sheet is
- * physically bounded by `top` and `bottom: 0`: dragging changes only its top
- * edge, the conversation gets a real visible height, and the composer remains
- * the flex footer at the viewport bottom.
- *
- * The initial position leaves the active video visible above the comments. The
- * handle can be released at any intermediate height; dragging far enough down
- * dismisses the sheet. There is deliberately no close icon on mobile.
+ * The sheet has real `top` + `bottom: 0` geometry, so the composer remains a
+ * viewport-stable flex footer while the handle changes the sheet height. The
+ * active video frame is temporarily constrained to the measured Instagram
+ * preview rectangle and restored automatically when comments close.
  */
 export function VideoCommentsSheet({
   isOpen,
@@ -117,6 +152,25 @@ export function VideoCommentsSheet({
       document.documentElement.style.backgroundColor = previousHtmlBackground;
     };
   }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen || !isMobile || typeof document === 'undefined') return;
+
+    const frame = findActiveVideoFrame();
+    if (!frame) return;
+
+    frame.classList.add('video-comments-preview-frame');
+    frame.style.setProperty('--video-comments-preview-width', `${MOBILE_PREVIEW_WIDTH_RATIO * 100}vw`);
+    frame.style.setProperty('--video-comments-preview-height', `${MOBILE_PREVIEW_HEIGHT_RATIO * 100}dvh`);
+    frame.style.setProperty('--video-comments-preview-top', `${MOBILE_PREVIEW_TOP_RATIO * 100}dvh`);
+
+    return () => {
+      frame.classList.remove('video-comments-preview-frame');
+      frame.style.removeProperty('--video-comments-preview-width');
+      frame.style.removeProperty('--video-comments-preview-height');
+      frame.style.removeProperty('--video-comments-preview-top');
+    };
+  }, [isMobile, isOpen, postId]);
 
   useEffect(() => {
     if (!isOpen || !isMobile) return;
@@ -200,7 +254,7 @@ export function VideoCommentsSheet({
           side="bottom"
           hideDefaultClose
           data-video-comments-sheet="true"
-          overlayClassName="bg-black/10"
+          overlayClassName="bg-transparent"
           aria-describedby="video-comments-mobile-description"
           onOpenAutoFocus={(event) => event.preventDefault()}
           style={{
@@ -208,28 +262,26 @@ export function VideoCommentsSheet({
             bottom: 0,
             transition: isDragging ? 'none' : 'top 180ms cubic-bezier(0.2, 0.8, 0.2, 1)',
           }}
-          className="video-comments-premium dark inset-x-0 flex h-auto min-h-0 max-h-none flex-col gap-0 overflow-hidden rounded-t-[26px] border-x-0 border-b-0 border-t border-white/[0.09] bg-[#0a0a0b] p-0 text-white shadow-[0_-16px_52px_rgba(0,0,0,.34)] data-[state=open]:duration-200 data-[state=closed]:duration-200"
+          className="video-comments-premium dark inset-x-0 flex h-auto min-h-0 max-h-none flex-col gap-0 overflow-hidden rounded-t-[26px] border-x-0 border-b-0 border-t border-white/[0.08] bg-[#181c1f] p-0 text-white shadow-[0_-10px_30px_rgba(0,0,0,.22)] data-[state=open]:duration-200 data-[state=closed]:duration-200"
         >
           <div
             data-video-comments-drag-handle="true"
-            className="shrink-0 cursor-grab select-none touch-none active:cursor-grabbing"
+            className="relative h-[4.3dvh] shrink-0 cursor-grab select-none touch-none active:cursor-grabbing"
             onPointerDown={handleDragStart}
             onPointerMove={handleDragMove}
             onPointerUp={(event) => finishDrag(event)}
             onPointerCancel={(event) => finishDrag(event, true)}
           >
-            <div className="mx-auto mt-2.5 h-[3px] w-10 rounded-full bg-white/40" />
-            <SheetHeader className="border-b border-white/[0.07] px-4 pb-2.5 pt-1 text-center">
-              <SheetTitle className="text-[15px] font-semibold leading-6 tracking-[-0.01em] text-white">
-                {commentsCount > 0 ? `Izohlar · ${commentsCount}` : 'Izohlar'}
-              </SheetTitle>
-              <SheetDescription id="video-comments-mobile-description" className="sr-only">
+            <div className="absolute left-1/2 top-[1.8dvh] h-[3px] w-[8.89vw] max-w-[42px] -translate-x-1/2 rounded-full bg-[#a0a9b5]" />
+            <SheetHeader className="sr-only">
+              <SheetTitle>{commentsCount > 0 ? `Izohlar · ${commentsCount}` : 'Izohlar'}</SheetTitle>
+              <SheetDescription id="video-comments-mobile-description">
                 Video izohlari. Yuqoridagi tutqich orqali panel balandligini o‘zgartirish mumkin.
               </SheetDescription>
             </SheetHeader>
           </div>
 
-          <div className="dark min-h-0 flex-1 overflow-hidden bg-[#0a0a0b] text-white [color-scheme:dark]">
+          <div className="dark min-h-0 flex-1 overflow-hidden bg-[#181c1f] text-white [color-scheme:dark]">
             <CommentsSection
               postId={postId}
               layout="panel"
