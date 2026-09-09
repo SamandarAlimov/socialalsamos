@@ -1,15 +1,10 @@
-import { useEffect } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { MessageCircle } from 'lucide-react';
 
 import {
-  Drawer,
-  DrawerContent,
-  DrawerHeader,
-  DrawerTitle,
-} from '@/components/ui/drawer';
-import {
   Sheet,
   SheetContent,
+  SheetDescription,
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet';
@@ -22,6 +17,41 @@ interface VideoCommentsSheetProps {
   onClose: () => void;
   postId: string;
   commentsCount: number;
+}
+
+type MobileDragState = {
+  pointerId: number;
+  startY: number;
+  startTop: number;
+  lastY: number;
+  lastAt: number;
+  velocityY: number;
+};
+
+const MOBILE_INITIAL_TOP_RATIO = 0.4;
+const MOBILE_MIN_TOP_RATIO = 0.055;
+const MOBILE_MAX_TOP_RATIO = 0.78;
+const MOBILE_DISMISS_TOP_RATIO = 0.72;
+const MOBILE_DISMISS_VELOCITY = 0.85;
+
+function getViewportHeight() {
+  if (typeof window === 'undefined') return 844;
+  return Math.max(1, window.innerHeight || document.documentElement.clientHeight || 844);
+}
+
+function mobileSheetBounds() {
+  const height = getViewportHeight();
+  return {
+    height,
+    minTop: height * MOBILE_MIN_TOP_RATIO,
+    maxTop: height * MOBILE_MAX_TOP_RATIO,
+    initialTop: height * MOBILE_INITIAL_TOP_RATIO,
+  };
+}
+
+function clampMobileTop(value: number) {
+  const { minTop, maxTop } = mobileSheetBounds();
+  return Math.min(maxTop, Math.max(minTop, value));
 }
 
 function DesktopHeader({ commentsCount }: { commentsCount: number }) {
@@ -41,18 +71,18 @@ function DesktopHeader({ commentsCount }: { commentsCount: number }) {
 }
 
 /**
- * Video comments are intentionally isolated from the player.
+ * Video comments use a dedicated Instagram-style mobile surface.
  *
- * Mobile uses one viewport-height conversation surface. The player is never a
- * layout sibling above the comments while the drawer is open: the dark overlay
- * covers the feed and the drawer owns the usable viewport below the iOS safe
- * area. The comment list is the only scrolling region and the composer remains
- * a real flex footer, so opening the keyboard cannot push it below a snap-point
- * translated drawer.
+ * Mobile intentionally does not use Vaul's translated full-height drawer. A
+ * translated ancestor also translates a fixed composer, which is why the input
+ * used to disappear when the sheet was dragged down. Instead the Radix sheet is
+ * physically bounded by `top` and `bottom: 0`: dragging changes only its top
+ * edge, the conversation gets a real visible height, and the composer can stay
+ * fixed to the viewport bottom.
  *
- * There is deliberately no close icon on mobile. Native sheet dismissal is via
- * swipe-down, backdrop, Escape/system back, matching the interaction users
- * expect from short-video comment surfaces.
+ * The initial position leaves the active video visible above the comments. The
+ * handle can be released at any intermediate height; dragging far enough down
+ * dismisses the sheet. There is deliberately no close icon on mobile.
  */
 export function VideoCommentsSheet({
   isOpen,
@@ -61,6 +91,9 @@ export function VideoCommentsSheet({
   commentsCount,
 }: VideoCommentsSheetProps) {
   const isMobile = useIsMobile();
+  const dragRef = useRef<MobileDragState | null>(null);
+  const [mobileTop, setMobileTop] = useState(() => mobileSheetBounds().initialTop);
+  const [isDragging, setIsDragging] = useState(false);
 
   useEffect(() => {
     if (!isOpen || typeof document === 'undefined') return;
@@ -70,9 +103,9 @@ export function VideoCommentsSheet({
     const previousBodyBackground = document.body.style.backgroundColor;
     const previousHtmlBackground = document.documentElement.style.backgroundColor;
 
-    themeMeta?.setAttribute('content', '#0a0a0b');
-    document.body.style.backgroundColor = '#0a0a0b';
-    document.documentElement.style.backgroundColor = '#0a0a0b';
+    themeMeta?.setAttribute('content', '#000000');
+    document.body.style.backgroundColor = '#000000';
+    document.documentElement.style.backgroundColor = '#000000';
 
     return () => {
       if (themeMeta) {
@@ -85,41 +118,110 @@ export function VideoCommentsSheet({
   }, [isOpen]);
 
   useEffect(() => {
-    if (!isOpen || !isMobile || typeof document === 'undefined') return;
+    if (!isOpen || !isMobile) return;
+    dragRef.current = null;
+    setIsDragging(false);
+    setMobileTop(mobileSheetBounds().initialTop);
+  }, [isMobile, isOpen, postId]);
 
-    // Comments own the mobile viewport, so hidden feed media must not keep
-    // playing audio or wasting decode/battery behind the opaque sheet.
-    const playingVideos = Array.from(document.querySelectorAll<HTMLVideoElement>('video')).filter(
-      (video) => !video.paused && !video.ended,
-    );
-    playingVideos.forEach((video) => video.pause());
+  useEffect(() => {
+    if (!isOpen || !isMobile) return;
 
-    return () => {
-      playingVideos.forEach((video) => {
-        if (!video.isConnected || video.ended) return;
-        void video.play().catch(() => undefined);
-      });
+    const handleResize = () => {
+      const activeElement = document.activeElement;
+      const keyboardLikelyOpen = activeElement instanceof HTMLInputElement || activeElement instanceof HTMLTextAreaElement;
+      if (keyboardLikelyOpen) return;
+      setMobileTop((current) => clampMobileTop(current));
     };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
   }, [isMobile, isOpen]);
+
+  const handleDragStart = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (!event.isPrimary || (event.pointerType === 'mouse' && event.button !== 0)) return;
+
+    const now = performance.now();
+    dragRef.current = {
+      pointerId: event.pointerId,
+      startY: event.clientY,
+      startTop: mobileTop,
+      lastY: event.clientY,
+      lastAt: now,
+      velocityY: 0,
+    };
+    setIsDragging(true);
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    event.preventDefault();
+  }, [mobileTop]);
+
+  const handleDragMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+
+    const now = performance.now();
+    const elapsed = Math.max(1, now - drag.lastAt);
+    drag.velocityY = (event.clientY - drag.lastY) / elapsed;
+    drag.lastY = event.clientY;
+    drag.lastAt = now;
+
+    setMobileTop(clampMobileTop(drag.startTop + event.clientY - drag.startY));
+    event.preventDefault();
+  }, []);
+
+  const finishDrag = useCallback((event: React.PointerEvent<HTMLDivElement>, cancelled = false) => {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+
+    dragRef.current = null;
+    setIsDragging(false);
+    event.currentTarget.releasePointerCapture?.(event.pointerId);
+
+    if (cancelled) return;
+
+    const { height } = mobileSheetBounds();
+    const shouldDismiss =
+      mobileTop >= height * MOBILE_DISMISS_TOP_RATIO ||
+      (drag.velocityY >= MOBILE_DISMISS_VELOCITY && mobileTop >= height * 0.54);
+
+    if (shouldDismiss) onClose();
+  }, [mobileTop, onClose]);
 
   if (isMobile) {
     return (
-      <Drawer
-        open={isOpen}
-        onOpenChange={(open) => !open && onClose()}
-        shouldScaleBackground={false}
-      >
-        <DrawerContent
+      <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()}>
+        <SheetContent
+          side="bottom"
+          hideDefaultClose
           data-video-comments-sheet="true"
-          overlayClassName="bg-[#0a0a0b]"
-          handleClassName="mt-2.5 h-[3px] w-10 bg-white/35"
-          className="video-comments-premium dark flex h-[calc(100dvh-env(safe-area-inset-top,0px))] max-h-none flex-col overflow-hidden rounded-t-[24px] border-x-0 border-b-0 border-t border-white/[0.08] bg-[#0a0a0b] text-white shadow-[0_-14px_52px_rgba(0,0,0,.38)]"
+          overlayClassName="bg-black/10"
+          aria-describedby="video-comments-mobile-description"
+          onOpenAutoFocus={(event) => event.preventDefault()}
+          style={{
+            top: `max(env(safe-area-inset-top, 0px), ${Math.round(mobileTop)}px)`,
+            bottom: 0,
+            transition: isDragging ? 'none' : 'top 180ms cubic-bezier(0.2, 0.8, 0.2, 1)',
+          }}
+          className="video-comments-premium dark inset-x-0 flex h-auto min-h-0 max-h-none flex-col gap-0 overflow-hidden rounded-t-[26px] border-x-0 border-b-0 border-t border-white/[0.09] bg-[#0a0a0b] p-0 text-white shadow-[0_-16px_52px_rgba(0,0,0,.34)] data-[state=open]:duration-200 data-[state=closed]:duration-200"
         >
-          <DrawerHeader className="shrink-0 border-b border-white/[0.07] px-4 pb-2.5 pt-1 text-center">
-            <DrawerTitle className="text-[15px] font-semibold leading-6 tracking-[-0.01em] text-white">
-              {commentsCount > 0 ? `Izohlar · ${commentsCount}` : 'Izohlar'}
-            </DrawerTitle>
-          </DrawerHeader>
+          <div
+            data-video-comments-drag-handle="true"
+            className="shrink-0 cursor-grab select-none touch-none active:cursor-grabbing"
+            onPointerDown={handleDragStart}
+            onPointerMove={handleDragMove}
+            onPointerUp={(event) => finishDrag(event)}
+            onPointerCancel={(event) => finishDrag(event, true)}
+          >
+            <div className="mx-auto mt-2.5 h-[3px] w-10 rounded-full bg-white/40" />
+            <SheetHeader className="border-b border-white/[0.07] px-4 pb-2.5 pt-1 text-center">
+              <SheetTitle className="text-[15px] font-semibold leading-6 tracking-[-0.01em] text-white">
+                {commentsCount > 0 ? `Izohlar · ${commentsCount}` : 'Izohlar'}
+              </SheetTitle>
+              <SheetDescription id="video-comments-mobile-description" className="sr-only">
+                Video izohlari. Yuqoridagi tutqich orqali panel balandligini o‘zgartirish mumkin.
+              </SheetDescription>
+            </SheetHeader>
+          </div>
 
           <div className="dark min-h-0 flex-1 overflow-hidden bg-[#0a0a0b] text-white [color-scheme:dark]">
             <CommentsSection
@@ -129,8 +231,8 @@ export function VideoCommentsSheet({
               quickReactions
             />
           </div>
-        </DrawerContent>
-      </Drawer>
+        </SheetContent>
+      </Sheet>
     );
   }
 
@@ -141,9 +243,13 @@ export function VideoCommentsSheet({
         className="video-comments-premium flex w-[min(440px,40vw)] min-w-[380px] flex-col overflow-hidden border-l border-border/70 bg-background p-0 text-foreground shadow-[-24px_0_70px_rgba(0,0,0,0.18)] dark:bg-neutral-950 sm:max-w-none"
         overlayClassName="bg-black/10 backdrop-blur-[0.5px] dark:bg-black/45"
         hideDefaultClose
+        aria-describedby="video-comments-desktop-description"
       >
         <SheetHeader className="shrink-0 border-b border-border/60 px-4 py-3 text-left">
           <DesktopHeader commentsCount={commentsCount} />
+          <SheetDescription id="video-comments-desktop-description" className="sr-only">
+            Video izohlari paneli.
+          </SheetDescription>
         </SheetHeader>
         <div className="min-h-0 flex-1 overflow-hidden">
           <CommentsSection postId={postId} layout="panel" />
