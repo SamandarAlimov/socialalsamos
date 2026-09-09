@@ -58,6 +58,14 @@ const sizeClasses = {
   xl: 'h-32 w-32',
 };
 
+const fallbackTextClasses = {
+  xs: 'text-[9px]',
+  sm: 'text-xs',
+  md: 'text-sm',
+  lg: 'text-lg',
+  xl: 'text-4xl',
+};
+
 const ringPadding = {
   xs: 'p-[1px]',
   sm: 'p-[1.5px]',
@@ -178,6 +186,7 @@ export function StoryAvatar({
         onClick={handleClick}
         className={cn(
           "relative rounded-full transition-transform hover:scale-105",
+          sizeClasses[size],
           hasStory && showRing ? (
             hasUnviewedStory
               ? "bg-gradient-to-tr from-alsamos-orange-light to-alsamos-orange-dark"
@@ -188,11 +197,12 @@ export function StoryAvatar({
         )}
       >
         <div className={cn(
+          "h-full w-full",
           hasStory && showRing && "bg-background rounded-full p-[1.5px]"
         )}>
-          <Avatar className={sizeClasses[size]}>
+          <Avatar className="h-full w-full">
             <AvatarImage src={avatarUrl || ''} />
-            <AvatarFallback className="text-xs">
+            <AvatarFallback className={cn("font-semibold leading-none", fallbackTextClasses[size])}>
               {displayName?.[0] || username?.[0] || 'U'}
             </AvatarFallback>
           </Avatar>
