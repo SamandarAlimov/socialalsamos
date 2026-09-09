@@ -1,18 +1,22 @@
 import { describe, expect, it } from 'vitest';
 import {
   applyRelayPolicy,
+  ensureTurnFallback,
   getIceServers,
   hasTurnRelay,
   urlsOfIceServer,
 } from './iceServers';
 
 describe('native WebRTC ICE policy', () => {
-  it('always keeps STUN discovery in the default configuration', () => {
-    const urls = getIceServers().flatMap(urlsOfIceServer);
+  it('keeps STUN discovery and a TURN fallback in the default configuration', () => {
+    const servers = getIceServers();
+    const urls = servers.flatMap(urlsOfIceServer);
+
     expect(urls.some((url) => url.startsWith('stun:'))).toBe(true);
+    expect(hasTurnRelay(servers)).toBe(true);
   });
 
-  it('keeps TURN candidates when relay fallback is enabled', () => {
+  it('keeps dedicated TURN candidates when relay fallback is enabled', () => {
     const servers: RTCIceServer[] = [
       { urls: 'stun:stun.example.com:3478' },
       {
@@ -22,9 +26,23 @@ describe('native WebRTC ICE policy', () => {
       },
     ];
 
-    const result = applyRelayPolicy(servers, true);
+    const result = ensureTurnFallback(servers, true);
+    const urls = result.flatMap(urlsOfIceServer);
+
     expect(hasTurnRelay(result)).toBe(true);
-    expect(result.flatMap(urlsOfIceServer)).toContain('turns:turn.example.com:5349');
+    expect(urls).toContain('turns:turn.example.com:5349');
+    expect(urls.some((url) => url.includes('openrelay.metered.ca'))).toBe(false);
+  });
+
+  it('adds emergency TURN when no dedicated relay is configured', () => {
+    const result = ensureTurnFallback(
+      [{ urls: 'stun:stun.example.com:3478' }],
+      true,
+    );
+    const urls = result.flatMap(urlsOfIceServer);
+
+    expect(hasTurnRelay(result)).toBe(true);
+    expect(urls.some((url) => url.includes('openrelay.metered.ca'))).toBe(true);
   });
 
   it('strips TURN only when relay has been explicitly disabled', () => {
