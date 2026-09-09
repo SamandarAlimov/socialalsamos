@@ -27,6 +27,17 @@ describe('video post discovery', () => {
     ).toBe(true);
   });
 
+  it('never leaks story videos into the Videos feed', () => {
+    expect(
+      isPotentialVideoPost({
+        id: 'story-1',
+        media_type: 'video',
+        post_kind: 'story',
+        media_urls: ['https://cdn.example.com/story.mp4'],
+      }),
+    ).toBe(false);
+  });
+
   it('recognizes video URLs with query strings and fragments', () => {
     expect(
       isVideoLikeUrl('https://cdn.example.com/path/clip.MP4?token=abc#frame'),
