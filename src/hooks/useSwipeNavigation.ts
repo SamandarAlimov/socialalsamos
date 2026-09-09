@@ -32,6 +32,12 @@ interface SwipeNavigationOptions {
   allowRightSwipe?: boolean;
   /** Enable finger movement from right to left. Defaults to true. */
   allowLeftSwipe?: boolean;
+  /**
+   * Publish every horizontal drag offset to React state for live translation.
+   * Set false on heavy/scrollable creation surfaces: the gesture still
+   * navigates on release, but media editors are not re-rendered every frame.
+   */
+  trackSwipeOffset?: boolean;
 }
 
 function isInteractiveTarget(target: EventTarget | null): boolean {
@@ -68,6 +74,7 @@ export function useSwipeNavigation(options: SwipeNavigationOptions = {}) {
   const allowRightSwipe = options.allowRightSwipe ?? true;
   const allowLeftSwipe = options.allowLeftSwipe ?? true;
   const ignoreInteractiveTargets = options.ignoreInteractiveTargets ?? false;
+  const trackSwipeOffset = options.trackSwipeOffset ?? true;
 
   const getCurrentIndex = useCallback(() => {
     return NAVIGATION_ORDER.indexOf(location.pathname);
@@ -85,8 +92,8 @@ export function useSwipeNavigation(options: SwipeNavigationOptions = {}) {
     intent.current = 'unknown';
     gestureBlocked.current = false;
     offsetRef.current = 0;
-    setSwipeOffset(0);
-    setIsSwiping(false);
+    setSwipeOffset((current) => (current === 0 ? current : 0));
+    setIsSwiping((current) => (current ? false : current));
   }, []);
 
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
@@ -104,8 +111,8 @@ export function useSwipeNavigation(options: SwipeNavigationOptions = {}) {
 
     // Tap/vertical scroll paytida render qilmaymiz.
     if (isSwiping) setIsSwiping(false);
-    if (swipeOffset !== 0) setSwipeOffset(0);
-  }, [ignoreInteractiveTargets, isSwiping, swipeOffset]);
+    if (trackSwipeOffset && swipeOffset !== 0) setSwipeOffset(0);
+  }, [ignoreInteractiveTargets, isSwiping, swipeOffset, trackSwipeOffset]);
 
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
     if (gestureBlocked.current) return;
@@ -142,14 +149,17 @@ export function useSwipeNavigation(options: SwipeNavigationOptions = {}) {
         ? diffX * 0.2
         : diffX * 0.5;
 
+    // Navigation always uses the ref. Heavy pages can opt out of React state
+    // updates while the finger is moving to keep camera/video surfaces stable.
     offsetRef.current = nextOffset;
-    setSwipeOffset(nextOffset);
+    if (trackSwipeOffset) setSwipeOffset(nextOffset);
   }, [
     allowLeftSwipe,
     allowRightSwipe,
     getCurrentIndex,
     getLeftSwipeDestination,
     getRightSwipeDestination,
+    trackSwipeOffset,
   ]);
 
   const handleTouchEnd = useCallback(() => {
