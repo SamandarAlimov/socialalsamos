@@ -48,7 +48,7 @@
 .video-comments-measured-handle {
   top: var(--video-comments-handle-top);
   width: var(--video-comments-handle-width);
-  height: 2px;
+  height: var(--video-comments-handle-height);
 }
 
 .video-comments-premium [data-comments-section='true'] {
