@@ -73,6 +73,38 @@ function revealVideoWatchControls(surface: HTMLElement) {
   surface.dispatchEvent(new Event('pointermove', { bubbles: true }));
 }
 
+/**
+ * VideosPage renders the expanded caption in a bounded scroll region. When it
+ * is expanded, a normal tap in the free video area above the username/info
+ * block should collapse the caption instead of toggling playback. This mirrors
+ * the visual affordance: the expanded text owns the lower information region,
+ * while the unobstructed upper surface becomes the quick "less" target.
+ *
+ * We intentionally resolve this from the live DOM instead of widening the
+ * caption overlay itself, so top controls, right-side actions, double-tap seek/
+ * like, pinch and long-press gestures keep their existing hit targets.
+ */
+function collapseExpandedCaptionFromUpperSurface(surface: HTMLElement, clientY: number) {
+  const expandedCaption = Array.from(surface.querySelectorAll<HTMLElement>('div')).find(
+    (node) =>
+      node.classList.contains('max-h-[32vh]') &&
+      node.classList.contains('overflow-y-auto'),
+  );
+
+  if (!expandedCaption) return false;
+
+  // Structure in VideosPage: info -> content wrapper -> expanded caption.
+  const infoBlock = expandedCaption.parentElement?.parentElement;
+  const lessButton = expandedCaption.querySelector<HTMLButtonElement>('button');
+  if (!infoBlock || !lessButton) return false;
+
+  const infoTop = infoBlock.getBoundingClientRect().top;
+  if (!Number.isFinite(infoTop) || clientY >= infoTop) return false;
+
+  lessButton.click();
+  return true;
+}
+
 function seekVideoBy(video: HTMLVideoElement, delta: number) {
   const current = Number.isFinite(video.currentTime) ? video.currentTime : 0;
   const duration = Number.isFinite(video.duration) && video.duration > 0 ? video.duration : null;
@@ -89,6 +121,7 @@ function seekVideoBy(video: HTMLVideoElement, delta: number) {
  * Distinguishes single tap from double tap while preserving the richer Alsamos
  * video gesture model:
  * - regular Videos feed single tap: play/pause;
+ * - if the caption is expanded, a single tap above its info block: collapse it;
  * - YouTube-style VideoWatchPanel single tap: reveal controls without changing
  *   playback; play/pause remains an explicit controller action;
  * - double tap in left third: seek -10s (YouTube-style);
@@ -177,6 +210,7 @@ export function useVideoSurfaceTap({
 
       if (point) {
         const hit = findVideoSurfaceAt(point.x, point.y);
+        if (hit && collapseExpandedCaptionFromUpperSurface(hit.surface, point.y)) return;
         if (hit && isVideoWatchSurface(hit.surface)) {
           revealVideoWatchControls(hit.surface);
           return;
