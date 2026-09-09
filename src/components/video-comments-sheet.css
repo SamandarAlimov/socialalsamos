@@ -1,0 +1,121 @@
+/* Video comments are intentionally scoped to this surface. Nothing here changes
+   comments rendered under normal posts. */
+.video-comments-premium [data-comments-section='true'] {
+  border-top: 0;
+}
+
+.video-comments-premium [data-comment-list='true'] {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+  scroll-padding-bottom: 12px;
+  padding-top: 8px;
+  padding-bottom: 12px;
+}
+
+/* Instagram-style continuous conversation list: no card chrome or dividers. */
+.video-comments-premium [data-comment-list='true'] > div.divide-y > [data-comment-id] {
+  border-top-width: 0 !important;
+}
+
+.video-comments-premium [data-comment-id] {
+  background: transparent;
+  box-shadow: none;
+}
+
+.video-comments-premium [data-comment-id] > div:first-child {
+  gap: 10px;
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
+.video-comments-premium [data-comment-id] > div:first-child > div:last-child {
+  position: relative;
+  padding-right: 38px;
+}
+
+/* Top-level metadata stays compact; the content gets the visual weight. */
+.video-comments-premium [data-comment-id] > div:first-child > div:last-child > div:first-child {
+  column-gap: 6px;
+}
+
+/* Move the like affordance to the right edge, like a native short-video
+   conversation, while Reply remains below the comment text. */
+.video-comments-premium [data-comment-id] > div:first-child > div:last-child > div:last-child {
+  min-height: 18px;
+  margin-top: 6px;
+  gap: 14px;
+}
+
+.video-comments-premium [data-comment-id] > div:first-child > div:last-child > div:last-child > button:first-child {
+  position: absolute;
+  top: 26px;
+  right: 0;
+  min-width: 30px;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  font-size: 10px;
+}
+
+.video-comments-premium [data-comment-id] > div:first-child > div:last-child > div:last-child > button:first-child svg {
+  width: 19px;
+  height: 19px;
+}
+
+/* Replies are indented but are not boxed into a second card. */
+.video-comments-premium [data-comment-id] [data-comment-id] {
+  margin-left: 36px;
+}
+
+/* Keep comment attachments substantial without allowing them to dominate the
+   entire sheet. Avatar images are outside this right-hand content column. */
+.video-comments-premium [data-comment-id] > div:first-child > div:last-child img,
+.video-comments-premium [data-comment-id] > div:first-child > div:last-child video {
+  max-width: min(72vw, 300px);
+  max-height: 220px;
+  border-radius: 12px;
+}
+
+/* Composer is a real flex footer, not a sticky child of the scrolling list.
+   This is important inside Vaul because translated snap drawers can otherwise
+   push a sticky footer below the visible viewport. */
+.video-comments-premium [data-comment-composer='true'] {
+  position: relative !important;
+  bottom: auto !important;
+  margin-top: auto;
+  border-top-color: rgba(255, 255, 255, 0.08);
+  background: rgba(11, 11, 12, 0.98);
+  padding: 8px 12px max(10px, env(safe-area-inset-bottom));
+  backdrop-filter: blur(18px);
+}
+
+.video-comments-premium [data-comment-quick-reactions='true'] {
+  margin-bottom: 7px;
+  padding-inline: 2px;
+}
+
+.video-comments-premium [data-comment-quick-reactions='true'] button {
+  width: 34px;
+  min-width: 34px;
+  height: 32px;
+  font-size: 22px;
+}
+
+.video-comments-premium [data-comment-composer='true'] input {
+  font-size: 16px; /* prevents iOS Safari focus zoom */
+  line-height: 22px;
+}
+
+.video-comments-premium [data-comment-composer='true'] input::placeholder {
+  color: rgba(255, 255, 255, 0.42);
+}
+
+@media (min-width: 768px) {
+  .video-comments-premium [data-comment-composer='true'] input {
+    font-size: 14px;
+  }
+
+  .video-comments-premium [data-comment-id] [data-comment-id] {
+    margin-left: 30px;
+  }
+}
