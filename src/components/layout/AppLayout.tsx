@@ -94,13 +94,38 @@ export function AppLayout() {
     }
 
     const sync = () => {
-      setMessagesChatOpen(Boolean(document.querySelector('main button[aria-label="Orqaga"]')));
+      const backButton = document.querySelector<HTMLElement>(
+        'main button[aria-label="Orqaga"]'
+      );
+
+      // MessagesPage keeps the mobile chat panel mounted and toggles it with
+      // Tailwind's `hidden` class. A raw querySelector therefore keeps finding
+      // the back button after the user returns to the chat list, which leaves
+      // the bottom navbar hidden. Track the button's actual rendered visibility
+      // instead, and react to class/style mutations on the mounted panel.
+      const isVisible = Boolean(
+        backButton &&
+          !backButton.closest('.hidden') &&
+          backButton.getClientRects().length > 0
+      );
+
+      setMessagesChatOpen(isVisible);
     };
 
     sync();
     const observer = new MutationObserver(sync);
-    observer.observe(document.body, { childList: true, subtree: true });
-    return () => observer.disconnect();
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['class', 'style'],
+    });
+    window.addEventListener('resize', sync);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', sync);
+    };
   }, [isMessagesPage]);
 
   const mobileChromeMode = getMobileChromeMode(location.pathname);
