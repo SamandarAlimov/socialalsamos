@@ -1,8 +1,48 @@
 /* Video comments are intentionally scoped to this surface. Nothing here changes
    comments rendered under normal posts. */
+
+/*
+ * Measured Instagram mobile reference (945 x 2048 screenshot):
+ * frame x=215..730, y=111..798 => 516 x 688.
+ * The values arrive as CSS variables from VideoCommentsSheet so the original
+ * pixel measurements remain the single source of truth while scaling to other
+ * mobile viewports.
+ */
+.video-comments-preview-frame {
+  position: fixed !important;
+  top: var(--video-comments-preview-top) !important;
+  left: 50% !important;
+  width: var(--video-comments-preview-width) !important;
+  height: var(--video-comments-preview-height) !important;
+  max-width: none !important;
+  max-height: none !important;
+  transform: translateX(-50%) !important;
+  border-radius: 4.3% !important;
+  background: #000 !important;
+  box-shadow: none !important;
+  z-index: 5990 !important;
+  pointer-events: none !important;
+  overflow: hidden !important;
+}
+
+.video-comments-preview-frame > :not(video) {
+  display: none !important;
+}
+
+.video-comments-preview-frame > video {
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: contain !important;
+  transform: none !important;
+  transform-origin: center center !important;
+  border-radius: inherit !important;
+}
+
 .video-comments-premium [data-comments-section='true'] {
   min-height: 0;
   border-top: 0;
+  background: #181c1f !important;
 }
 
 .video-comments-premium [data-comment-list='true'] {
@@ -11,8 +51,9 @@
   overscroll-behavior-y: contain;
   scroll-padding-top: 10px;
   scroll-padding-bottom: 18px;
-  padding-top: 10px;
+  padding-top: 8px;
   padding-bottom: 18px;
+  background: #181c1f !important;
 }
 
 /* Instagram-style continuous conversation list: no card chrome or dividers. */
@@ -84,7 +125,7 @@
 
 /* Composer is a real flex footer, not a child of the scrolling list. The list
    consumes only remaining height, while this surface remains visible at the
-   bottom of the drawer before and after iOS keyboard transitions. */
+   bottom of the sheet before and after iOS keyboard transitions. */
 .video-comments-premium [data-comment-composer='true'] {
   position: relative !important;
   bottom: auto !important;
@@ -92,7 +133,7 @@
   margin-top: auto;
   flex: 0 0 auto;
   border-top-color: rgba(255, 255, 255, 0.08);
-  background: rgba(10, 10, 11, 0.98);
+  background: rgba(24, 28, 31, 0.985) !important;
   padding: 8px 12px max(10px, env(safe-area-inset-bottom));
   backdrop-filter: blur(22px);
   -webkit-backdrop-filter: blur(22px);
@@ -117,7 +158,7 @@
 }
 
 .video-comments-premium [data-comment-composer='true'] input::placeholder {
-  color: rgba(255, 255, 255, 0.42);
+  color: rgba(255, 255, 255, 0.54);
 }
 
 /* Keep popovers/autocomplete above the composer rather than clipping behind the
