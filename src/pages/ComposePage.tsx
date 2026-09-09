@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { FileText, Radio, UserCircle2, Video, X } from 'lucide-react';
 
@@ -33,13 +33,14 @@ export default function ComposePage() {
   );
   const [storyDraftActive, setStoryDraftActive] = useState(false);
   const [reelDraftActive, setReelDraftActive] = useState(false);
+  const composerMainRef = useRef<HTMLElement>(null);
+  const autoCameraModeRef = useRef<CreateMode | null>(null);
 
   const currentModeLocked =
     (mode === 'story' && storyDraftActive) ||
     (mode === 'reel' && reelDraftActive);
 
   const {
-    swipeOffset,
     handleTouchStart,
     handleTouchMove,
     handleTouchEnd,
@@ -51,6 +52,10 @@ export default function ComposePage() {
     // Home --swipe right--> Create --swipe left--> Home.
     allowRightSwipe: false,
     allowLeftSwipe: true,
+    // Never translate/re-render the heavy composer while the finger moves.
+    // The gesture still navigates on release, but iOS camera/video surfaces stay
+    // in a stable viewport instead of sliding independently from the footer.
+    trackSwipeOffset: false,
   });
 
   useEffect(() => {
@@ -66,6 +71,36 @@ export default function ComposePage() {
     setMode(nextMode);
   }, [currentModeLocked, mode, searchParams, setSearchParams]);
 
+  // Mobile Story/Reel are camera-first, like modern social creation flows.
+  // The composers already own capture/upload state; triggering their semantic
+  // camera action here avoids a duplicate media pipeline while removing the
+  // old intermediate empty editor screen. Closing the camera deliberately does
+  // not immediately reopen it until the user leaves and re-enters the mode.
+  useEffect(() => {
+    if (!isMobile || (mode !== 'story' && mode !== 'reel')) {
+      autoCameraModeRef.current = null;
+      return;
+    }
+    if (currentModeLocked || autoCameraModeRef.current === mode) return;
+
+    let cancelled = false;
+    const frame = window.requestAnimationFrame(() => {
+      if (cancelled) return;
+      const cameraButton = composerMainRef.current?.querySelector<HTMLButtonElement>(
+        'button[aria-label="Kamera"]',
+      );
+      if (!cameraButton || cameraButton.disabled) return;
+
+      autoCameraModeRef.current = mode;
+      cameraButton.click();
+    });
+
+    return () => {
+      cancelled = true;
+      window.cancelAnimationFrame(frame);
+    };
+  }, [currentModeLocked, isMobile, mode]);
+
   const selectMode = (next: CreateMode) => {
     if (currentModeLocked && next !== mode) return;
 
@@ -80,12 +115,8 @@ export default function ComposePage() {
     if (!currentModeLocked) navigate('/home');
   };
 
-  // Only leftward movement is rendered. A disabled right swipe gets no page
-  // translation, so it feels like an edge rather than another hidden route.
-  const renderedSwipeOffset = Math.min(0, swipeOffset);
-
   return (
-    <div className="relative flex h-[100dvh] min-h-0 flex-col overflow-hidden bg-background">
+    <div className="relative flex h-[100dvh] min-h-0 flex-col overflow-hidden overscroll-none bg-background">
       {/*
         Mobile keeps a compact close affordance without rebuilding the old
         header. Desktop/tablet intentionally have no back-arrow chrome.
@@ -102,12 +133,8 @@ export default function ComposePage() {
       </button>
 
       <main
-        className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch] lg:overflow-hidden"
-        style={
-          isMobile && renderedSwipeOffset !== 0
-            ? { transform: `translateX(${renderedSwipeOffset}px)` }
-            : undefined
-        }
+        ref={composerMainRef}
+        className="relative min-h-0 flex-1 touch-pan-y overflow-x-hidden overflow-y-auto overscroll-x-none overscroll-y-contain [-webkit-overflow-scrolling:touch] lg:overflow-hidden"
         onTouchStart={
           isMobile && !currentModeLocked ? handleTouchStart : undefined
         }
@@ -142,7 +169,7 @@ export default function ComposePage() {
       </main>
 
       <footer className="relative z-40 shrink-0 border-t border-border/60 bg-background/90 shadow-[0_-10px_30px_-24px_hsl(var(--foreground)/0.35)] backdrop-blur-2xl supports-[backdrop-filter]:bg-background/80">
-        <div className="mx-auto flex w-full max-w-2xl items-center justify-center px-3 pb-safe pt-2 sm:px-5 sm:py-3">
+        <div className="mx-auto flex w-full max-w-2xl items-center justify-center px-3 pb-[max(env(safe-area-inset-bottom),0.5rem)] pt-2 sm:px-5 sm:py-3">
           <nav
             role="tablist"
             aria-label="Yaratish turi"
