@@ -21,15 +21,15 @@ interface PostCollaboratorBylineProps {
   className?: string;
 }
 
+function profileHandle(profile: PostCollaboratorProfile | null) {
+  return profile?.username || profile?.display_name || 'user';
+}
+
 /**
- * Post sarlavhasidagi hammuallif satri.
+ * Instagram-style public collaborator byline.
  *
- * Bu komponent faqat VIEWER:
- * - post egasi;
- * - qabul qilingan hammualliflar;
- * - hali javob bermagan takliflar.
- *
- * Taklif yuborish/o'chirish/boshqarish Edit post ichida bajariladi.
+ * Only accepted collaborators are surfaced publicly. Pending invitations stay
+ * inside the edit/invitation flow and are never presented as co-authors.
  */
 export function PostCollaboratorByline({
   postId,
@@ -47,17 +47,6 @@ export function PostCollaboratorByline({
 
   const accepted = useMemo(
     () => collaborators.filter((item) => item.status === 'accepted'),
-    [collaborators],
-  );
-  const pending = useMemo(
-    () => collaborators.filter((item) => item.status === 'pending'),
-    [collaborators],
-  );
-  const visibleCollaborators = useMemo(
-    () =>
-      collaborators.filter(
-        (item) => item.status === 'accepted' || item.status === 'pending',
-      ),
     [collaborators],
   );
 
@@ -79,53 +68,33 @@ export function PostCollaboratorByline({
     setOpen(true);
   };
 
-  if (isLoading || visibleCollaborators.length === 0) return null;
+  if (isLoading || accepted.length === 0) return null;
 
-  const first = accepted[0] ?? null;
-  const hasMany = accepted.length > 1;
+  const first = accepted[0];
 
   return (
     <>
       <span className={cn('inline min-w-0 text-sm', className)}>
-        {first ? (
+        {accepted.length === 1 ? (
           <>
+            <span className="font-semibold text-foreground"> and </span>
             <button
               type="button"
-              onClick={openList}
+              onClick={(event) => openProfile(event, first.profile, first.user_id)}
               className="font-semibold text-foreground transition hover:underline"
             >
-              {' va'}
-            </button>{' '}
-            {hasMany ? (
-              <button
-                type="button"
-                onClick={openList}
-                className="font-semibold text-foreground transition hover:underline"
-              >
-                {'yana ' + accepted.length + ' kishi'}
-              </button>
-            ) : (
-              <span className="inline-flex min-w-0 items-center gap-1 align-bottom">
-                <button
-                  type="button"
-                  onClick={(event) => openProfile(event, first.profile, first.user_id)}
-                  className="truncate font-semibold text-foreground transition hover:underline"
-                >
-                  {first.profile?.display_name || '@' + (first.profile?.username || 'user')}
-                </button>
-                {first.profile?.is_verified && <VerifiedBadge size="xs" />}
-              </span>
-            )}
+              {profileHandle(first.profile)}
+            </button>
           </>
-        ) : pending.length > 0 ? (
+        ) : (
           <button
             type="button"
             onClick={openList}
-            className="font-medium text-muted-foreground transition hover:text-foreground hover:underline"
+            className="font-semibold text-foreground transition hover:underline"
           >
-            {' · ' + pending.length + ' taklif kutilmoqda'}
+            {' and ' + accepted.length + ' more'}
           </button>
-        ) : null}
+        )}
       </span>
 
       <Dialog open={open} onOpenChange={setOpen}>
@@ -164,7 +133,7 @@ export function PostCollaboratorByline({
               </button>
             )}
 
-            {visibleCollaborators.map((item) => {
+            {accepted.map((item) => {
               const label =
                 item.profile?.display_name ||
                 item.profile?.username ||
@@ -190,10 +159,7 @@ export function PostCollaboratorByline({
                       {item.profile?.is_verified && <VerifiedBadge size="xs" />}
                     </span>
                     <span className="mt-0.5 block truncate text-xs text-muted-foreground">
-                      @{item.profile?.username || 'user'} ·{' '}
-                      {item.status === 'accepted'
-                        ? 'Hammuallif'
-                        : 'Taklif yuborilgan'}
+                      @{item.profile?.username || 'user'} · Hammuallif
                     </span>
                   </span>
                 </button>

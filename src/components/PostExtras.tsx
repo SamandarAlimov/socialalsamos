@@ -11,6 +11,7 @@ import { PostLocationCard } from '@/components/PostLocationCard';
 import { PostMusicCard } from '@/components/PostMusicCard';
 import { PostAudioPlayer } from '@/components/PostAudioPlayer';
 import { PostDocumentCard } from '@/components/PostDocumentViewer';
+import { PostLikedByFollowing } from '@/components/PostLikedByFollowing';
 import { fileNameFromUrl } from '@/lib/documentPreview';
 import { resolveStorageUrlCandidates } from '@/lib/mediaUpload';
 import {
@@ -258,7 +259,15 @@ export function PostExtras({
     Boolean(labelOnlyLocation) ||
     Boolean(displayMusic) ||
     Boolean(hasPoll);
-  if (!hasAnything) return null;
+
+  if (!hasAnything) {
+    return (
+      <PostLikedByFollowing
+        postId={postId}
+        visibleWrapperClassName={className}
+      />
+    );
+  }
 
   const hasStandardCardGutter =
     Boolean(className?.split(/\s+/).includes('px-4')) &&
@@ -348,6 +357,8 @@ export function PostExtras({
       )}
 
       {labelOnlyLocation && <PlaceLabelCard label={labelOnlyLocation} />}
+
+      <PostLikedByFollowing postId={postId} />
     </div>
   );
 }

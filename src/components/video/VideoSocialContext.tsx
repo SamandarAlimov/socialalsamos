@@ -25,6 +25,43 @@ export interface VideoSocialProfile {
 
 const FOLLOW_CHUNK_SIZE = 150;
 const MAX_VISIBLE_SOCIAL_LIKERS = 3;
+const FOLLOW_CACHE_TTL_MS = 5 * 60 * 1000;
+
+let followingCache:
+  | { userId: string; ids: string[]; expiresAt: number }
+  | null = null;
+
+async function getFollowingIds(userId: string): Promise<string[]> {
+  if (
+    followingCache?.userId === userId &&
+    followingCache.expiresAt > Date.now()
+  ) {
+    return followingCache.ids;
+  }
+
+  const { data, error } = await supabase
+    .from('follows')
+    .select('following_id')
+    .eq('follower_id', userId);
+
+  if (error) throw error;
+
+  const ids = Array.from(
+    new Set(
+      (data ?? [])
+        .map((row) => String(row.following_id || ''))
+        .filter(Boolean),
+    ),
+  );
+
+  followingCache = {
+    userId,
+    ids,
+    expiresAt: Date.now() + FOLLOW_CACHE_TTL_MS,
+  };
+
+  return ids;
+}
 
 function profileLabel(profile: VideoSocialProfile): string {
   return profile.username || profile.display_name || 'user';
@@ -63,20 +100,7 @@ export function useVideoSocialContext(
       }
 
       try {
-        const { data: followRows, error: followError } = await supabase
-          .from('follows')
-          .select('following_id')
-          .eq('follower_id', user.id);
-
-        if (followError) throw followError;
-
-        const followingIds = Array.from(
-          new Set(
-            (followRows ?? [])
-              .map((row) => String(row.following_id || ''))
-              .filter(Boolean),
-          ),
-        );
+        const followingIds = await getFollowingIds(user.id);
 
         if (followingIds.length === 0) {
           if (!cancelled) setLikedByFollowing([]);
