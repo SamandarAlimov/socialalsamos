@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { callPhaseLabel, deriveCallUiPhase, formatCallDuration } from './callUi';
+import {
+  callPhaseLabel,
+  deriveCallUiPhase,
+  formatCallDuration,
+  resolveCallDisplayName,
+} from './callUi';
 
 describe('call UI state', () => {
   it('keeps an unanswered outgoing call in ringing state', () => {
@@ -39,6 +44,33 @@ describe('call UI state', () => {
     });
     expect(phase).toBe('failed');
     expect(callPhaseLabel(phase)).toBe('Ulanishda xatolik');
+  });
+
+  it('never labels a context-less 1:1 call as a group call', () => {
+    expect(
+      resolveCallDisplayName({
+        participantCount: 0,
+        peerName: "Guruh qo'ng'irog'i",
+      }),
+    ).toBe('Suhbatdosh');
+
+    expect(
+      resolveCallDisplayName({
+        participantCount: 1,
+        participantName: 'Samandar',
+        peerName: "Guruh qo'ng'irog'i",
+      }),
+    ).toBe('Samandar');
+  });
+
+  it('keeps a real group call label when group controls are available', () => {
+    expect(
+      resolveCallDisplayName({
+        participantCount: 0,
+        groupControlsAvailable: true,
+        peerName: "Guruh qo'ng'irog'i",
+      }),
+    ).toBe("Guruh qo'ng'irog'i");
   });
 
   it('formats duration consistently for short and long calls', () => {
