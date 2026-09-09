@@ -280,12 +280,13 @@ export function VideoCommentsSheet({
     const mobileStyle = {
       top: `${Math.round(mobileTop)}px`,
       bottom: 0,
-      borderTopLeftRadius: 'min(12.38vw, 42px)',
-      borderTopRightRadius: 'min(12.38vw, 42px)',
+      borderTopLeftRadius: `${geometry.sheetCornerRadius}px`,
+      borderTopRightRadius: `${geometry.sheetCornerRadius}px`,
       transition: isDragging ? 'none' : 'top 180ms cubic-bezier(0.2, 0.8, 0.2, 1)',
       '--video-comments-footer-height': `${geometry.footerHeight}px`,
       '--video-comments-handle-top': `${geometry.handleTopWithinSheet}px`,
       '--video-comments-handle-width': `${geometry.handleWidth}px`,
+      '--video-comments-handle-height': `${geometry.handleHeight}px`,
     } as React.CSSProperties;
 
     return (
