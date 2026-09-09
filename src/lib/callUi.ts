@@ -14,6 +14,13 @@ export interface CallUiStateInput {
   error?: string | null;
 }
 
+export interface CallDisplayNameInput {
+  participantName?: string | null;
+  peerName?: string | null;
+  participantCount: number;
+  groupControlsAvailable?: boolean;
+}
+
 export function deriveCallUiPhase(input: CallUiStateInput): CallUiPhase {
   if (input.error && !input.isConnected) return 'failed';
   if (input.isReconnecting) return 'reconnecting';
@@ -23,6 +30,30 @@ export function deriveCallUiPhase(input: CallUiStateInput): CallUiPhase {
   // peer appears, SDP/ICE negotiation is in progress.
   if (input.participantCount === 0 && !input.callStartedAt) return 'ringing';
   return 'connecting';
+}
+
+/**
+ * A missing/stale selected chat must never turn a 1:1 incoming call into a
+ * "group call" label. `MessagesPage` historically used that phrase as a
+ * catch-all fallback whenever selectedConversation was null/non-private.
+ * Preserve an actual group label only when the call UI has group evidence.
+ */
+export function resolveCallDisplayName(input: CallDisplayNameInput): string {
+  const participantName = input.participantName?.trim();
+  if (participantName) return participantName;
+
+  const isGroupContext =
+    input.participantCount > 1 || Boolean(input.groupControlsAvailable);
+  const peerName = input.peerName?.trim();
+
+  if (peerName) {
+    if (!isGroupContext && peerName === "Guruh qo'ng'irog'i") {
+      return 'Suhbatdosh';
+    }
+    return peerName;
+  }
+
+  return isGroupContext ? "Guruh qo'ng'irog'i" : 'Suhbatdosh';
 }
 
 export function formatCallDuration(seconds: number): string {
