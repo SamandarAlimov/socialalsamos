@@ -197,4 +197,104 @@ describe('useVideoSurfaceTap', () => {
     expect(onSingleTap).not.toHaveBeenCalled();
     expect(onDoubleTap).not.toHaveBeenCalled();
   });
+
+  it('collapses an expanded caption when a single tap lands above the username info block', () => {
+    const surface = document.createElement('div');
+    const video = document.createElement('video');
+    const infoBlock = document.createElement('div');
+    const usernameRow = document.createElement('div');
+    const contentWrapper = document.createElement('div');
+    const expandedCaption = document.createElement('div');
+    const lessButton = document.createElement('button');
+
+    expandedCaption.className = 'max-h-[32vh] overflow-y-auto';
+    lessButton.textContent = 'less';
+    expandedCaption.appendChild(lessButton);
+    contentWrapper.appendChild(expandedCaption);
+    infoBlock.append(usernameRow, contentWrapper);
+    surface.append(video, infoBlock);
+    document.body.appendChild(surface);
+
+    vi.spyOn(infoBlock, 'getBoundingClientRect').mockReturnValue({
+      x: 0,
+      y: 420,
+      left: 0,
+      top: 420,
+      right: 300,
+      bottom: 720,
+      width: 300,
+      height: 300,
+      toJSON: () => ({}),
+    });
+    Object.defineProperty(document, 'elementFromPoint', {
+      configurable: true,
+      value: vi.fn(() => surface),
+    });
+
+    const collapse = vi.fn();
+    lessButton.addEventListener('click', collapse);
+    const onSingleTap = vi.fn();
+    const onDoubleTap = vi.fn();
+    const { result } = renderHook(() =>
+      useVideoSurfaceTap({ onSingleTap, onDoubleTap, delay: 240 }),
+    );
+
+    act(() => {
+      result.current.registerTap(150, 220);
+      vi.advanceTimersByTime(240);
+    });
+
+    expect(collapse).toHaveBeenCalledTimes(1);
+    expect(onSingleTap).not.toHaveBeenCalled();
+    expect(onDoubleTap).not.toHaveBeenCalled();
+  });
+
+  it('keeps normal single-tap playback when the tap lands inside the expanded info block', () => {
+    const surface = document.createElement('div');
+    const video = document.createElement('video');
+    const infoBlock = document.createElement('div');
+    const contentWrapper = document.createElement('div');
+    const expandedCaption = document.createElement('div');
+    const lessButton = document.createElement('button');
+
+    expandedCaption.className = 'max-h-[32vh] overflow-y-auto';
+    expandedCaption.appendChild(lessButton);
+    contentWrapper.appendChild(expandedCaption);
+    infoBlock.appendChild(contentWrapper);
+    surface.append(video, infoBlock);
+    document.body.appendChild(surface);
+
+    vi.spyOn(infoBlock, 'getBoundingClientRect').mockReturnValue({
+      x: 0,
+      y: 420,
+      left: 0,
+      top: 420,
+      right: 300,
+      bottom: 720,
+      width: 300,
+      height: 300,
+      toJSON: () => ({}),
+    });
+    Object.defineProperty(document, 'elementFromPoint', {
+      configurable: true,
+      value: vi.fn(() => surface),
+    });
+
+    const collapse = vi.fn();
+    lessButton.addEventListener('click', collapse);
+    const onSingleTap = vi.fn();
+    const onDoubleTap = vi.fn();
+    const { result } = renderHook(() =>
+      useVideoSurfaceTap({ onSingleTap, onDoubleTap, delay: 240 }),
+    );
+
+    act(() => {
+      result.current.registerTap(150, 500);
+      vi.advanceTimersByTime(240);
+    });
+
+    expect(collapse).not.toHaveBeenCalled();
+    expect(onSingleTap).toHaveBeenCalledTimes(1);
+    expect(onDoubleTap).not.toHaveBeenCalled();
+  });
 });
