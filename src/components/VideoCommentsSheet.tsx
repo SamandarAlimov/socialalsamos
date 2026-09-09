@@ -23,6 +23,7 @@ type MobileDragState = {
   pointerId: number;
   startY: number;
   startTop: number;
+  currentTop: number;
   lastY: number;
   lastAt: number;
   velocityY: number;
@@ -77,8 +78,8 @@ function DesktopHeader({ commentsCount }: { commentsCount: number }) {
  * translated ancestor also translates a fixed composer, which is why the input
  * used to disappear when the sheet was dragged down. Instead the Radix sheet is
  * physically bounded by `top` and `bottom: 0`: dragging changes only its top
- * edge, the conversation gets a real visible height, and the composer can stay
- * fixed to the viewport bottom.
+ * edge, the conversation gets a real visible height, and the composer remains
+ * the flex footer at the viewport bottom.
  *
  * The initial position leaves the active video visible above the comments. The
  * handle can be released at any intermediate height; dragging far enough down
@@ -146,6 +147,7 @@ export function VideoCommentsSheet({
       pointerId: event.pointerId,
       startY: event.clientY,
       startTop: mobileTop,
+      currentTop: mobileTop,
       lastY: event.clientY,
       lastAt: now,
       velocityY: 0,
@@ -165,7 +167,9 @@ export function VideoCommentsSheet({
     drag.lastY = event.clientY;
     drag.lastAt = now;
 
-    setMobileTop(clampMobileTop(drag.startTop + event.clientY - drag.startY));
+    const nextTop = clampMobileTop(drag.startTop + event.clientY - drag.startY);
+    drag.currentTop = nextTop;
+    setMobileTop(nextTop);
     event.preventDefault();
   }, []);
 
@@ -175,17 +179,19 @@ export function VideoCommentsSheet({
 
     dragRef.current = null;
     setIsDragging(false);
-    event.currentTarget.releasePointerCapture?.(event.pointerId);
+    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
 
     if (cancelled) return;
 
     const { height } = mobileSheetBounds();
     const shouldDismiss =
-      mobileTop >= height * MOBILE_DISMISS_TOP_RATIO ||
-      (drag.velocityY >= MOBILE_DISMISS_VELOCITY && mobileTop >= height * 0.54);
+      drag.currentTop >= height * MOBILE_DISMISS_TOP_RATIO ||
+      (drag.velocityY >= MOBILE_DISMISS_VELOCITY && drag.currentTop >= height * 0.54);
 
     if (shouldDismiss) onClose();
-  }, [mobileTop, onClose]);
+  }, [onClose]);
 
   if (isMobile) {
     return (
