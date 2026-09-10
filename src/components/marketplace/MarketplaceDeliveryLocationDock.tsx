@@ -21,7 +21,8 @@ function safeInternalRoute(value: string | null) {
  * Shared Marketplace chrome bridge.
  *
  * Delivery selection is contextual instead of a permanent floating dock:
- * - Marketplace browse gets a compact address control inside its real header;
+ * - desktop browse mounts a compact address control beside the marketplace tabs;
+ * - mobile browse keeps a small full-width control under the search row;
  * - product/cart/checkout can open the same picker through the shared event;
  * - the mobile Marketplace back action is mounted into the sticky header row.
  *
@@ -35,6 +36,7 @@ export function MarketplaceDeliveryLocationDock() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [headerRowTarget, setHeaderRowTarget] = useState<HTMLElement | null>(null);
   const [headerShellTarget, setHeaderShellTarget] = useState<HTMLElement | null>(null);
+  const [locationSlotTarget, setLocationSlotTarget] = useState<HTMLElement | null>(null);
   const { location, setLocation } = useMarketplaceDeliveryLocation();
 
   useEffect(() => {
@@ -60,14 +62,17 @@ export function MarketplaceDeliveryLocationDock() {
     if (route.pathname !== '/marketplace') {
       setHeaderRowTarget(null);
       setHeaderShellTarget(null);
+      setLocationSlotTarget(null);
       return;
     }
 
     const syncTargets = () => {
       const shell = document.querySelector<HTMLElement>('.marketplace-neutral > header > div');
       const row = shell?.firstElementChild instanceof HTMLElement ? shell.firstElementChild : null;
+      const locationSlot = shell?.querySelector<HTMLElement>('[data-marketplace-location-slot]') ?? null;
       setHeaderShellTarget(current => (current === shell ? current : shell));
       setHeaderRowTarget(current => (current === row ? current : row));
+      setLocationSlotTarget(current => (current === locationSlot ? current : locationSlot));
     };
 
     syncTargets();
@@ -102,10 +107,57 @@ export function MarketplaceDeliveryLocationDock() {
 
   const marketplaceParams = new URLSearchParams(route.search);
   const tab = marketplaceParams.get('tab');
-  const showBrowseLocation =
-    route.pathname === '/marketplace' && (!tab || tab === 'browse');
-  const showPicker =
-    route.pathname.startsWith('/marketplace') && route.pathname !== '/marketplace/chat';
+  const showBrowseLocation = route.pathname === '/marketplace' && (!tab || tab === 'browse');
+  const showPicker = route.pathname.startsWith('/marketplace') && route.pathname !== '/marketplace/chat';
+
+  const locationLabel = location?.label || 'Yetkazish manzilini tanlang';
+
+  const desktopLocationControl = (
+    <button
+      type="button"
+      onClick={() => setPickerOpen(true)}
+      className={cn(
+        'group flex h-9 w-56 min-w-0 items-center gap-2 rounded-xl border px-2.5 text-left transition lg:w-72 xl:w-80',
+        'border-border/50 bg-muted/30 hover:border-foreground/20 hover:bg-muted/55',
+      )}
+      aria-label={location ? `Yetkazish manzili: ${location.label}` : 'Yetkazish manzilini tanlash'}
+    >
+      <span
+        className={cn(
+          'flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition',
+          location ? 'bg-foreground text-background' : 'bg-background text-muted-foreground shadow-sm',
+        )}
+      >
+        <MapPin className="h-3.5 w-3.5" />
+      </span>
+      <span className="min-w-0 flex-1 truncate text-xs font-semibold text-foreground">
+        {locationLabel}
+      </span>
+      <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground transition group-hover:translate-x-0.5" />
+    </button>
+  );
+
+  const mobileLocationControl = (
+    <div className="mt-2 md:hidden">
+      <button
+        type="button"
+        onClick={() => setPickerOpen(true)}
+        className="group flex h-10 w-full min-w-0 items-center gap-2.5 rounded-xl border border-border/50 bg-muted/30 px-2.5 text-left transition hover:bg-muted/55"
+        aria-label={location ? `Yetkazish manzili: ${location.label}` : 'Yetkazish manzilini tanlash'}
+      >
+        <span
+          className={cn(
+            'flex h-7 w-7 shrink-0 items-center justify-center rounded-lg',
+            location ? 'bg-foreground text-background' : 'bg-background text-muted-foreground shadow-sm',
+          )}
+        >
+          <MapPin className="h-3.5 w-3.5" />
+        </span>
+        <span className="min-w-0 flex-1 truncate text-xs font-semibold">{locationLabel}</span>
+        <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+      </button>
+    </div>
+  );
 
   return (
     <>
@@ -125,45 +177,12 @@ export function MarketplaceDeliveryLocationDock() {
           )
         : null}
 
+      {showBrowseLocation && locationSlotTarget
+        ? createPortal(desktopLocationControl, locationSlotTarget)
+        : null}
+
       {showBrowseLocation && headerShellTarget
-        ? createPortal(
-            <div className="mt-2 flex min-w-0 md:justify-end">
-              <button
-                type="button"
-                onClick={() => setPickerOpen(true)}
-                className={cn(
-                  'group flex w-full min-w-0 items-center gap-3 rounded-2xl border px-3 py-2 text-left transition',
-                  'border-border/50 bg-muted/30 hover:border-foreground/20 hover:bg-muted/55',
-                  'md:w-auto md:min-w-[300px] md:max-w-[420px]',
-                )}
-                aria-label={location ? `Yetkazish manzili: ${location.label}` : 'Yetkazish manzilini tanlash'}
-              >
-                <span
-                  className={cn(
-                    'flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition',
-                    location
-                      ? 'bg-foreground text-background'
-                      : 'bg-background text-muted-foreground shadow-sm',
-                  )}
-                >
-                  <MapPin className="h-4 w-4" />
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block text-[9px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
-                    Yetkazish manzili
-                  </span>
-                  <span className="mt-0.5 block truncate text-xs font-semibold text-foreground">
-                    {location?.label || 'Xaritadan yoki qidiruvdan manzil tanlang'}
-                  </span>
-                </span>
-                <span className="hidden shrink-0 text-[10px] font-semibold text-muted-foreground sm:inline">
-                  {location ? 'O‘zgartirish' : 'Tanlash'}
-                </span>
-                <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground transition group-hover:translate-x-0.5" />
-              </button>
-            </div>,
-            headerShellTarget,
-          )
+        ? createPortal(mobileLocationControl, headerShellTarget)
         : null}
 
       {showPicker && (
