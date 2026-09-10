@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 )
@@ -16,6 +17,7 @@ var (
 	ErrIdempotencyInProgress   = errors.New("idempotent request is already in progress")
 	ErrIdempotencyFailed       = errors.New("previous idempotent request failed")
 	ErrPostingRepositoryAbsent = errors.New("posting repository is required")
+	ErrInsufficientFunds       = errors.New("insufficient funds")
 )
 
 type IdempotencyState string
@@ -34,12 +36,19 @@ type IdempotencyRecord struct {
 	JournalID   string
 }
 
+type BalanceRequirement struct {
+	AccountID   string
+	Currency    Currency
+	AtLeastMinor int64
+}
+
 type PostingCommand struct {
-	Scope          string
-	IdempotencyKey string
-	RequestHash    []byte
-	Journal        Journal
-	OccurredAt     time.Time
+	Scope               string
+	IdempotencyKey      string
+	RequestHash         []byte
+	Journal             Journal
+	BalanceRequirements []BalanceRequirement
+	OccurredAt          time.Time
 }
 
 type PostingResult struct {
@@ -49,6 +58,8 @@ type PostingResult struct {
 
 type PostingTx interface {
 	ClaimIdempotency(context.Context, IdempotencyRecord, time.Time) (record IdempotencyRecord, created bool, err error)
+	LockAccounts(context.Context, []string) error
+	Balance(context.Context, string, Currency) (int64, error)
 	InsertJournal(context.Context, Journal, string, string, time.Time) error
 	CompleteIdempotency(context.Context, string, string, string) error
 }
@@ -123,6 +134,20 @@ func (p Poster) Post(ctx context.Context, command PostingCommand) (PostingResult
 			}
 		}
 
+		accountIDs := postingAccountIDs(command)
+		if err := tx.LockAccounts(ctx, accountIDs); err != nil {
+			return fmt.Errorf("lock ledger accounts: %w", err)
+		}
+		for _, requirement := range command.BalanceRequirements {
+			balance, err := tx.Balance(ctx, requirement.AccountID, requirement.Currency)
+			if err != nil {
+				return fmt.Errorf("read balance for %s: %w", requirement.AccountID, err)
+			}
+			if balance < requirement.AtLeastMinor {
+				return fmt.Errorf("%w: account=%s available=%d required=%d", ErrInsufficientFunds, requirement.AccountID, balance, requirement.AtLeastMinor)
+			}
+		}
+
 		if err := tx.InsertJournal(ctx, command.Journal, scope, key, occurredAt); err != nil {
 			return fmt.Errorf("insert journal: %w", err)
 		}
@@ -151,5 +176,32 @@ func validatePostingCommand(command PostingCommand) error {
 	if err := command.Journal.Validate(); err != nil {
 		return fmt.Errorf("%w: %v", ErrInvalidPostingCommand, err)
 	}
+	for i, requirement := range command.BalanceRequirements {
+		if strings.TrimSpace(requirement.AccountID) == "" {
+			return fmt.Errorf("%w: balance requirement %d account id is required", ErrInvalidPostingCommand, i)
+		}
+		if err := requirement.Currency.Validate(); err != nil {
+			return fmt.Errorf("%w: balance requirement %d: %v", ErrInvalidPostingCommand, i, err)
+		}
+		if requirement.AtLeastMinor < 0 {
+			return fmt.Errorf("%w: balance requirement %d minimum cannot be negative", ErrInvalidPostingCommand, i)
+		}
+	}
 	return nil
+}
+
+func postingAccountIDs(command PostingCommand) []string {
+	unique := make(map[string]struct{}, len(command.Journal.Entries)+len(command.BalanceRequirements))
+	for _, entry := range command.Journal.Entries {
+		unique[entry.AccountID] = struct{}{}
+	}
+	for _, requirement := range command.BalanceRequirements {
+		unique[requirement.AccountID] = struct{}{}
+	}
+	ids := make([]string, 0, len(unique))
+	for id := range unique {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	return ids
 }

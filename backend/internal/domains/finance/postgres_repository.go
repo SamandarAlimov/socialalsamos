@@ -5,10 +5,14 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 )
 
-var ErrNilSQLDatabase = errors.New("finance SQL database is required")
+var (
+	ErrNilSQLDatabase       = errors.New("finance SQL database is required")
+	ErrLedgerAccountMissing = errors.New("ledger account not found")
+)
 
 type SQLPostingRepository struct {
 	DB *sql.DB
@@ -80,6 +84,62 @@ FOR UPDATE`, requested.Scope, requested.Key).Scan(
 	}
 	record.State = IdempotencyState(state)
 	return record, false, nil
+}
+
+func (s sqlPostingTx) LockAccounts(ctx context.Context, accountIDs []string) error {
+	for _, accountID := range accountIDs {
+		var lockedID string
+		err := s.tx.QueryRowContext(ctx, `
+SELECT id::text
+FROM finance.ledger_accounts
+WHERE id = $1
+FOR UPDATE`, accountID).Scan(&lockedID)
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("%w: %s", ErrLedgerAccountMissing, accountID)
+		}
+		if err != nil {
+			return fmt.Errorf("lock ledger account %s: %w", accountID, err)
+		}
+	}
+	return nil
+}
+
+func (s sqlPostingTx) Balance(ctx context.Context, accountID string, currency Currency) (int64, error) {
+	var accountClass string
+	var accountCurrency string
+	err := s.tx.QueryRowContext(ctx, `
+SELECT account_class::text, currency
+FROM finance.ledger_accounts
+WHERE id = $1`, accountID).Scan(&accountClass, &accountCurrency)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, fmt.Errorf("%w: %s", ErrLedgerAccountMissing, accountID)
+	}
+	if err != nil {
+		return 0, fmt.Errorf("read ledger account %s: %w", accountID, err)
+	}
+	if accountCurrency != string(currency) {
+		return 0, fmt.Errorf("%w: account=%s ledger=%s requested=%s", ErrCurrencyMismatch, accountID, accountCurrency, currency)
+	}
+
+	normalSide := Credit
+	switch strings.ToLower(accountClass) {
+	case "asset", "expense":
+		normalSide = Debit
+	case "liability", "equity", "revenue":
+		normalSide = Credit
+	default:
+		return 0, fmt.Errorf("unknown account class %q for %s", accountClass, accountID)
+	}
+
+	var balance int64
+	err = s.tx.QueryRowContext(ctx, `
+SELECT COALESCE(SUM(CASE WHEN side::text = $2 THEN amount_minor ELSE -amount_minor END), 0)::bigint
+FROM finance.ledger_entries
+WHERE account_id = $1 AND currency = $3`, accountID, string(normalSide), string(currency)).Scan(&balance)
+	if err != nil {
+		return 0, fmt.Errorf("calculate balance for %s: %w", accountID, err)
+	}
+	return balance, nil
 }
 
 func (s sqlPostingTx) InsertJournal(ctx context.Context, journal Journal, scope, key string, occurredAt time.Time) error {
