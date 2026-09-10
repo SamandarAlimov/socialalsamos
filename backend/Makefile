@@ -1,10 +1,10 @@
 GO ?= go
-IMPLEMENTED_PACKAGES := ./cmd/api ./internal/platform/config ./internal/platform/http ./internal/domains/finance ./internal/domains/sharia
+IMPLEMENTED_PACKAGES := ./cmd/api ./internal/platform/config ./internal/platform/http ./internal/domains/finance ./internal/domains/sharia ./internal/domains/wallet
 
 .PHONY: fmt test vet build ci
 
 fmt:
-	gofmt -w ./cmd/api ./internal/platform/config ./internal/platform/http ./internal/domains/finance ./internal/domains/sharia
+	gofmt -w ./cmd/api ./internal/platform/config ./internal/platform/http ./internal/domains/finance ./internal/domains/sharia ./internal/domains/wallet
 
 test:
 	$(GO) test $(IMPLEMENTED_PACKAGES)
