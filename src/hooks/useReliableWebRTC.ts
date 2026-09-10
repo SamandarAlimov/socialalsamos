@@ -14,6 +14,7 @@ import {
   iceRestartDelayMs,
   negotiationMatches,
 } from "@/lib/webrtcReliability";
+import { shouldReserveVideoTransceiver } from "@/lib/callMediaPolicy";
 import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
 import { useAuth } from "@/contexts/AuthContext";
@@ -48,6 +49,13 @@ type SignalEvent = "ready" | "offer" | "answer" | "ice" | "media" | "leave";
 type PersistedSignalEvent = "offer" | "answer" | "ice";
 type RestartReason = "failed" | "disconnected" | "timeout" | "remote-request";
 
+type MediaState = {
+  isMuted: boolean;
+  isVideoOn: boolean;
+  isScreenSharing: boolean;
+  isHandRaised: boolean;
+};
+
 type SignalPayload = {
   from: string;
   to?: string;
@@ -59,12 +67,7 @@ type SignalPayload = {
   restart?: boolean;
   sdp?: RTCSessionDescriptionInit;
   candidate?: RTCIceCandidateInit;
-  mediaState?: {
-    isMuted: boolean;
-    isVideoOn: boolean;
-    isScreenSharing: boolean;
-    isHandRaised: boolean;
-  };
+  mediaState?: MediaState;
 };
 
 type CandidateEnvelope = {
@@ -76,6 +79,12 @@ const DEFAULT_ICE_SERVERS = expandIceServersForReliability(getIceServers());
 const QUALITY_CHECK_INTERVAL = 5000;
 const ICE_RESTART_LIMIT = 3;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const DEFAULT_CAMERA_CONSTRAINTS: MediaTrackConstraints = {
+  width: { ideal: 1280, max: 1920 },
+  height: { ideal: 720, max: 1080 },
+  frameRate: { ideal: 30, max: 60 },
+  facingMode: "user",
+};
 
 function makeSignalId() {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
@@ -95,6 +104,13 @@ function isConnectionAlive(pc: RTCPeerConnection) {
   return pc.connectionState === "connected" || pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed";
 }
 
+function videoSenderFor(pc: RTCPeerConnection): RTCRtpSender | null {
+  const transceiver = pc.getTransceivers().find(
+    (item) => item.sender.track?.kind === "video" || item.receiver.track?.kind === "video",
+  );
+  return transceiver?.sender ?? pc.getSenders().find((item) => item.track?.kind === "video") ?? null;
+}
+
 export function useWebRTC(roomId: string | null, options: UseWebRTCOptions = {}) {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -112,7 +128,7 @@ export function useWebRTC(roomId: string | null, options: UseWebRTCOptions = {})
   const [isConnecting, setIsConnecting] = useState(false);
   const [isReconnecting, setIsReconnecting] = useState(false);
   const [isMuted, setIsMuted] = useState(!canPublishMedia);
-  const [isVideoOn, setIsVideoOn] = useState(canPublishMedia);
+  const [isVideoOn, setIsVideoOn] = useState(false);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [isHandRaised, setIsHandRaised] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -156,6 +172,18 @@ export function useWebRTC(roomId: string | null, options: UseWebRTCOptions = {})
   const callStartedStampedRef = useRef(false);
   const roomGenerationRef = useRef(0);
   const joiningRoomRef = useRef<{ roomId: string; promise: Promise<void> } | null>(null);
+  const handRaisedRef = useRef(false);
+
+  const currentMediaState = useCallback((): MediaState => {
+    const audioTrack = localStreamRef.current?.getAudioTracks()[0];
+    const videoTrack = localStreamRef.current?.getVideoTracks()[0];
+    return {
+      isMuted: !audioTrack || !audioTrack.enabled,
+      isVideoOn: Boolean(videoTrack && videoTrack.readyState === "live" && videoTrack.enabled),
+      isScreenSharing: Boolean(screenStreamRef.current),
+      isHandRaised: handRaisedRef.current,
+    };
+  }, []);
 
   const isDatabaseCall = useCallback(
     () => !!roomId && UUID_RE.test(roomId),
@@ -413,9 +441,6 @@ export function useWebRTC(roomId: string | null, options: UseWebRTCOptions = {})
           currentNegotiationRef.current.set(peerId, negotiationId);
           pendingOfferRef.current.set(peerId, negotiationId);
 
-          // Do NOT call pc.restartIce() here. That method fires
-          // `negotiationneeded`, which previously created a second normal offer
-          // immediately after the restart offer and poisoned the ICE generation.
           const offer = await pc.createOffer(iceRestart ? { iceRestart: true } : undefined);
           if (pc.signalingState !== "stable" || pc.connectionState === "closed") return;
           await pc.setLocalDescription(offer);
@@ -480,9 +505,6 @@ export function useWebRTC(roomId: string | null, options: UseWebRTCOptions = {})
         restartTimersRef.current.delete(peerId);
         if (leavingRoomRef.current || pc.connectionState === "closed" || isConnectionAlive(pc)) return;
 
-        // Never overlap an ICE restart with an outstanding offer. The next
-        // failed/disconnected transition will schedule again if this attempt
-        // still cannot connect.
         if (
           pc.signalingState !== "stable" ||
           makingOfferRef.current.has(peerId) ||
@@ -554,11 +576,14 @@ export function useWebRTC(roomId: string | null, options: UseWebRTCOptions = {})
 
       if (canPublishMedia) {
         stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+        const hasVideoTransceiver = pc.getTransceivers().some(
+          (item) => item.sender.track?.kind === "video" || item.receiver.track?.kind === "video",
+        );
+        if (shouldReserveVideoTransceiver(canPublishMedia, hasVideoTransceiver)) {
+          pc.addTransceiver("video", { direction: "sendrecv" });
+        }
       }
 
-      // Negotiation is intentionally driven only by ready/offer/restart frames.
-      // addTrack() and restartIce() used to trigger `negotiationneeded` and race
-      // a second offer against the deterministic handshake.
       pc.onnegotiationneeded = null;
 
       pc.onicecandidate = (event) => {
@@ -627,7 +652,7 @@ export function useWebRTC(roomId: string | null, options: UseWebRTCOptions = {})
               id: peerId,
               stream: remote,
               isMuted: false,
-              isVideoOn: true,
+              isVideoOn: false,
               isScreenSharing: false,
               isHandRaised: false,
             },
@@ -701,9 +726,6 @@ export function useWebRTC(roomId: string | null, options: UseWebRTCOptions = {})
       await enqueueNegotiation(from, async () => {
         if (pc.connectionState === "closed") return;
 
-        // Current clients have exactly one deterministic offer owner. If this
-        // client already owns an offer, an incoming offer is stale/glare and
-        // must not roll back the valid generation.
         if (
           shouldInitiatePeer(from) &&
           (pc.signalingState === "have-local-offer" || pc.localDescription)
@@ -862,6 +884,11 @@ export function useWebRTC(roomId: string | null, options: UseWebRTCOptions = {})
       if (!wasReady) {
         await sendSignal("ready", { from: user.id, to: from });
       }
+      await sendSignal("media", {
+        from: user.id,
+        to: from,
+        mediaState: currentMediaState(),
+      });
 
       if (signal.restartRequested && shouldInitiatePeer(from)) {
         scheduleIceRestart(from, pc, "remote-request");
@@ -871,9 +898,6 @@ export function useWebRTC(roomId: string | null, options: UseWebRTCOptions = {})
       if (!shouldInitiatePeer(from)) return;
       if (isConnectionAlive(pc) || pc.signalingState !== "stable") return;
 
-      // Ready frames only start the first negotiation. Reconnects are owned by
-      // the ICE state machine; repeated ready/presence frames must never create
-      // another normal offer after an answer has already been applied.
       if (!pc.localDescription && !pc.remoteDescription) {
         armConnectionWatchdog(from, pc);
         void negotiatePeer(from, pc, false);
@@ -881,6 +905,7 @@ export function useWebRTC(roomId: string | null, options: UseWebRTCOptions = {})
     },
     [
       armConnectionWatchdog,
+      currentMediaState,
       ensurePeerConnection,
       negotiatePeer,
       registerPeerSession,
@@ -902,14 +927,7 @@ export function useWebRTC(roomId: string | null, options: UseWebRTCOptions = {})
       };
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: video
-            ? {
-                width: { ideal: 1280, max: 1920 },
-                height: { ideal: 720, max: 1080 },
-                frameRate: { ideal: 30, max: 60 },
-                facingMode: "user",
-              }
-            : false,
+          video: video ? DEFAULT_CAMERA_CONSTRAINTS : false,
           audio: audio ? audioConstraints : false,
         });
         localStreamRef.current = stream;
@@ -918,8 +936,6 @@ export function useWebRTC(roomId: string | null, options: UseWebRTCOptions = {})
         setIsMuted(false);
         return stream;
       } catch (mediaError: any) {
-        // Some mobile WebViews reject ideal/max video constraints while the
-        // physical camera itself is available. Retry once with browser defaults.
         if (video && mediaError?.name === "OverconstrainedError") {
           try {
             const fallback = await navigator.mediaDevices.getUserMedia({
@@ -932,7 +948,6 @@ export function useWebRTC(roomId: string | null, options: UseWebRTCOptions = {})
             setIsMuted(false);
             return fallback;
           } catch {
-            // Fall through to the user-facing error below.
           }
         }
 
@@ -1009,7 +1024,6 @@ export function useWebRTC(roomId: string | null, options: UseWebRTCOptions = {})
             lossCount += 1;
           }
         } catch {
-          // A transient getStats failure must not affect call media.
         }
       }
 
@@ -1080,6 +1094,7 @@ export function useWebRTC(roomId: string | null, options: UseWebRTCOptions = {})
     screenStreamRef.current?.getTracks().forEach((track) => track.stop());
     localStreamRef.current = null;
     screenStreamRef.current = null;
+    handRaisedRef.current = false;
     setLocalStream(null);
     setScreenStream(null);
     setParticipants([]);
@@ -1087,7 +1102,7 @@ export function useWebRTC(roomId: string | null, options: UseWebRTCOptions = {})
     setIsConnecting(false);
     setIsReconnecting(false);
     setIsMuted(!canPublishMedia);
-    setIsVideoOn(canPublishMedia);
+    setIsVideoOn(false);
     setIsScreenSharing(false);
     setIsHandRaised(false);
     setConnectionQuality({ bitrate: 0, packetLoss: 0, latency: 0, quality: "disconnected" });
@@ -1216,7 +1231,7 @@ export function useWebRTC(roomId: string | null, options: UseWebRTCOptions = {})
                 id: peerId,
                 stream: remoteStreamsRef.current.get(peerId) ?? null,
                 isMuted: false,
-                isVideoOn: true,
+                isVideoOn: false,
                 isScreenSharing: false,
                 isHandRaised: false,
               });
@@ -1329,6 +1344,7 @@ export function useWebRTC(roomId: string | null, options: UseWebRTCOptions = {})
             }
 
             await sendSignal("ready", { from: user.id });
+            await sendSignal("media", { from: user.id, mediaState: currentMediaState() });
             syncPresence();
 
             if (shouldPersistSignals()) {
@@ -1386,6 +1402,7 @@ export function useWebRTC(roomId: string | null, options: UseWebRTCOptions = {})
       canPublishMedia,
       cleanupRoom,
       closePeer,
+      currentMediaState,
       ensurePeerConnection,
       handleAnswer,
       handleIce,
@@ -1414,7 +1431,7 @@ export function useWebRTC(roomId: string | null, options: UseWebRTCOptions = {})
   }, [cleanupRoom, sendSignal, user?.id]);
 
   const broadcastMediaState = useCallback(
-    (next: { isMuted: boolean; isVideoOn: boolean; isScreenSharing: boolean; isHandRaised: boolean }) => {
+    (next: MediaState) => {
       if (!user?.id) return;
       void sendSignal("media", { from: user.id, mediaState: next });
     },
@@ -1436,39 +1453,114 @@ export function useWebRTC(roomId: string | null, options: UseWebRTCOptions = {})
     });
   }, [broadcastMediaState, canPublishMedia, isHandRaised, isScreenSharing, isVideoOn]);
 
-  const toggleVideo = useCallback(() => {
+  const replaceOutgoingVideoTrack = useCallback(async (track: MediaStreamTrack | null) => {
+    await Promise.all(
+      Array.from(peerConnectionsRef.current.entries()).map(async ([peerId, pc]) => {
+        const sender = videoSenderFor(pc);
+        if (!sender) {
+          console.warn("[WebRTC] video sender is unavailable for media upgrade", { peerId });
+          return;
+        }
+        try {
+          await sender.replaceTrack(track);
+        } catch (replaceError) {
+          console.warn("[WebRTC] video track replacement failed", { peerId, replaceError });
+        }
+      }),
+    );
+  }, []);
+
+  const toggleVideo = useCallback(async () => {
     if (!canPublishMedia) return;
-    const track = localStreamRef.current?.getVideoTracks()[0];
-    if (!track) return;
-    track.enabled = !track.enabled;
-    const nextVideo = track.enabled;
-    setIsVideoOn(nextVideo);
-    broadcastMediaState({
-      isMuted,
-      isVideoOn: nextVideo,
-      isScreenSharing,
-      isHandRaised,
-    });
-  }, [broadcastMediaState, canPublishMedia, isHandRaised, isMuted, isScreenSharing]);
+
+    const existingTrack = localStreamRef.current?.getVideoTracks()[0];
+    if (existingTrack && existingTrack.readyState === "live") {
+      existingTrack.enabled = !existingTrack.enabled;
+      const nextVideo = existingTrack.enabled;
+      setIsVideoOn(nextVideo);
+      broadcastMediaState({
+        isMuted,
+        isVideoOn: nextVideo,
+        isScreenSharing,
+        isHandRaised,
+      });
+      return;
+    }
+
+    if (!navigator.mediaDevices?.getUserMedia) {
+      toast({
+        title: "Kamera mavjud emas",
+        description: "Bu qurilma brauzeri kamerani qo'llab-quvvatlamaydi.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      let cameraStream: MediaStream;
+      try {
+        cameraStream = await navigator.mediaDevices.getUserMedia({
+          video: DEFAULT_CAMERA_CONSTRAINTS,
+          audio: false,
+        });
+      } catch (cameraError: any) {
+        if (cameraError?.name !== "OverconstrainedError") throw cameraError;
+        cameraStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      }
+
+      const cameraTrack = cameraStream.getVideoTracks()[0];
+      if (!cameraTrack) throw new Error("Camera track is unavailable");
+      cameraTrack.enabled = true;
+
+      const previous = localStreamRef.current ?? new MediaStream();
+      previous.getVideoTracks().forEach((track) => track.stop());
+      const nextStream = new MediaStream([...previous.getAudioTracks(), cameraTrack]);
+      localStreamRef.current = nextStream;
+      setLocalStream(nextStream);
+
+      if (!isScreenSharing) {
+        await replaceOutgoingVideoTrack(cameraTrack);
+      }
+
+      setIsVideoOn(true);
+      setError(null);
+      broadcastMediaState({
+        isMuted,
+        isVideoOn: true,
+        isScreenSharing,
+        isHandRaised,
+      });
+    } catch (cameraError: any) {
+      console.warn("[WebRTC] camera enable failed", cameraError);
+      let message = "Kamerani yoqib bo'lmadi.";
+      if (cameraError?.name === "NotAllowedError") {
+        message = "Kameraga ruxsat berilmagan. Brauzer sayt sozlamalaridan kamera ruxsatini yoqing.";
+      } else if (cameraError?.name === "NotFoundError") {
+        message = "Kamera topilmadi.";
+      } else if (cameraError?.name === "NotReadableError") {
+        message = "Kamera boshqa dastur tomonidan band.";
+      }
+      toast({ title: "Kamera", description: message, variant: "destructive" });
+    }
+  }, [
+    broadcastMediaState,
+    canPublishMedia,
+    isHandRaised,
+    isMuted,
+    isScreenSharing,
+    replaceOutgoingVideoTrack,
+    toast,
+  ]);
 
   const toggleScreenShare = useCallback(async () => {
     if (!canPublishMedia) return;
-
-    const replaceVideoTrack = async (track: MediaStreamTrack | null) => {
-      await Promise.all(
-        Array.from(peerConnectionsRef.current.values()).map(async (pc) => {
-          const sender = pc.getSenders().find((item) => item.track?.kind === "video");
-          if (sender) await sender.replaceTrack(track);
-        }),
-      );
-    };
 
     if (isScreenSharing && screenStreamRef.current) {
       screenStreamRef.current.getTracks().forEach((track) => track.stop());
       screenStreamRef.current = null;
       setScreenStream(null);
       setIsScreenSharing(false);
-      await replaceVideoTrack(localStreamRef.current?.getVideoTracks()[0] ?? null);
+      await replaceOutgoingVideoTrack(localStreamRef.current?.getVideoTracks()[0] ?? null);
       broadcastMediaState({ isMuted, isVideoOn, isScreenSharing: false, isHandRaised });
       return;
     }
@@ -1480,20 +1572,28 @@ export function useWebRTC(roomId: string | null, options: UseWebRTCOptions = {})
       screenStreamRef.current = display;
       setScreenStream(display);
       setIsScreenSharing(true);
-      await replaceVideoTrack(screenTrack);
+      await replaceOutgoingVideoTrack(screenTrack);
 
       screenTrack.onended = () => {
         screenStreamRef.current = null;
         setScreenStream(null);
         setIsScreenSharing(false);
-        void replaceVideoTrack(localStreamRef.current?.getVideoTracks()[0] ?? null);
+        void replaceOutgoingVideoTrack(localStreamRef.current?.getVideoTracks()[0] ?? null);
         broadcastMediaState({ isMuted, isVideoOn, isScreenSharing: false, isHandRaised });
       };
       broadcastMediaState({ isMuted, isVideoOn, isScreenSharing: true, isHandRaised });
     } catch (screenError) {
       console.warn("[WebRTC] screen sharing failed", screenError);
     }
-  }, [broadcastMediaState, canPublishMedia, isHandRaised, isMuted, isScreenSharing, isVideoOn]);
+  }, [
+    broadcastMediaState,
+    canPublishMedia,
+    isHandRaised,
+    isMuted,
+    isScreenSharing,
+    isVideoOn,
+    replaceOutgoingVideoTrack,
+  ]);
 
   const selectCamera = useCallback(
     async (deviceId: string): Promise<boolean> => {
@@ -1513,12 +1613,7 @@ export function useWebRTC(roomId: string | null, options: UseWebRTCOptions = {})
         nextTrack.enabled = isVideoOn;
 
         if (!isScreenSharing) {
-          await Promise.all(
-            Array.from(peerConnectionsRef.current.values()).map(async (pc) => {
-              const sender = pc.getSenders().find((item) => item.track?.kind === "video");
-              if (sender) await sender.replaceTrack(nextTrack);
-            }),
-          );
+          await replaceOutgoingVideoTrack(nextTrack);
         }
 
         const previous = localStreamRef.current;
@@ -1532,7 +1627,7 @@ export function useWebRTC(roomId: string | null, options: UseWebRTCOptions = {})
         return false;
       }
     },
-    [canPublishMedia, isScreenSharing, isVideoOn],
+    [canPublishMedia, isScreenSharing, isVideoOn, replaceOutgoingVideoTrack],
   );
 
   const selectMicrophone = useCallback(
@@ -1590,6 +1685,7 @@ export function useWebRTC(roomId: string | null, options: UseWebRTCOptions = {})
 
   const toggleHandRaise = useCallback(() => {
     const next = !isHandRaised;
+    handRaisedRef.current = next;
     setIsHandRaised(next);
     broadcastMediaState({ isMuted, isVideoOn, isScreenSharing, isHandRaised: next });
   }, [broadcastMediaState, isHandRaised, isMuted, isScreenSharing, isVideoOn]);
