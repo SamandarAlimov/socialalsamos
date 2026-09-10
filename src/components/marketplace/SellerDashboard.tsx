@@ -2,6 +2,7 @@ import { useState } from 'react';
 import {
   DollarSign, Package, Eye, ShoppingCart, TrendingUp, Clock, CheckCircle, ChevronRight,
   BarChart3, ArrowUpRight, Loader2, Truck, XCircle, RotateCcw, AlertTriangle, MapPin, Phone,
+  PackagePlus,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -20,6 +21,7 @@ import { useToast } from '@/hooks/use-toast';
 import { formatPrice, formatPriceCompact } from '@/lib/marketplace';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { CreateProductDialog } from '@/components/marketplace/CreateProductDialog';
 
 interface SellerDashboardProps {
   onClose?: () => void;
@@ -67,6 +69,7 @@ export function SellerDashboard({ onClose }: SellerDashboardProps) {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [cancelTarget, setCancelTarget] = useState<Order | null>(null);
+  const [showCreateProduct, setShowCreateProduct] = useState(false);
 
   const runStatusChange = async (
     order: Order,
@@ -120,12 +123,20 @@ export function SellerDashboard({ onClose }: SellerDashboardProps) {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between gap-3">
-        <div>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
           <h2 className="text-2xl font-bold">Sotuvchi paneli</h2>
           <p className="text-sm text-muted-foreground">Savdo va buyurtmalarni boshqaring</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            className="h-9 rounded-xl px-3"
+            onClick={() => setShowCreateProduct(true)}
+          >
+            <PackagePlus className="mr-1.5 h-4 w-4" />
+            <span className="hidden sm:inline">Mahsulot qo‘shish</span>
+            <span className="sm:hidden">Qo‘shish</span>
+          </Button>
           <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl" onClick={refresh} aria-label="Yangilash">
             <RotateCcw className="h-4 w-4" />
           </Button>
@@ -404,6 +415,15 @@ export function SellerDashboard({ onClose }: SellerDashboardProps) {
           )}
         </CardContent>
       </Card>
+
+      <CreateProductDialog
+        open={showCreateProduct}
+        onOpenChange={setShowCreateProduct}
+        onSuccess={() => {
+          setShowCreateProduct(false);
+          void refresh();
+        }}
+      />
 
       <AlertDialog open={!!cancelTarget} onOpenChange={open => !open && setCancelTarget(null)}>
         <AlertDialogContent className="rounded-2xl">
