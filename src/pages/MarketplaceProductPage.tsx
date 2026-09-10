@@ -10,6 +10,24 @@ import { MarketplaceReviewMediaWall } from '@/components/marketplace/Marketplace
 import { fetchMarketplaceProductById, Product, useCart } from '@/hooks/useMarketplace';
 import { marketplaceUz } from '@/i18n/marketplace';
 import { parseMarketplaceSelectionFromUrl } from '@/lib/marketplaceChat';
+import { resolveMarketplaceImageUrl } from '@/lib/marketplaceImageRecovery';
+
+async function hydrateProductImageUrls(product: Product | null): Promise<Product | null> {
+  if (!product?.images?.length) return product;
+
+  const images = await Promise.all(
+    product.images.map(async image => {
+      try {
+        const url = await resolveMarketplaceImageUrl(image.url);
+        return url && url !== image.url ? { ...image, url } : image;
+      } catch {
+        return image;
+      }
+    }),
+  );
+
+  return { ...product, images };
+}
 
 export default function MarketplaceProductPage() {
   const { productId } = useParams<{ productId: string }>();
@@ -154,6 +172,7 @@ export default function MarketplaceProductPage() {
     setLoadError(false);
 
     void fetchMarketplaceProductById(productId)
+      .then(hydrateProductImageUrls)
       .then(result => {
         if (cancelled) return;
         setProduct(result);
