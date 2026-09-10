@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Check, Crosshair, Loader2, MapPin, Search, X } from 'lucide-react';
+import { Check, Crosshair, History, Loader2, MapPin, Search, X } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -22,10 +22,11 @@ interface MarketplaceLocationPickerProps {
   value?: MarketplaceLocationValue | null;
   onSelect: (location: MarketplaceLocationValue) => void;
   title?: string;
-  description?: string;
 }
 
 const DEFAULT_CENTER = { latitude: 41.311081, longitude: 69.240562 };
+const RECENT_LOCATIONS_STORAGE_KEY = 'alsamos:marketplace:delivery-location-history';
+const MAX_RECENT_LOCATIONS = 6;
 
 function validPoint(latitude: number, longitude: number) {
   return (
@@ -34,6 +35,65 @@ function validPoint(latitude: number, longitude: number) {
     Math.abs(latitude) <= 90 &&
     Math.abs(longitude) <= 180
   );
+}
+
+function validLocation(value: MarketplaceLocationValue | null | undefined): value is MarketplaceLocationValue {
+  return Boolean(
+    value &&
+    validPoint(Number(value.latitude), Number(value.longitude)) &&
+    typeof value.label === 'string' &&
+    value.label.trim(),
+  );
+}
+
+function normalizeLocation(value: MarketplaceLocationValue): MarketplaceLocationValue {
+  return {
+    latitude: Number(value.latitude),
+    longitude: Number(value.longitude),
+    label: value.label.trim(),
+    accuracy: Number.isFinite(Number(value.accuracy)) ? Number(value.accuracy) : null,
+  };
+}
+
+function sameLocation(a: MarketplaceLocationValue, b: MarketplaceLocationValue) {
+  return (
+    Math.abs(a.latitude - b.latitude) < 0.00001 &&
+    Math.abs(a.longitude - b.longitude) < 0.00001
+  );
+}
+
+function readRecentLocations(): MarketplaceLocationValue[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(RECENT_LOCATIONS_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((item): item is MarketplaceLocationValue => validLocation(item))
+      .map(normalizeLocation)
+      .slice(0, MAX_RECENT_LOCATIONS);
+  } catch {
+    return [];
+  }
+}
+
+function mergeRecentLocation(
+  location: MarketplaceLocationValue,
+  current: MarketplaceLocationValue[],
+) {
+  const normalized = normalizeLocation(location);
+  return [normalized, ...current.filter(item => !sameLocation(item, normalized))]
+    .slice(0, MAX_RECENT_LOCATIONS);
+}
+
+function persistRecentLocations(locations: MarketplaceLocationValue[]) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(RECENT_LOCATIONS_STORAGE_KEY, JSON.stringify(locations));
+  } catch {
+    // Location history is a convenience preference; selection still works.
+  }
 }
 
 function pointLabel(latitude: number, longitude: number) {
@@ -53,10 +113,10 @@ export function MarketplaceLocationPicker({
   value,
   onSelect,
   title = 'Joylashuvni xaritadan tanlang',
-  description = 'Joriy joylashuv bilan cheklanmaydi — xaritadan istalgan manzilni belgilang yoki qidiruvdan toping.',
 }: MarketplaceLocationPickerProps) {
   const controllerRef = useRef<MapEngineController | null>(null);
   const [selected, setSelected] = useState<MarketplaceLocationValue | null>(value ?? null);
+  const [recentLocations, setRecentLocations] = useState<MarketplaceLocationValue[]>([]);
   const [center, setCenter] = useState(() =>
     value && validPoint(value.latitude, value.longitude)
       ? { latitude: value.latitude, longitude: value.longitude }
@@ -71,7 +131,21 @@ export function MarketplaceLocationPicker({
 
   useEffect(() => {
     if (!open) return;
+
     setSelected(value ?? null);
+    setQuery('');
+    setResults([]);
+    setError(null);
+
+    const stored = readRecentLocations();
+    if (value && validLocation(value)) {
+      const merged = mergeRecentLocation(value, stored);
+      setRecentLocations(merged);
+      persistRecentLocations(merged);
+    } else {
+      setRecentLocations(stored);
+    }
+
     if (value && validPoint(value.latitude, value.longitude)) {
       const next = { latitude: value.latitude, longitude: value.longitude };
       setCenter(next);
@@ -139,17 +213,22 @@ export function MarketplaceLocationPicker({
     }
   };
 
+  const selectLocation = (location: MarketplaceLocationValue) => {
+    const next = normalizeLocation(location);
+    setSelected(next);
+    setCenter({ latitude: next.latitude, longitude: next.longitude });
+    setQuery('');
+    setResults([]);
+    setError(null);
+    controllerRef.current?.flyTo([next.latitude, next.longitude], 16, { animate: true });
+  };
+
   const selectPlace = (place: GeoPlace) => {
-    const next = {
+    selectLocation({
       latitude: place.latitude,
       longitude: place.longitude,
       label: placeLabel(place),
-    };
-    setSelected(next);
-    setCenter({ latitude: place.latitude, longitude: place.longitude });
-    setQuery('');
-    setResults([]);
-    controllerRef.current?.flyTo([place.latitude, place.longitude], 16, { animate: true });
+    });
   };
 
   const useCurrentLocation = async () => {
@@ -189,20 +268,27 @@ export function MarketplaceLocationPicker({
       setError('Avval xaritadan manzilni tanlang.');
       return;
     }
+
+    const nextRecent = mergeRecentLocation(selected, recentLocations);
+    setRecentLocations(nextRecent);
+    persistRecentLocations(nextRecent);
     onSelect(selected);
     onOpenChange(false);
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="marketplace-neutral max-w-4xl overflow-hidden p-0 sm:rounded-3xl">
-        <DialogHeader className="border-b border-border/60 px-5 py-4 text-left">
-          <DialogTitle className="text-lg">{title}</DialogTitle>
-          <DialogDescription>{description}</DialogDescription>
+      <DialogContent
+        aria-describedby={undefined}
+        className="marketplace-neutral flex h-[calc(100dvh-1rem)] max-h-[820px] w-[calc(100vw-1rem)] max-w-[1120px] flex-col gap-0 overflow-hidden p-0 sm:h-[min(820px,calc(100dvh-2rem))] sm:w-[calc(100vw-2rem)] sm:rounded-3xl"
+      >
+        <DialogHeader className="shrink-0 border-b border-border/60 px-4 py-3.5 text-left sm:px-5 sm:py-4">
+          <DialogTitle className="pr-8 text-base sm:text-lg">{title}</DialogTitle>
+          <DialogDescription className="sr-only">Manzilni qidirish va xaritadan tanlash</DialogDescription>
         </DialogHeader>
 
-        <div className="grid min-h-[620px] grid-rows-[auto_1fr_auto] lg:grid-cols-[340px_1fr] lg:grid-rows-[1fr_auto]">
-          <div className="relative z-20 border-b border-border/60 bg-background p-4 lg:border-b-0 lg:border-r">
+        <div className="grid min-h-0 flex-1 grid-rows-[minmax(175px,0.9fr)_minmax(220px,1.1fr)_auto] md:grid-cols-[320px_minmax(0,1fr)] md:grid-rows-[minmax(0,1fr)_auto] lg:grid-cols-[360px_minmax(0,1fr)]">
+          <div className="relative z-20 min-h-0 overflow-y-auto border-b border-border/60 bg-background p-3 overscroll-contain md:border-b-0 md:border-r md:p-4">
             <div className="space-y-3">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -268,7 +354,7 @@ export function MarketplaceLocationPicker({
                   <MapPin className="mt-0.5 h-4 w-4 shrink-0" />
                   <div className="min-w-0 flex-1">
                     <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Tanlangan manzil</p>
-                    <p className="mt-1 text-sm font-medium">
+                    <p className="mt-1 line-clamp-2 text-sm font-medium">
                       {selected?.label || 'Xaritadagi kerakli nuqtani bosing'}
                     </p>
                     {selected && (
@@ -281,11 +367,38 @@ export function MarketplaceLocationPicker({
                 </div>
               </div>
 
+              {recentLocations.length > 0 && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-1.5 px-1 text-xs font-semibold text-muted-foreground">
+                    <History className="h-3.5 w-3.5" />
+                    Oldingi manzillar
+                  </div>
+                  <div className="space-y-1.5">
+                    {recentLocations.map((location, index) => (
+                      <button
+                        key={`${location.latitude}:${location.longitude}:${index}`}
+                        type="button"
+                        onClick={() => selectLocation(location)}
+                        className={cn(
+                          'flex w-full min-w-0 items-center gap-2 rounded-xl border px-2.5 py-2 text-left transition hover:bg-muted/55',
+                          selected && sameLocation(selected, location)
+                            ? 'border-foreground/20 bg-muted/45'
+                            : 'border-border/50 bg-background',
+                        )}
+                      >
+                        <MapPin className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                        <span className="min-w-0 flex-1 truncate text-xs font-medium">{location.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {error && <p className="rounded-xl bg-destructive/10 px-3 py-2 text-xs text-destructive">{error}</p>}
             </div>
           </div>
 
-          <div className="relative min-h-[360px] overflow-hidden bg-muted lg:min-h-0">
+          <div className="relative min-h-0 overflow-hidden bg-muted md:col-start-2 md:row-start-1">
             <LeafletMapSurface
               controllerRef={controllerRef}
               center={center}
@@ -300,22 +413,30 @@ export function MarketplaceLocationPicker({
               onMovedCenter={() => undefined}
               onMapClick={(point) => selectCoordinates(point.latitude, point.longitude)}
             />
-            <div className="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 rounded-full bg-background/90 px-3 py-1.5 text-[11px] font-medium shadow-sm backdrop-blur">
+            <div className="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 whitespace-nowrap rounded-full bg-background/90 px-3 py-1.5 text-[11px] font-medium shadow-sm backdrop-blur">
               Nuqtani tanlash uchun xaritani bosing
             </div>
           </div>
 
-          <div className="flex items-center justify-between gap-3 border-t border-border/60 bg-background px-4 py-3 lg:col-span-2">
-            <p className="hidden text-xs text-muted-foreground sm:block">
-              Bu manzil Marketplace qidiruvi, mahsulot joylashuvi yoki yetkazib berish uchun ishlatiladi.
-            </p>
-            <div className="ml-auto flex gap-2">
-              <Button type="button" variant="outline" className="rounded-xl" onClick={() => onOpenChange(false)}>
+          <div className="flex shrink-0 items-center border-t border-border/60 bg-background px-3 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] md:col-span-2 md:px-4 md:pb-3">
+            <div className="grid w-full grid-cols-2 gap-2 sm:ml-auto sm:flex sm:w-auto">
+              <Button
+                type="button"
+                variant="outline"
+                className="h-11 min-w-0 rounded-xl px-3 sm:px-4"
+                onClick={() => onOpenChange(false)}
+              >
                 Bekor qilish
               </Button>
-              <Button type="button" className="rounded-xl" onClick={confirm} disabled={!selected || isResolving}>
-                <Check className="mr-2 h-4 w-4" />
-                Manzilni tanlash
+              <Button
+                type="button"
+                className="h-11 min-w-0 rounded-xl px-3 sm:px-4"
+                onClick={confirm}
+                disabled={!selected || isResolving}
+              >
+                <Check className="mr-1.5 h-4 w-4 shrink-0 sm:mr-2" />
+                <span className="sm:hidden">Tanlash</span>
+                <span className="hidden sm:inline">Manzilni tanlash</span>
               </Button>
             </div>
           </div>
