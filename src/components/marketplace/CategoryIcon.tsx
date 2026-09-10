@@ -86,16 +86,16 @@ const KEYWORD_ICONS: Array<[RegExp, LucideIcon]> = [
 ];
 
 const CATEGORY_TONES = [
-  { icon: 'text-violet-600 dark:text-violet-400', box: 'bg-violet-500/12' },
-  { icon: 'text-sky-600 dark:text-sky-400', box: 'bg-sky-500/12' },
-  { icon: 'text-emerald-600 dark:text-emerald-400', box: 'bg-emerald-500/12' },
-  { icon: 'text-amber-600 dark:text-amber-400', box: 'bg-amber-500/14' },
-  { icon: 'text-rose-600 dark:text-rose-400', box: 'bg-rose-500/12' },
-  { icon: 'text-cyan-600 dark:text-cyan-400', box: 'bg-cyan-500/12' },
-  { icon: 'text-fuchsia-600 dark:text-fuchsia-400', box: 'bg-fuchsia-500/12' },
-  { icon: 'text-lime-700 dark:text-lime-400', box: 'bg-lime-500/12' },
-  { icon: 'text-orange-600 dark:text-orange-400', box: 'bg-orange-500/12' },
-  { icon: 'text-indigo-600 dark:text-indigo-400', box: 'bg-indigo-500/12' },
+  { icon: 'text-violet-600 dark:text-violet-400', box: 'bg-violet-500/[0.12]' },
+  { icon: 'text-sky-600 dark:text-sky-400', box: 'bg-sky-500/[0.12]' },
+  { icon: 'text-emerald-600 dark:text-emerald-400', box: 'bg-emerald-500/[0.12]' },
+  { icon: 'text-amber-600 dark:text-amber-400', box: 'bg-amber-500/[0.14]' },
+  { icon: 'text-rose-600 dark:text-rose-400', box: 'bg-rose-500/[0.12]' },
+  { icon: 'text-cyan-600 dark:text-cyan-400', box: 'bg-cyan-500/[0.12]' },
+  { icon: 'text-fuchsia-600 dark:text-fuchsia-400', box: 'bg-fuchsia-500/[0.12]' },
+  { icon: 'text-lime-700 dark:text-lime-400', box: 'bg-lime-500/[0.12]' },
+  { icon: 'text-orange-600 dark:text-orange-400', box: 'bg-orange-500/[0.12]' },
+  { icon: 'text-indigo-600 dark:text-indigo-400', box: 'bg-indigo-500/[0.12]' },
 ] as const;
 
 function categoryTone(slug?: string | null, name?: string | null) {
