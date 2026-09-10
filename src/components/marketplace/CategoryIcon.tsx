@@ -5,6 +5,7 @@ import {
   Plane, HeartPulse, GraduationCap, Ticket, type LucideIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import '@/styles/marketplace-catalog-mega.css';
 
 /**
  * Professional category iconography.
@@ -147,7 +148,7 @@ export function CategoryIcon({ slug, name, className, boxed = false }: CategoryI
   return (
     <span
       className={cn(
-        'inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl',
+        'marketplace-category-icon-box inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl',
         tone.box,
         tone.icon,
       )}
