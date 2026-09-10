@@ -9,11 +9,10 @@ import { cn } from '@/lib/utils';
 /**
  * Professional category iconography.
  *
- * The marketplace previously rendered whatever emoji string was stored in
- * `product_categories.icon`, which looked like chat stickers, rendered
- * inconsistently across platforms, had no size/colour control and no
- * fallback. Categories are now mapped to a real Lucide icon set keyed by
- * slug, with keyword matching and a neutral fallback.
+ * Category glyphs stay consistent through Lucide, while every category also
+ * gets a stable accent tone. This gives the catalogue the visual scanning
+ * speed of large commerce apps without falling back to platform-dependent
+ * emoji or making every category monochrome.
  */
 
 const SLUG_ICONS: Record<string, LucideIcon> = {
@@ -86,6 +85,28 @@ const KEYWORD_ICONS: Array<[RegExp, LucideIcon]> = [
   [/event|ticket|chipta/i, Ticket],
 ];
 
+const CATEGORY_TONES = [
+  { icon: 'text-violet-600 dark:text-violet-400', box: 'bg-violet-500/12' },
+  { icon: 'text-sky-600 dark:text-sky-400', box: 'bg-sky-500/12' },
+  { icon: 'text-emerald-600 dark:text-emerald-400', box: 'bg-emerald-500/12' },
+  { icon: 'text-amber-600 dark:text-amber-400', box: 'bg-amber-500/14' },
+  { icon: 'text-rose-600 dark:text-rose-400', box: 'bg-rose-500/12' },
+  { icon: 'text-cyan-600 dark:text-cyan-400', box: 'bg-cyan-500/12' },
+  { icon: 'text-fuchsia-600 dark:text-fuchsia-400', box: 'bg-fuchsia-500/12' },
+  { icon: 'text-lime-700 dark:text-lime-400', box: 'bg-lime-500/12' },
+  { icon: 'text-orange-600 dark:text-orange-400', box: 'bg-orange-500/12' },
+  { icon: 'text-indigo-600 dark:text-indigo-400', box: 'bg-indigo-500/12' },
+] as const;
+
+function categoryTone(slug?: string | null, name?: string | null) {
+  const value = `${slug ?? ''}:${name ?? ''}` || 'category';
+  let hash = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = ((hash << 5) - hash + value.charCodeAt(index)) | 0;
+  }
+  return CATEGORY_TONES[Math.abs(hash) % CATEGORY_TONES.length];
+}
+
 /** Resolves the best icon for a category by slug, then by name keywords. */
 export function resolveCategoryIcon(
   slug?: string | null,
@@ -106,20 +127,32 @@ interface CategoryIconProps {
   slug?: string | null;
   name?: string | null;
   className?: string;
-  /** Renders the icon inside a tinted square (used in category grids). */
+  /** Renders the icon inside a stable category-coloured tile. */
   boxed?: boolean;
 }
 
 export function CategoryIcon({ slug, name, className, boxed = false }: CategoryIconProps) {
   const Icon = resolveCategoryIcon(slug, name);
+  const tone = categoryTone(slug, name);
 
   if (!boxed) {
-    return <Icon className={cn('h-3.5 w-3.5 shrink-0', className)} aria-hidden="true" />;
+    return (
+      <Icon
+        className={cn('h-3.5 w-3.5 shrink-0', tone.icon, className)}
+        aria-hidden="true"
+      />
+    );
   }
 
   return (
-    <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-foreground/10 text-foreground shrink-0">
-      <Icon className={cn('h-4.5 w-4.5', className)} aria-hidden="true" />
+    <span
+      className={cn(
+        'inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl',
+        tone.box,
+        tone.icon,
+      )}
+    >
+      <Icon className={cn('h-[18px] w-[18px]', className)} aria-hidden="true" />
     </span>
   );
 }
