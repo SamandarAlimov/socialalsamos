@@ -7,9 +7,7 @@ import {
   FileText,
   Film,
   Loader2,
-  ShieldAlert,
   Music2,
-  BookOpen,
   Images,
 } from 'lucide-react';
 import { MediaPanel } from '@/components/chat/MediaPanel';
@@ -27,7 +25,6 @@ import { uploadMedia } from '@/lib/mediaUpload';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
-import { detectPII } from '@/hooks/useMessageSafety';
 import { useMessageDraft } from '@/hooks/useMessageDraft';
 import type { MessageSendExtras } from '@/hooks/useMessages';
 
@@ -521,12 +518,9 @@ export function MessageInput({
     if (longPressTimeoutRef.current) clearTimeout(longPressTimeoutRef.current);
   };
 
-  const pii = detectPII(message);
   const previewSrc = pendingAttachment?.localPreview || pendingAttachment?.url;
   const canToggleAsDocument =
     pendingAttachment && (pendingAttachment.kind === 'image' || pendingAttachment.kind === 'video');
-  // Uzun matn yozilsa Telegramdek "maqola sifatida yuborish" taklif qilinadi
-  const suggestArticle = message.trim().length > 600;
   const hasContent = Boolean(message.trim() || pendingAttachment || pendingAlbum);
 
   return (
@@ -567,39 +561,6 @@ export function MessageInput({
         </div>
       )}
 
-      {/* Uzun matn uchun maqola taklifi */}
-      {suggestArticle && (
-        <div className="mb-2 flex items-center gap-2 rounded-xl border border-border bg-muted/30 px-3 py-2 text-xs">
-          <BookOpen className="h-4 w-4 shrink-0 text-muted-foreground" />
-          <p className="min-w-0 flex-1 text-muted-foreground">
-            Matn ancha uzun. Uni maqola ko'rinishida chiroyli formatlab yuborishingiz mumkin.
-          </p>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="h-7 shrink-0"
-            onClick={() => setShowArticleComposer(true)}
-          >
-            Maqola qilish
-          </Button>
-        </div>
-      )}
-
-      {/* Shaxsiy ma'lumot ogohlantirishi */}
-      {pii && (
-        <div className="mb-2 flex items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs">
-          <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
-          <div className="min-w-0">
-            <p className="font-medium text-destructive">{pii.hint}</p>
-            <p className="text-muted-foreground">
-              Shaxsiy ma'lumotlarni chat orqali yubormang. Karta raqami, parol yoki tasdiqlash
-              kodini hech qachon ulashmang.
-            </p>
-          </div>
-        </div>
-      )}
-
       {/* Yuklanmoqda holati */}
       {uploading && !pendingAttachment && !pendingAlbum && (
         <div className="mb-2 flex items-center gap-2 rounded-xl bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
@@ -615,7 +576,7 @@ export function MessageInput({
             <Images className="h-4 w-4 shrink-0 text-muted-foreground" />
             <p className="min-w-0 flex-1 text-xs text-muted-foreground">
               {pendingAlbum.length} ta media bitta albom bo'lib yuboriladi
-              {uploading ? ' \u00b7 yuklanmoqda...' : ''}
+              {uploading ? ' · yuklanmoqda...' : ''}
             </p>
             <Button
               variant="ghost"
@@ -701,7 +662,7 @@ export function MessageInput({
             <p className="text-xs text-muted-foreground">
               {formatSize(pendingAttachment.size)}
               {pendingAttachment.type === 'document' && pendingAttachment.kind !== 'document'
-                ? ' \u00b7 fayl sifatida'
+                ? ' · fayl sifatida'
                 : ''}
             </p>
             {canToggleAsDocument && (
