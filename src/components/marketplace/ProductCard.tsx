@@ -165,7 +165,7 @@ export function ProductCard({ product, onSelect, onLikeChange, layout = 'grid' }
       role="button"
       tabIndex={0}
       aria-label={product.title}
-      className="group flex cursor-pointer flex-col overflow-hidden rounded-2xl border border-border/40 bg-card transition-all duration-300 hover:border-foreground/30 hover:shadow-xl hover:shadow-black/5 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/40"
+      className="group flex h-full cursor-pointer flex-col overflow-hidden rounded-2xl border border-border/40 bg-card transition-all duration-300 hover:border-foreground/30 hover:shadow-xl hover:shadow-black/5 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/40"
       onClick={() => onSelect?.(product)}
       onKeyDown={handleKeyDown}
     >

@@ -323,6 +323,11 @@ export default function MarketplacePage() {
       .slice(0, 4);
   }, [categories, searchInput]);
 
+  const selectedCategoryLabel = useMemo(() => {
+    if (selectedCategory === 'all') return 'Katalog';
+    return categories.find(category => category.slug === selectedCategory)?.name || 'Katalog';
+  }, [categories, selectedCategory]);
+
   const desktopTabs: Array<{ id: MarketplaceTab; label: string; icon: typeof Store }> = [
     { id: 'browse', label: 'Bozor', icon: Store },
     { id: 'orders', label: 'Buyurtmalar', icon: ClipboardList },
@@ -471,7 +476,7 @@ export default function MarketplacePage() {
           <CategoryTile
             active={selectedCategory === 'all'}
             label="Barchasi"
-            icon={<Sparkles className="h-5 w-5" />}
+            icon={<Sparkles className="h-5 w-5 text-violet-500" />}
             onClick={() => handleCategorySelect('all')}
           />
           {categories.map(category => (
@@ -524,20 +529,22 @@ export default function MarketplacePage() {
       )}
 
       {discountedProducts.length > 0 && selectedCategory === 'all' && !searchQuery && (
-        <section className="space-y-3 rounded-[28px] border border-red-500/15 bg-red-500/[0.025] p-4 sm:p-5">
-          <SectionHeading
-            title="Chegirmalar"
-            icon={<BadgePercent className="h-4 w-4 text-red-500" />}
-            action="Barchasini ko‘rish"
-            onAction={() => {
-              setDiscountOnly(true);
-              window.setTimeout(() => window.scrollTo({ top: document.body.scrollHeight * 0.45, behavior: 'smooth' }), 0);
-            }}
-          />
-          <p className="-mt-1 text-xs text-muted-foreground">Eski narx bilan solishtirilgan, cardda foizi ko‘rinadigan takliflar.</p>
-          <div className="marketplace-x-rail -mx-1 flex gap-3 overflow-x-auto px-1 pb-2">
+        <section className="space-y-3">
+          <div className="rounded-2xl bg-gradient-to-r from-red-500/[0.07] via-orange-500/[0.035] to-transparent px-3 py-3 sm:px-4">
+            <SectionHeading
+              title="Chegirmalar"
+              icon={<BadgePercent className="h-4 w-4 text-red-500" />}
+              action="Barchasini ko‘rish"
+              onAction={() => {
+                setDiscountOnly(true);
+                window.setTimeout(() => window.scrollTo({ top: document.body.scrollHeight * 0.45, behavior: 'smooth' }), 0);
+              }}
+            />
+            <p className="mt-1 text-xs text-muted-foreground">Eski narx bilan solishtirilgan, cardda foizi ko‘rinadigan takliflar.</p>
+          </div>
+          <div className="marketplace-x-rail -mx-4 flex gap-3 overflow-x-auto px-4 pb-2 sm:mx-0 sm:px-0">
             {discountedProducts.map(product => (
-              <div key={product.id} className="w-[46vw] min-w-[158px] max-w-[190px] shrink-0 sm:w-44">
+              <div key={product.id} className="w-[46vw] min-w-[158px] max-w-[210px] shrink-0 sm:w-48 lg:w-52">
                 <ProductCard product={product} onSelect={handleProductSelect} onLikeChange={refreshProducts} />
               </div>
             ))}
@@ -558,7 +565,7 @@ export default function MarketplacePage() {
               <button
                 type="button"
                 key={product.id}
-                className="w-[46vw] min-w-[154px] max-w-[190px] shrink-0 snap-start text-left sm:w-44"
+                className="w-[46vw] min-w-[154px] max-w-[200px] shrink-0 snap-start text-left sm:w-44 lg:w-48"
                 onClick={() => handleProductSelect(product)}
               >
                 <div className="aspect-square overflow-hidden rounded-2xl border border-border/40 bg-muted">
@@ -586,6 +593,9 @@ export default function MarketplacePage() {
           <p className="text-xs text-muted-foreground">Natijalar</p>
           <p className="truncate text-sm font-bold">
             {sortedProducts.length} ta mahsulot
+            {selectedCategory !== 'all' && (
+              <span className="ml-1.5 font-medium text-muted-foreground">· {selectedCategoryLabel}</span>
+            )}
             {activeFilterCount > 0 && (
               <span className="ml-1.5 font-medium text-muted-foreground">
                 · {activeFilterCount} filtr
@@ -634,7 +644,7 @@ export default function MarketplacePage() {
           className={cn(
             'min-w-0 gap-3 sm:gap-4',
             gridLayout === 'grid'
-              ? 'grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4'
+              ? 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5'
               : 'grid grid-cols-1',
           )}
         >
@@ -682,18 +692,18 @@ export default function MarketplacePage() {
     <div className="marketplace-neutral min-h-screen min-w-0 overflow-x-clip bg-background pb-32 md:pb-8">
       <header className="sticky top-0 z-40 border-b border-border/40 bg-background/92 backdrop-blur-2xl">
         <div className="mx-auto w-full max-w-7xl min-w-0 px-4 py-3 lg:px-6">
-          <div className="flex min-w-0 items-center gap-3">
+          <div className="flex min-w-0 items-center gap-2.5">
             <div className="hidden min-w-0 items-center gap-3 md:flex">
               <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-foreground text-background">
                 <Store className="h-5 w-5" />
               </span>
-              <div className="min-w-0">
+              <div className="hidden min-w-0 xl:block">
                 <h1 className="truncate text-lg font-extrabold tracking-tight">Alsamos Bozor</h1>
                 <p className="truncate text-[11px] text-muted-foreground">Xavfsiz savdo · keng katalog</p>
               </div>
             </div>
 
-            <div className="relative min-w-0 flex-1 md:mx-3">
+            <div className="relative min-w-0 flex-1 md:ml-1 xl:ml-3">
               <Search className="pointer-events-none absolute left-3.5 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 type="search"
@@ -748,9 +758,7 @@ export default function MarketplacePage() {
                               setSearchFocused(false);
                             }}
                           >
-                            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-muted">
-                              <CategoryIcon slug={category.slug} name={category.name} />
-                            </span>
+                            <CategoryIcon slug={category.slug} name={category.name} boxed />
                             <span className="text-sm font-semibold">{category.name}</span>
                           </button>
                         ))}
@@ -796,6 +804,19 @@ export default function MarketplacePage() {
 
             <Button
               variant="outline"
+              className={cn(
+                'hidden h-11 shrink-0 rounded-2xl px-3 sm:inline-flex',
+                selectedCategory !== 'all' && 'border-foreground/20 bg-foreground/[0.05]',
+              )}
+              onClick={() => setShowCatalog(true)}
+              aria-label="Katalogni ochish"
+            >
+              <Grid3X3 className="h-4 w-4 xl:mr-1.5" />
+              <span className="hidden max-w-28 truncate text-xs font-semibold xl:inline">{selectedCategoryLabel}</span>
+            </Button>
+
+            <Button
+              variant="outline"
               size="icon"
               className={cn(
                 'relative h-11 w-11 shrink-0 rounded-2xl',
@@ -836,27 +857,34 @@ export default function MarketplacePage() {
             </Button>
           </div>
 
-          <nav className="mt-3 hidden items-center gap-5 md:flex" aria-label="Marketplace bo‘limlari">
-            {desktopTabs.map(tab => {
-              const Icon = tab.icon;
-              const active = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => selectTab(tab.id)}
-                  className={cn(
-                    'relative flex items-center gap-1.5 py-2 text-sm font-semibold transition',
-                    active ? 'text-foreground' : 'text-muted-foreground hover:text-foreground',
-                  )}
-                >
-                  <Icon className="h-4 w-4" />
-                  {tab.label}
-                  {active && <span className="absolute inset-x-0 -bottom-[13px] h-0.5 rounded-full bg-foreground" />}
-                </button>
-              );
-            })}
-          </nav>
+          <div className="mt-2 hidden min-w-0 items-center justify-between gap-3 md:flex">
+            <nav
+              className="flex min-w-0 items-center gap-1 rounded-xl bg-muted/35 p-1"
+              aria-label="Marketplace bo‘limlari"
+            >
+              {desktopTabs.map(tab => {
+                const Icon = tab.icon;
+                const active = activeTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => selectTab(tab.id)}
+                    className={cn(
+                      'flex min-w-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition lg:px-3',
+                      active
+                        ? 'bg-background text-foreground shadow-sm ring-1 ring-border/40'
+                        : 'text-muted-foreground hover:bg-background/60 hover:text-foreground',
+                    )}
+                  >
+                    <Icon className="h-3.5 w-3.5 shrink-0" />
+                    <span className="truncate">{tab.label}</span>
+                  </button>
+                );
+              })}
+            </nav>
+            <div data-marketplace-location-slot className="flex min-w-0 shrink-0 justify-end" />
+          </div>
         </div>
       </header>
 
@@ -868,49 +896,8 @@ export default function MarketplacePage() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="grid min-w-0 gap-6 lg:grid-cols-[250px_minmax(0,1fr)]"
+              className="min-w-0"
             >
-              <aside className="hidden min-w-0 lg:block">
-                <div className="sticky top-32 space-y-5">
-                  <section className="rounded-3xl border border-border/50 bg-card p-3">
-                    <div className="flex items-center justify-between px-2 pb-2">
-                      <p className="text-sm font-extrabold">Katalog</p>
-                      <span className="text-[10px] text-muted-foreground">{categories.length} turkum</span>
-                    </div>
-                    <div className="max-h-[38vh] space-y-1 overflow-y-auto pr-1">
-                      <CategoryListButton
-                        active={selectedCategory === 'all'}
-                        label="Barcha mahsulotlar"
-                        icon={<Sparkles className="h-4 w-4" />}
-                        onClick={() => handleCategorySelect('all')}
-                      />
-                      {categories.map(category => (
-                        <CategoryListButton
-                          key={category.id}
-                          active={selectedCategory === category.slug}
-                          label={category.name}
-                          icon={<CategoryIcon slug={category.slug} name={category.name} />}
-                          onClick={() => handleCategorySelect(category.slug)}
-                        />
-                      ))}
-                    </div>
-                  </section>
-
-                  <section className="rounded-3xl border border-border/50 bg-card p-4">
-                    <div className="mb-4 flex items-center gap-2">
-                      <SlidersHorizontal className="h-4 w-4" />
-                      <p className="text-sm font-extrabold">Filtrlar</p>
-                      {activeFilterCount > 0 && (
-                        <span className="ml-auto rounded-full bg-foreground px-2 py-0.5 text-[10px] font-bold text-background">
-                          {activeFilterCount}
-                        </span>
-                      )}
-                    </div>
-                    {filtersPanel}
-                  </section>
-                </div>
-              </aside>
-
               {browseContent}
             </motion.div>
           )}
@@ -1030,7 +1017,7 @@ export default function MarketplacePage() {
                       {sellerLoading ? (
                         <ProductSkeletonGrid layout="grid" />
                       ) : sellerProducts.length > 0 ? (
-                        <div className="grid min-w-0 grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                        <div className="grid min-w-0 grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
                           {sellerProducts.map(product => (
                             <div key={product.id} className="min-w-0">
                               <ProductCard product={product} onSelect={handleProductSelect} />
@@ -1128,31 +1115,38 @@ export default function MarketplacePage() {
 
       <Sheet open={showCatalog} onOpenChange={setShowCatalog}>
         <SheetContent
-          side="bottom"
-          className="max-h-[88dvh] rounded-t-[30px] border-x border-t border-border/60 px-4 pb-[calc(1rem+env(safe-area-inset-bottom))]"
+          side={isMobile ? 'bottom' : 'right'}
+          className={cn(
+            'p-0',
+            isMobile
+              ? 'max-h-[88dvh] rounded-t-[30px] border-x border-t border-border/60'
+              : 'w-[430px] border-l border-border/60 sm:max-w-[430px]',
+          )}
         >
-          <SheetHeader className="text-left">
+          <SheetHeader className="border-b border-border/50 px-5 py-4 text-left">
             <SheetTitle>Katalog</SheetTitle>
             <p className="text-xs text-muted-foreground">
-              Kerakli turkumni tanlang — qidiruv va filtrlar shu katalogga moslashadi.
+              Kerakli turkumni tanlang. Katalog sahifa bilan birga scroll bo‘lmaydi.
             </p>
           </SheetHeader>
-          <div className="mt-4 grid grid-cols-2 gap-2 overflow-y-auto pb-4 sm:grid-cols-3">
-            <CategoryListButton
-              active={selectedCategory === 'all'}
-              label="Barcha mahsulotlar"
-              icon={<Sparkles className="h-4 w-4" />}
-              onClick={() => handleCategorySelect('all')}
-            />
-            {categories.map(category => (
+          <div className="max-h-[calc(88dvh-84px)] overflow-y-auto px-4 py-4">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <CategoryListButton
-                key={category.id}
-                active={selectedCategory === category.slug}
-                label={category.name}
-                icon={<CategoryIcon slug={category.slug} name={category.name} />}
-                onClick={() => handleCategorySelect(category.slug)}
+                active={selectedCategory === 'all'}
+                label="Barcha mahsulotlar"
+                icon={<span className="flex h-9 w-9 items-center justify-center rounded-xl bg-violet-500/12 text-violet-600 dark:text-violet-400"><Sparkles className="h-[18px] w-[18px]" /></span>}
+                onClick={() => handleCategorySelect('all')}
               />
-            ))}
+              {categories.map(category => (
+                <CategoryListButton
+                  key={category.id}
+                  active={selectedCategory === category.slug}
+                  label={category.name}
+                  icon={<CategoryIcon slug={category.slug} name={category.name} boxed />}
+                  onClick={() => handleCategorySelect(category.slug)}
+                />
+              ))}
+            </div>
           </div>
         </SheetContent>
       </Sheet>
@@ -1285,10 +1279,10 @@ function CategoryTile({
     >
       <span
         className={cn(
-          'mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border transition',
+          'mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border bg-background transition',
           active
-            ? 'border-foreground bg-foreground text-background shadow-lg'
-            : 'border-border/50 bg-muted/55 text-muted-foreground',
+            ? 'border-foreground/15 shadow-md ring-2 ring-foreground/[0.06]'
+            : 'border-border/50 shadow-sm hover:border-foreground/15 hover:shadow-md',
         )}
       >
         {icon}
@@ -1317,22 +1311,15 @@ function CategoryListButton({
       onClick={onClick}
       aria-pressed={active}
       className={cn(
-        'flex min-w-0 items-center gap-3 rounded-2xl px-3 py-2.5 text-left transition',
+        'flex min-w-0 items-center gap-3 rounded-2xl border px-3 py-2.5 text-left transition',
         active
-          ? 'bg-foreground text-background'
-          : 'bg-muted/35 text-foreground hover:bg-muted/70',
+          ? 'border-foreground/15 bg-foreground/[0.055] text-foreground shadow-sm'
+          : 'border-transparent bg-muted/30 text-foreground hover:border-border/60 hover:bg-muted/60',
       )}
     >
-      <span
-        className={cn(
-          'flex h-9 w-9 shrink-0 items-center justify-center rounded-xl',
-          active ? 'bg-background/15' : 'bg-background',
-        )}
-      >
-        {icon}
-      </span>
+      {icon}
       <span className="min-w-0 flex-1 truncate text-sm font-semibold">{label}</span>
-      <ChevronRight className="h-4 w-4 shrink-0 opacity-40" />
+      <ChevronRight className="h-4 w-4 shrink-0 opacity-35" />
     </button>
   );
 }
@@ -1381,13 +1368,13 @@ function ProductSkeletonGrid({ layout }: { layout: 'grid' | 'list' }) {
   return (
     <div
       className={cn(
-        'min-w-0 gap-3',
+        'min-w-0 gap-3 sm:gap-4',
         layout === 'grid'
-          ? 'grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4'
+          ? 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5'
           : 'grid grid-cols-1',
       )}
     >
-      {Array.from({ length: 8 }).map((_, index) => (
+      {Array.from({ length: 10 }).map((_, index) => (
         <div
           key={index}
           className={cn(
