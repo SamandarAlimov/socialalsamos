@@ -261,9 +261,44 @@ export function orderProductMedia(media: ProductMediaDraft[]) {
   return [cover, ...ordered];
 }
 
+type ProductMediaWriteError = {
+  code?: string;
+  message?: string;
+  details?: string;
+  hint?: string;
+};
+
+/**
+ * Production DB migratsiyasi frontenddan ortda qolsa PostgREST yangi media
+ * ustunlarini schema cache'da topolmaydi. Oddiy rasmlar eski product_images
+ * sxemasida ham to'liq ishlaydi, shuning uchun shu holatni aniq ajratib olamiz.
+ */
+function isLegacyProductImagesSchema(error: unknown) {
+  if (!error || typeof error !== 'object') return false;
+  const value = error as ProductMediaWriteError;
+  const text = [value.message, value.details, value.hint]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+  const mentionsNewColumn =
+    text.includes('media_type') ||
+    text.includes('thumbnail_url') ||
+    text.includes('duration_seconds');
+
+  return (
+    value.code === 'PGRST204' ||
+    (mentionsNewColumn && (text.includes('column') || text.includes('schema cache')))
+  );
+}
+
 /**
  * product_images ni berilgan ro'yxatga tenglashtiradi. Idempotent: eski
  * satrlar o'chiriladi va yangi tartib to'liq qayta yoziladi.
+ *
+ * Muhim compatibility: Supabase migration deploy hali productionga yetib
+ * bormagan bo'lsa, faqat rasmlardan iborat product uchun legacy uchta ustun
+ * (product_id/url/position) bilan qayta uriniladi. Video esa yangi sxemani
+ * talab qiladi va jimgina rasm sifatida yozilmaydi.
  */
 export async function syncProductMedia(
   productId: string,
@@ -294,10 +329,33 @@ export async function syncProductMedia(
 
   const { error: insertError } = await db.from('product_images').insert(rows);
 
-  if (insertError) {
-    console.error('Product media write failed:', insertError);
+  if (!insertError) return true;
+
+  const canUseLegacySchema =
+    ordered.every(item => item.mediaType === 'image') &&
+    isLegacyProductImagesSchema(insertError);
+
+  if (canUseLegacySchema) {
+    console.warn(
+      'Marketplace product media schema is behind frontend; retrying image persistence with legacy columns.',
+      insertError,
+    );
+
+    const legacyRows = ordered.map((item, index) => ({
+      product_id: productId,
+      url: item.url,
+      position: index,
+    }));
+    const { error: legacyInsertError } = await db
+      .from('product_images')
+      .insert(legacyRows);
+
+    if (!legacyInsertError) return true;
+
+    console.error('Product media legacy write failed:', legacyInsertError);
     return false;
   }
 
-  return true;
+  console.error('Product media write failed:', insertError);
+  return false;
 }
