@@ -1,68 +1,98 @@
 /*
- * Desktop/tablet Marketplace catalogue behaves like a commerce mega menu instead
- * of a narrow permanent drawer. The selector is intentionally scoped by the
- * boxed category marker so the ordinary filter sheet keeps its own dimensions.
+ * Marketplace catalog is a page-level commerce surface, not an app-wide modal.
+ * It is rendered by the existing Sheet component, but CSS constrains that portal
+ * to the Marketplace content column so the platform sidebar and sticky Marketplace
+ * header remain untouched. The boxed category marker uniquely identifies this
+ * sheet without changing the ordinary filter sheet.
  */
 
-[role="dialog"]:has(.marketplace-category-icon-box) > div:first-child > p {
+body:has(main[data-platform-scroll-root] .marketplace-neutral > header.sticky)
+  [role="dialog"]:has(.marketplace-category-icon-box)
+  > div:first-child
+  > p {
+  display: none !important;
+}
+
+/* Do not dim or block the Alsamos sidebar/header when the catalog is open. */
+body:has(main[data-platform-scroll-root] .marketplace-neutral > header.sticky)
+  > div.fixed.inset-0[data-state="open"]:has(+ [role="dialog"] .marketplace-category-icon-box) {
   display: none !important;
 }
 
 @media (min-width: 768px) {
-  body:has([role="dialog"] .marketplace-category-icon-box)
-    > div.fixed.inset-0[data-state="open"] {
-    background-color: rgb(0 0 0 / 0.28) !important;
-  }
-
-  [role="dialog"]:has(.marketplace-category-icon-box) {
-    inset: 7.25rem 1rem auto 1rem !important;
+  body:has(main[data-platform-scroll-root] .marketplace-neutral > header.sticky)
+    [role="dialog"]:has(.marketplace-category-icon-box) {
+    inset: 7.25rem 0 0 4rem !important;
     display: flex !important;
-    height: min(68dvh, 680px) !important;
-    max-height: calc(100dvh - 8.25rem) !important;
+    height: auto !important;
+    max-height: none !important;
     width: auto !important;
-    max-width: 1180px !important;
-    margin-inline: auto !important;
+    max-width: none !important;
+    margin: 0 !important;
+    transform: none !important;
     flex-direction: column !important;
     gap: 0 !important;
     overflow: hidden !important;
-    border: 1px solid hsl(var(--border) / 0.7) !important;
-    border-radius: 0 0 1.5rem 1.5rem !important;
-    box-shadow: 0 26px 70px rgb(0 0 0 / 0.2) !important;
+    border: 0 !important;
+    border-top: 1px solid hsl(var(--border) / 0.6) !important;
+    border-radius: 0 !important;
+    background: hsl(var(--background)) !important;
+    box-shadow: none !important;
   }
 
-  [role="dialog"]:has(.marketplace-category-icon-box) > div:first-child {
+  /* AppLayout exposes the sidebar state through this shell control. */
+  body:has(button[aria-label="Collapse sidebar"])
+    [role="dialog"]:has(.marketplace-category-icon-box) {
+    left: 16rem !important;
+  }
+
+  body:has(button[aria-label="Expand sidebar"])
+    [role="dialog"]:has(.marketplace-category-icon-box) {
+    left: 4rem !important;
+  }
+
+  body:has(main[data-platform-scroll-root] .marketplace-neutral > header.sticky)
+    [role="dialog"]:has(.marketplace-category-icon-box)
+    > div:first-child {
     flex: none;
-    padding: 1rem 1.25rem !important;
+    padding: 1.15rem clamp(1rem, 2.2vw, 2rem) !important;
+    background: hsl(var(--background)) !important;
   }
 
-  [role="dialog"]:has(.marketplace-category-icon-box) > div:nth-child(2) {
+  body:has(main[data-platform-scroll-root] .marketplace-neutral > header.sticky)
+    [role="dialog"]:has(.marketplace-category-icon-box)
+    > div:nth-child(2) {
     min-height: 0 !important;
     max-height: none !important;
     flex: 1 1 auto !important;
     overflow-y: auto !important;
-    padding: 1rem 1.25rem 1.25rem !important;
-    overscroll-behavior: contain;
+    padding: 1.25rem clamp(1rem, 2.2vw, 2rem) 2rem !important;
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
   }
 
-  [role="dialog"]:has(.marketplace-category-icon-box)
+  body:has(main[data-platform-scroll-root] .marketplace-neutral > header.sticky)
+    [role="dialog"]:has(.marketplace-category-icon-box)
     > div:nth-child(2)
     > div {
     display: grid !important;
     grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
-    gap: 0.65rem !important;
+    gap: 0.75rem !important;
     align-content: start;
   }
 
-  [role="dialog"]:has(.marketplace-category-icon-box)
+  body:has(main[data-platform-scroll-root] .marketplace-neutral > header.sticky)
+    [role="dialog"]:has(.marketplace-category-icon-box)
     button[aria-pressed] {
-    min-height: 3.65rem;
+    min-height: 4rem;
     border-radius: 1rem;
-    padding-inline: 0.9rem;
+    padding-inline: 1rem;
   }
 }
 
-@media (min-width: 1100px) {
-  [role="dialog"]:has(.marketplace-category-icon-box)
+@media (min-width: 1180px) {
+  body:has(main[data-platform-scroll-root] .marketplace-neutral > header.sticky)
+    [role="dialog"]:has(.marketplace-category-icon-box)
     > div:nth-child(2)
     > div {
     grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
@@ -70,29 +100,58 @@
 }
 
 @media (max-width: 767px) {
-  [role="dialog"]:has(.marketplace-category-icon-box) {
-    max-height: 92dvh !important;
+  body:has(main[data-platform-scroll-root] .marketplace-neutral > header.sticky)
+    [role="dialog"]:has(.marketplace-category-icon-box) {
+    inset: 7.1rem 0 0 0 !important;
+    display: flex !important;
+    height: auto !important;
+    max-height: none !important;
+    width: 100vw !important;
+    max-width: none !important;
+    transform: none !important;
+    flex-direction: column !important;
+    gap: 0 !important;
+    overflow: hidden !important;
+    border: 0 !important;
+    border-top: 1px solid hsl(var(--border) / 0.6) !important;
+    border-radius: 0 !important;
+    background: hsl(var(--background)) !important;
+    box-shadow: none !important;
   }
 
-  [role="dialog"]:has(.marketplace-category-icon-box) > div:first-child {
-    padding-bottom: 0.85rem !important;
+  body:has(main[data-platform-scroll-root] .marketplace-neutral > header.sticky)
+    [role="dialog"]:has(.marketplace-category-icon-box)
+    > div:first-child {
+    flex: none;
+    padding: 0.9rem 1rem !important;
   }
 
-  [role="dialog"]:has(.marketplace-category-icon-box) > div:nth-child(2) {
-    max-height: calc(92dvh - 64px) !important;
-    padding: 0.75rem 0.9rem calc(1rem + env(safe-area-inset-bottom)) !important;
+  body:has(main[data-platform-scroll-root] .marketplace-neutral > header.sticky)
+    [role="dialog"]:has(.marketplace-category-icon-box)
+    > div:nth-child(2) {
+    min-height: 0 !important;
+    max-height: none !important;
+    flex: 1 1 auto !important;
+    overflow-y: auto !important;
+    padding: 0.85rem 0.9rem calc(1.25rem + env(safe-area-inset-bottom)) !important;
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
   }
 
-  [role="dialog"]:has(.marketplace-category-icon-box)
+  body:has(main[data-platform-scroll-root] .marketplace-neutral > header.sticky)
+    [role="dialog"]:has(.marketplace-category-icon-box)
     > div:nth-child(2)
     > div {
+    display: grid !important;
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-    gap: 0.5rem !important;
+    gap: 0.55rem !important;
   }
 
-  [role="dialog"]:has(.marketplace-category-icon-box)
+  body:has(main[data-platform-scroll-root] .marketplace-neutral > header.sticky)
+    [role="dialog"]:has(.marketplace-category-icon-box)
     button[aria-pressed] {
     min-width: 0;
-    padding-inline: 0.65rem;
+    min-height: 3.75rem;
+    padding-inline: 0.7rem;
   }
 }
