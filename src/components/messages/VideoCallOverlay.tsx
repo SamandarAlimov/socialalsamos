@@ -24,6 +24,7 @@ import {
   formatCallDuration,
   resolveCallDisplayName,
 } from '@/lib/callUi';
+import { isParticipantVisualActive } from '@/lib/callMediaPolicy';
 import { NetworkQualityIndicator } from './NetworkQualityIndicator';
 import { CallDebugPanel } from './CallDebugPanel';
 import type { CallStats, ICEDebugInfo } from '@/hooks/useCallStats';
@@ -222,6 +223,9 @@ export function VideoCallOverlay({
     groupControlsAvailable: Boolean(onAddPeople),
   });
   const displayAvatar = primaryParticipant?.avatarUrl || peerAvatar;
+  const primaryVisualActive = primaryParticipant
+    ? isParticipantVisualActive(primaryParticipant)
+    : false;
 
   const changeOutputDevice = useCallback((deviceId: string) => {
     setOutputDeviceId(deviceId);
@@ -236,9 +240,7 @@ export function VideoCallOverlay({
     }
   }, []);
 
-  const hasRemoteVideo = Boolean(
-    primaryParticipant?.stream && primaryParticipant?.isVideoOn && callType === 'video'
-  );
+  const hasRemoteVideo = Boolean(primaryParticipant?.stream && primaryVisualActive);
 
   const phase = useMemo(
     () =>
@@ -372,7 +374,7 @@ export function VideoCallOverlay({
         {primaryParticipant?.stream && (
           <MediaElement
             stream={primaryParticipant.stream}
-            showVideo={Boolean(primaryParticipant.isVideoOn && callType === 'video')}
+            showVideo={primaryVisualActive}
             className="absolute inset-0 h-full w-full object-cover opacity-25"
             outputDeviceId={outputDeviceId}
           />
@@ -422,6 +424,7 @@ export function VideoCallOverlay({
   return (
     <div
       ref={rootRef}
+      data-initial-call-type={callType}
       className={cn(
         'chat-no-select fixed inset-0 overflow-hidden bg-[#080b0f] text-white',
         UI_LAYER.immersive
@@ -451,7 +454,7 @@ export function VideoCallOverlay({
           primaryParticipant.stream ? (
             <MediaElement
               stream={primaryParticipant.stream}
-              showVideo={Boolean(primaryParticipant.isVideoOn && callType === 'video')}
+              showVideo={primaryVisualActive}
               className="h-full w-full bg-black object-contain"
               outputDeviceId={outputDeviceId}
             />
@@ -469,36 +472,39 @@ export function VideoCallOverlay({
                     : 'grid-cols-3 md:grid-cols-4'
             )}
           >
-            {participants.map((participant) => (
-              <div
-                key={participant.id}
-                className="relative min-h-0 overflow-hidden rounded-2xl border border-white/5 bg-black/35"
-              >
-                {participant.stream ? (
-                  <MediaElement
-                    stream={participant.stream}
-                    showVideo={Boolean(participant.isVideoOn && callType === 'video')}
-                    className="h-full w-full object-cover"
-                    outputDeviceId={outputDeviceId}
-                  />
-                ) : null}
-                {(!participant.stream || !participant.isVideoOn || callType === 'audio') && (
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <Avatar className="h-20 w-20 border border-white/15 sm:h-24 sm:w-24">
-                      <AvatarImage src={participant.avatarUrl} />
-                      <AvatarFallback className="bg-white/10 text-2xl text-white">
-                        {(participant.name || "A'zo").slice(0, 2).toUpperCase()}
-                      </AvatarFallback>
-                    </Avatar>
+            {participants.map((participant) => {
+              const visualActive = isParticipantVisualActive(participant);
+              return (
+                <div
+                  key={participant.id}
+                  className="relative min-h-0 overflow-hidden rounded-2xl border border-white/5 bg-black/35"
+                >
+                  {participant.stream ? (
+                    <MediaElement
+                      stream={participant.stream}
+                      showVideo={visualActive}
+                      className="h-full w-full object-cover"
+                      outputDeviceId={outputDeviceId}
+                    />
+                  ) : null}
+                  {(!participant.stream || !visualActive) && (
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <Avatar className="h-20 w-20 border border-white/15 sm:h-24 sm:w-24">
+                        <AvatarImage src={participant.avatarUrl} />
+                        <AvatarFallback className="bg-white/10 text-2xl text-white">
+                          {(participant.name || "A'zo").slice(0, 2).toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
+                    </div>
+                  )}
+                  <div className="absolute bottom-3 left-3 flex max-w-[75%] items-center gap-1.5 rounded-full bg-black/55 px-2.5 py-1 text-xs backdrop-blur-xl">
+                    <span className="truncate">{participant.name || "A'zo"}</span>
+                    {participant.isMuted && <MicOff className="h-3.5 w-3.5 text-red-300" />}
+                    {participant.isHandRaised && <Hand className="h-3.5 w-3.5 text-yellow-300" />}
                   </div>
-                )}
-                <div className="absolute bottom-3 left-3 flex max-w-[75%] items-center gap-1.5 rounded-full bg-black/55 px-2.5 py-1 text-xs backdrop-blur-xl">
-                  <span className="truncate">{participant.name || "A'zo"}</span>
-                  {participant.isMuted && <MicOff className="h-3.5 w-3.5 text-red-300" />}
-                  {participant.isHandRaised && <Hand className="h-3.5 w-3.5 text-yellow-300" />}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         ) : null}
       </div>
@@ -673,14 +679,14 @@ export function VideoCallOverlay({
           </PremiumControl>
 
           <PremiumControl
-            label={isVideoOn ? "Videoni o'chirish" : 'Videoni yoqish'}
+            label={isVideoOn ? "Kamerani o'chirish" : 'Kamerani yoqish'}
             active={!isVideoOn}
             onClick={onToggleVideo}
           >
             {isVideoOn ? <Video className="h-5 w-5" /> : <VideoOff className="h-5 w-5" />}
           </PremiumControl>
 
-          {onSwitchCamera && callType === 'video' && isVideoOn && (
+          {onSwitchCamera && isVideoOn && (
             <PremiumControl label="Kamerani almashtirish" onClick={() => void onSwitchCamera()}>
               <RotateCcw className="h-5 w-5" />
             </PremiumControl>
