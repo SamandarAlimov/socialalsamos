@@ -6,7 +6,7 @@ import { marketplaceUz } from '@/i18n/marketplace';
 import { Product, useProductActions } from '@/hooks/useMarketplace';
 import { useHapticFeedback } from '@/hooks/useHapticFeedback';
 import { conditionLabel, formatPrice, getDiscount, getStockState } from '@/lib/marketplace';
-import { CategoryIcon } from '@/components/marketplace/CategoryIcon';
+import { MarketplaceProductImage } from '@/components/marketplace/MarketplaceProductImage';
 import { motion } from 'framer-motion';
 
 interface ProductCardProps {
@@ -44,17 +44,11 @@ export function ProductCard({ product, onSelect, onLikeChange, layout = 'grid' }
   const { toggleLike } = useProductActions();
   const [isLiked, setIsLiked] = useState(product.is_liked || false);
   const [isLiking, setIsLiking] = useState(false);
-  const [imageFailed, setImageFailed] = useState(false);
 
   useEffect(() => {
     setIsLiked(Boolean(product.is_liked));
   }, [product.is_liked, product.id]);
 
-  useEffect(() => {
-    setImageFailed(false);
-  }, [product.id, product.images?.[0]?.url]);
-
-  const mainImage = product.images?.[0]?.url;
   const { hasDiscount, percent: discountPercent } = getDiscount(product.price, product.compare_at_price);
   const { isSoldOut, isLowStock, stock } = getStockState(product);
   const currency = product.currency || 'USD';
@@ -89,16 +83,6 @@ export function ProductCard({ product, onSelect, onLikeChange, layout = 'grid' }
     }
   };
 
-  const ImageFallback = () => (
-    <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-muted to-muted/40 text-muted-foreground/40">
-      <CategoryIcon
-        slug={product.category?.slug}
-        name={product.category?.name}
-        className="h-7 w-7"
-      />
-    </div>
-  );
-
   if (layout === 'list') {
     return (
       <div
@@ -110,18 +94,10 @@ export function ProductCard({ product, onSelect, onLikeChange, layout = 'grid' }
         onKeyDown={handleKeyDown}
       >
         <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-xl bg-muted">
-          {mainImage && !imageFailed ? (
-            <img
-              src={mainImage}
-              alt={product.title}
-              className={cn('h-full w-full object-cover', isSoldOut && 'opacity-60 grayscale-[30%]')}
-              loading="lazy"
-              decoding="async"
-              onError={() => setImageFailed(true)}
-            />
-          ) : (
-            <ImageFallback />
-          )}
+          <MarketplaceProductImage
+            product={product}
+            className={cn('h-full w-full object-cover', isSoldOut && 'opacity-60 grayscale-[30%]')}
+          />
           {isSoldOut && (
             <div className="absolute inset-0 flex items-center justify-center">
               <span className="rounded-md bg-black/70 px-2 py-0.5 text-[10px] font-bold text-white">{marketplaceUz.card.sold}</span>
@@ -194,21 +170,13 @@ export function ProductCard({ product, onSelect, onLikeChange, layout = 'grid' }
       onKeyDown={handleKeyDown}
     >
       <div className="relative aspect-square overflow-hidden bg-muted">
-        {mainImage && !imageFailed ? (
-          <img
-            src={mainImage}
-            alt={product.title}
-            className={cn(
-              'h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-105',
-              isSoldOut && 'opacity-60 grayscale-[30%]',
-            )}
-            loading="lazy"
-            decoding="async"
-            onError={() => setImageFailed(true)}
-          />
-        ) : (
-          <ImageFallback />
-        )}
+        <MarketplaceProductImage
+          product={product}
+          className={cn(
+            'h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-105',
+            isSoldOut && 'opacity-60 grayscale-[30%]',
+          )}
+        />
 
         {isSoldOut && (
           <div className="absolute inset-0 flex items-center justify-center">
