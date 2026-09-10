@@ -18,6 +18,13 @@ type SQLPostingRepository struct {
 	DB *sql.DB
 }
 
+func NewSQLPostingTx(tx *sql.Tx) (PostingTx, error) {
+	if tx == nil {
+		return nil, ErrPostingTransactionAbsent
+	}
+	return sqlPostingTx{tx: tx}, nil
+}
+
 func (r SQLPostingRepository) WithinTransaction(ctx context.Context, fn func(PostingTx) error) error {
 	if r.DB == nil {
 		return ErrNilSQLDatabase
@@ -30,7 +37,11 @@ func (r SQLPostingRepository) WithinTransaction(ctx context.Context, fn func(Pos
 	if err != nil {
 		return fmt.Errorf("begin finance transaction: %w", err)
 	}
-	store := sqlPostingTx{tx: tx}
+	store, err := NewSQLPostingTx(tx)
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
 	if err := fn(store); err != nil {
 		if rollbackErr := tx.Rollback(); rollbackErr != nil && !errors.Is(rollbackErr, sql.ErrTxDone) {
 			return fmt.Errorf("finance transaction failed: %v; rollback failed: %w", err, rollbackErr)
