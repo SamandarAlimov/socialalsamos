@@ -84,8 +84,6 @@ export function MarketplaceDeliveryLocationDock() {
   }, [route.pathname]);
 
   const goBack = () => {
-    // Marketplace home should return to the app surface from which Marketplace
-    // was entered, even if the browser history also contains product routes.
     try {
       const stored = sessionStorage.getItem(RETURN_ROUTE_KEY);
       if (safeInternalRoute(stored) && !stored!.startsWith('/marketplace')) {
@@ -192,7 +190,6 @@ export function MarketplaceDeliveryLocationDock() {
           value={location}
           onSelect={setLocation}
           title="Yetkazish manzilini tanlang"
-          description="Joriy joylashuvingizni tanlang yoki xarita va qidiruv orqali buyurtma yetkazilishi kerak bo‘lgan boshqa manzilni belgilang."
         />
       )}
     </>
