@@ -52,6 +52,17 @@
   scrollbar-width: none;
 }
 
+/* Product detail currently uses the shared scrollbar class for native horizontal
+   rails (similar/recent products). Those rails must not contain the vertical axis:
+   otherwise wheel/trackpad/touch gestures that begin on a card cannot bubble to the
+   page. Let the browser arbitrate both axes while containing only horizontal edge
+   chaining. */
+.marketplace-neutral .alsamos-scrollbar.overflow-x-auto {
+  overscroll-behavior-x: contain;
+  overscroll-behavior-y: auto;
+  touch-action: pan-x pan-y;
+}
+
 .marketplace-x-rail::-webkit-scrollbar,
 .marketplace-neutral .alsamos-scrollbar::-webkit-scrollbar {
   display: none;
