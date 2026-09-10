@@ -1,0 +1,98 @@
+/*
+ * Desktop/tablet Marketplace catalogue behaves like a commerce mega menu instead
+ * of a narrow permanent drawer. The selector is intentionally scoped by the
+ * boxed category marker so the ordinary filter sheet keeps its own dimensions.
+ */
+
+[role="dialog"]:has(.marketplace-category-icon-box) > div:first-child > p {
+  display: none !important;
+}
+
+@media (min-width: 768px) {
+  body:has([role="dialog"] .marketplace-category-icon-box)
+    > div.fixed.inset-0[data-state="open"] {
+    background-color: rgb(0 0 0 / 0.28) !important;
+  }
+
+  [role="dialog"]:has(.marketplace-category-icon-box) {
+    inset: 7.25rem 1rem auto 1rem !important;
+    display: flex !important;
+    height: min(68dvh, 680px) !important;
+    max-height: calc(100dvh - 8.25rem) !important;
+    width: auto !important;
+    max-width: 1180px !important;
+    margin-inline: auto !important;
+    flex-direction: column !important;
+    gap: 0 !important;
+    overflow: hidden !important;
+    border: 1px solid hsl(var(--border) / 0.7) !important;
+    border-radius: 0 0 1.5rem 1.5rem !important;
+    box-shadow: 0 26px 70px rgb(0 0 0 / 0.2) !important;
+  }
+
+  [role="dialog"]:has(.marketplace-category-icon-box) > div:first-child {
+    flex: none;
+    padding: 1rem 1.25rem !important;
+  }
+
+  [role="dialog"]:has(.marketplace-category-icon-box) > div:nth-child(2) {
+    min-height: 0 !important;
+    max-height: none !important;
+    flex: 1 1 auto !important;
+    overflow-y: auto !important;
+    padding: 1rem 1.25rem 1.25rem !important;
+    overscroll-behavior: contain;
+  }
+
+  [role="dialog"]:has(.marketplace-category-icon-box)
+    > div:nth-child(2)
+    > div {
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 0.65rem !important;
+    align-content: start;
+  }
+
+  [role="dialog"]:has(.marketplace-category-icon-box)
+    button[aria-pressed] {
+    min-height: 3.65rem;
+    border-radius: 1rem;
+    padding-inline: 0.9rem;
+  }
+}
+
+@media (min-width: 1100px) {
+  [role="dialog"]:has(.marketplace-category-icon-box)
+    > div:nth-child(2)
+    > div {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 767px) {
+  [role="dialog"]:has(.marketplace-category-icon-box) {
+    max-height: 92dvh !important;
+  }
+
+  [role="dialog"]:has(.marketplace-category-icon-box) > div:first-child {
+    padding-bottom: 0.85rem !important;
+  }
+
+  [role="dialog"]:has(.marketplace-category-icon-box) > div:nth-child(2) {
+    max-height: calc(92dvh - 64px) !important;
+    padding: 0.75rem 0.9rem calc(1rem + env(safe-area-inset-bottom)) !important;
+  }
+
+  [role="dialog"]:has(.marketplace-category-icon-box)
+    > div:nth-child(2)
+    > div {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 0.5rem !important;
+  }
+
+  [role="dialog"]:has(.marketplace-category-icon-box)
+    button[aria-pressed] {
+    min-width: 0;
+    padding-inline: 0.65rem;
+  }
+}
