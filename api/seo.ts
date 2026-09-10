@@ -40,6 +40,21 @@ function safeImage(value: unknown) {
   return /^https?:\/\//i.test(image) ? image : SITE_ORIGIN + '/apple-touch-icon.png';
 }
 
+async function supabaseRest(path: string) {
+  const { url, key } = supabaseConfig();
+  const response = await fetch(url + '/rest/v1/' + path, {
+    headers: {
+      apikey: key,
+      Authorization: 'Bearer ' + key,
+      Accept: 'application/json',
+    },
+  });
+  if (!response.ok) {
+    throw new Error('rest_http_' + response.status + ':' + (await response.text()).slice(0, 180));
+  }
+  return response.json();
+}
+
 async function rpc(name: string, body: unknown) {
   const { url, key } = supabaseConfig();
   const response = await fetch(url + '/rest/v1/rpc/' + name, {
@@ -56,6 +71,56 @@ async function rpc(name: string, body: unknown) {
     throw new Error(name + '_http_' + response.status + ':' + (await response.text()).slice(0, 180));
   }
   return response.json();
+}
+
+async function fallbackProductEntity(productId: string) {
+  const encodedId = encodeURIComponent(productId);
+  const rows = await supabaseRest(
+    `products?id=eq.${encodedId}&select=id,title,description,price,currency,status,quantity,created_at,updated_at,seller_id&limit=1`,
+  );
+  const product = Array.isArray(rows) ? rows[0] : null;
+  if (!product) return null;
+
+  const images = await supabaseRest(
+    `product_images?product_id=eq.${encodedId}&select=url,position&order=position.asc&limit=1`,
+  ).catch(() => []);
+  const image = Array.isArray(images) ? images[0]?.url : null;
+
+  let sellerName = '';
+  if (product.seller_id) {
+    const sellers = await supabaseRest(
+      `sellers?id=eq.${encodeURIComponent(String(product.seller_id))}&select=business_name&limit=1`,
+    ).catch(() => []);
+    sellerName = Array.isArray(sellers) ? String(sellers[0]?.business_name || '') : '';
+  }
+
+  const quantity = Number(product.quantity || 0);
+  return {
+    kind: 'product',
+    title: product.title || 'Marketplace mahsuloti',
+    description: product.description || `${product.title || 'Mahsulot'} — Alsamos Marketplace`,
+    image,
+    canonicalPath: `/marketplace/product/${product.id}`,
+    price: Number(product.price || 0),
+    currency: product.currency || 'USD',
+    availability: product.status === 'active' && quantity > 0 ? 'InStock' : 'OutOfStock',
+    sellerName,
+    createdAt: product.created_at,
+    updatedAt: product.updated_at,
+  };
+}
+
+async function resolveEntity(kind: string, value: string) {
+  try {
+    const entity = await rpc('seo_public_entity', { p_kind: kind, p_value: value });
+    if (entity) return entity;
+  } catch (error) {
+    if (kind !== 'product') throw error;
+    console.warn('seo_public_entity unavailable for product; using REST fallback', error);
+  }
+
+  if (kind === 'product') return fallbackProductEntity(value);
+  return null;
 }
 
 function jsonLd(entity: any, canonical: string, image: string) {
@@ -134,7 +199,7 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
-    const entity = await rpc('seo_public_entity', { p_kind: kind, p_value: value });
+    const entity = await resolveEntity(kind, value);
     if (!entity) {
       res.setHeader('X-Robots-Tag', 'noindex, nofollow');
       res.status(404).send('<!doctype html><html><head><title>Topilmadi • Alsamos</title></head><body><h1>Topilmadi</h1></body></html>');
@@ -192,6 +257,7 @@ export default async function handler(req: any, res: any) {
 </body>
 </html>`);
   } catch (error: any) {
+    console.error('SEO snapshot failed:', error);
     res.setHeader('X-Robots-Tag', 'noindex, nofollow');
     res.status(503).send('SEO snapshot unavailable');
   }
