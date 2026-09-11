@@ -39,7 +39,7 @@ export class AppErrorBoundary extends Component<
       <main
         style={{
           minHeight: '100vh',
-          minHeight: '100dvh',
+          height: '100dvh',
           width: '100%',
           display: 'flex',
           alignItems: 'center',
