@@ -1,3 +1,4 @@
+import { toast } from '@/hooks/use-toast';
 import { db } from '@/lib/supabaseAny';
 import { uploadMedia } from '@/lib/mediaUpload';
 
@@ -28,6 +29,7 @@ export const MAX_IMAGE_BYTES = 12 * 1024 * 1024;
 const PRODUCT_IMAGE_MAX_EDGE = 1920;
 const PRODUCT_IMAGE_WEBP_QUALITY = 0.82;
 const PRODUCT_IMAGE_OPTIMIZE_FROM_BYTES = 320 * 1024;
+const NEW_PRODUCT_MEDIA_GUARD_MS = 10 * 60 * 1000;
 const HEIC_IMAGE_TYPES = new Set([
   'image/heic',
   'image/heif',
@@ -376,6 +378,74 @@ type ProductMediaWriteError = {
   hint?: string;
 };
 
+type FreshProductGuard = {
+  canRollback: boolean;
+};
+
+async function readFreshProductGuard(productId: string): Promise<FreshProductGuard> {
+  const [productResult, mediaResult] = await Promise.all([
+    db
+      .from('products')
+      .select('created_at, status')
+      .eq('id', productId)
+      .maybeSingle(),
+    db
+      .from('product_images')
+      .select('id')
+      .eq('product_id', productId)
+      .limit(1),
+  ]);
+
+  if (productResult.error || mediaResult.error || !productResult.data) {
+    return { canRollback: false };
+  }
+
+  const createdAt = Date.parse(String(productResult.data.created_at || ''));
+  const age = Number.isFinite(createdAt) ? Date.now() - createdAt : Number.POSITIVE_INFINITY;
+  const isFresh = age >= 0 && age <= NEW_PRODUCT_MEDIA_GUARD_MS;
+  const hasExistingMedia = Boolean(mediaResult.data?.length);
+
+  return {
+    canRollback:
+      isFresh &&
+      !hasExistingMedia &&
+      productResult.data.status !== 'deleted',
+  };
+}
+
+/**
+ * CreateProductDialog avval products satrini yaratadi, keyin media yozadi.
+ * Media yiqilsa oldingi kod aktiv, ammo rasmsiz e'lon qoldirib ketardi.
+ * Faqat ayni create-flow'dagi yangi va hali mediasiz productni soft-delete
+ * qilamiz; eski product tahririga tegmaymiz. Throw callerning success/reset/
+ * close oqimini to'xtatadi, media draft esa formda qoladi va user qayta urina oladi.
+ */
+async function abortFreshProductAfterMediaFailure(
+  productId: string,
+  guard: FreshProductGuard,
+) {
+  if (!guard.canRollback) return false;
+
+  const { error } = await db
+    .from('products')
+    .update({ status: 'deleted' })
+    .eq('id', productId);
+
+  if (error) {
+    console.error('Failed to rollback product after media persistence error:', error);
+    return false;
+  }
+
+  toast({
+    title: "Mahsulot e'lon qilinmadi",
+    description:
+      "Rasm bazaga to'liq saqlanmadi. Media formda qoldi — qayta E'lon qilishni bosing.",
+    variant: 'destructive',
+  });
+
+  throw new Error('MARKETPLACE_PRODUCT_MEDIA_PERSISTENCE_FAILED');
+}
+
 /**
  * Production DB migratsiyasi frontenddan ortda qolsa PostgREST yangi media
  * ustunlarini schema cache'da topolmaydi. Oddiy rasmlar eski product_images
@@ -422,6 +492,9 @@ export async function syncProductMedia(
   media: ProductMediaDraft[],
 ) {
   const ordered = orderProductMedia(media).slice(0, MAX_PRODUCT_MEDIA);
+  const guard = ordered.length > 0
+    ? await readFreshProductGuard(productId)
+    : { canRollback: false };
 
   const { error: deleteError } = await db
     .from('product_images')
@@ -430,7 +503,7 @@ export async function syncProductMedia(
 
   if (deleteError) {
     console.error('Product media cleanup failed:', deleteError);
-    return false;
+    return abortFreshProductAfterMediaFailure(productId, guard);
   }
 
   if (ordered.length === 0) return true;
@@ -474,9 +547,10 @@ export async function syncProductMedia(
     } else {
       console.error('Product media retry cleanup failed:', retryCleanupError);
     }
-    return false;
+
+    return abortFreshProductAfterMediaFailure(productId, guard);
   }
 
   console.error('Product media write failed:', insertError);
-  return false;
+  return abortFreshProductAfterMediaFailure(productId, guard);
 }
