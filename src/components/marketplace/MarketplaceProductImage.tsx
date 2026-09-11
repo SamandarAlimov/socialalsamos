@@ -126,6 +126,7 @@ export function MarketplaceProductImage({
       className={className}
       loading="lazy"
       decoding="async"
+      data-marketplace-resilient-image="true"
       onLoad={() => {
         if (!rawSource) return;
         workingCandidateCache.set(rawSource, source);
