@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Loader2, MapPinned, Navigation, PackageSearch } from 'lucide-react';
+import { Component, Suspense, lazy, useEffect, useMemo, useState, type ErrorInfo, type ReactNode } from 'react';
+import { ArrowLeft, Loader2, MapPinned, Navigation, PackageSearch, Pencil, RotateCcw } from 'lucide-react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { ProductDetail } from '@/components/marketplace/ProductDetail';
@@ -7,6 +7,7 @@ import { CartSheet } from '@/components/marketplace/CartSheet';
 import { CheckoutSheet } from '@/components/marketplace/CheckoutSheet';
 import { MarketplaceReviewComposer } from '@/components/marketplace/MarketplaceReviewComposer';
 import { MarketplaceReviewMediaWall } from '@/components/marketplace/MarketplaceReviewMediaWall';
+import { useAuth } from '@/contexts/AuthContext';
 import { fetchMarketplaceProductById, Product, useCart } from '@/hooks/useMarketplace';
 import { marketplaceUz } from '@/i18n/marketplace';
 import { parseMarketplaceSelectionFromUrl } from '@/lib/marketplaceChat';
@@ -14,12 +15,79 @@ import { resolveMarketplaceProductMedia } from '@/lib/marketplaceProductMedia';
 
 const productDetailCache = new Map<string, Product>();
 
+function EditorModuleFailure() {
+  const navigate = useNavigate();
+  const { productId } = useParams<{ productId: string }>();
+
+  return (
+    <div className="mx-auto flex min-h-[65vh] max-w-lg flex-col items-center justify-center gap-4 px-6 text-center">
+      <PackageSearch className="h-12 w-12 text-muted-foreground/50" />
+      <div>
+        <h1 className="text-lg font-bold">Tahrirlash oynasi yuklanmadi</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Mahsulot sahifasi ishlashda davom etadi. Tahrirlash modulini qayta yuklab ko‘ring.
+        </p>
+      </div>
+      <div className="flex flex-wrap justify-center gap-2">
+        <Button variant="outline" className="rounded-xl" onClick={() => window.location.reload()}>
+          <RotateCcw className="mr-2 h-4 w-4" /> Qayta yuklash
+        </Button>
+        <Button className="rounded-xl" onClick={() => navigate(`/marketplace/product/${productId || ''}`, { replace: true })}>
+          Mahsulotga qaytish
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+const MarketplaceProductEditPage = lazy(() =>
+  import('./MarketplaceProductEditPage').catch(error => {
+    console.error('Marketplace product editor module failed to load:', error);
+    return { default: EditorModuleFailure };
+  }),
+);
+
+class MarketplaceEditorBoundary extends Component<
+  { children: ReactNode; onClose: () => void },
+  { failed: boolean }
+> {
+  state = { failed: false };
+
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+
+  componentDidCatch(error: unknown, info: ErrorInfo) {
+    console.error('Marketplace product editor render failed:', error, info);
+  }
+
+  render() {
+    if (this.state.failed) {
+      return (
+        <div className="mx-auto flex min-h-[65vh] max-w-lg flex-col items-center justify-center gap-4 px-6 text-center">
+          <PackageSearch className="h-12 w-12 text-muted-foreground/50" />
+          <div>
+            <h1 className="text-lg font-bold">Tahrirlash oynasida xatolik yuz berdi</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Asosiy Marketplace ishlashda davom etadi. Mahsulot sahifasiga qaytib, qayta urinishingiz mumkin.
+            </p>
+          </div>
+          <Button className="rounded-xl" onClick={this.props.onClose}>Mahsulotga qaytish</Button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export default function MarketplaceProductPage() {
   const { productId } = useParams<{ productId: string }>();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const { user } = useAuth();
   const { refresh: refreshCart } = useCart();
   const cachedProduct = productId ? productDetailCache.get(productId) ?? null : null;
+  const isEditing = searchParams.get('edit') === '1';
 
   const [product, setProduct] = useState<Product | null>(cachedProduct);
   const [isLoading, setIsLoading] = useState(!cachedProduct);
@@ -121,7 +189,7 @@ export default function MarketplaceProductPage() {
       offers: {
         '@type': 'Offer',
         url: canonicalUrl,
-        priceCurrency: product.currency || 'USD',
+        priceCurrency: 'UZS',
         price: product.price,
         availability: product.status === 'active' && Number(product.quantity) > 0
           ? 'https://schema.org/InStock'
@@ -185,7 +253,7 @@ export default function MarketplaceProductPage() {
     return () => {
       cancelled = true;
     };
-  }, [productId]);
+  }, [productId, isEditing]);
 
   const goBack = () => {
     if (window.history.length > 1) navigate(-1);
@@ -218,6 +286,27 @@ export default function MarketplaceProductPage() {
           {marketplaceUz.productDetail.back}
         </Button>
       </div>
+    );
+  }
+
+  const canEdit = Boolean(user?.id && product.seller?.user_id === user.id);
+
+  if (isEditing && canEdit) {
+    return (
+      <MarketplaceEditorBoundary onClose={() => navigate(`/marketplace/product/${product.id}`, { replace: true })}>
+        <Suspense
+          fallback={(
+            <div className="flex min-h-[65vh] items-center justify-center">
+              <div className="flex flex-col items-center gap-3 text-sm text-muted-foreground">
+                <Loader2 className="h-7 w-7 animate-spin" />
+                Tahrirlash oynasi yuklanmoqda…
+              </div>
+            </div>
+          )}
+        >
+          <MarketplaceProductEditPage />
+        </Suspense>
+      </MarketplaceEditorBoundary>
     );
   }
 
@@ -260,21 +349,35 @@ export default function MarketplaceProductPage() {
       <MarketplaceReviewComposer productId={product.id} />
       <MarketplaceReviewMediaWall productId={product.id} />
 
-      {productMapTarget && (
-        <div className="pointer-events-none fixed bottom-24 right-4 z-40 md:bottom-6 md:right-6">
-          <Button
-            type="button"
-            className="pointer-events-auto h-11 gap-2 rounded-full border border-border/60 bg-background/94 px-4 text-foreground shadow-xl backdrop-blur-xl hover:bg-muted"
-            variant="outline"
-            onClick={() => navigate(productMapTarget)}
-            aria-label="Mahsulot joylashuvini Alsamos Mapda ko‘rish"
-          >
-            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-foreground text-background">
-              <MapPinned className="h-3.5 w-3.5" />
-            </span>
-            <span className="hidden text-sm font-semibold sm:inline">Xaritada ko‘rish</span>
-            <Navigation className="h-3.5 w-3.5 text-muted-foreground" />
-          </Button>
+      {(canEdit || productMapTarget) && (
+        <div className="pointer-events-none fixed bottom-24 right-4 z-40 flex flex-col items-end gap-2 md:bottom-6 md:right-6">
+          {canEdit && (
+            <Button
+              type="button"
+              className="pointer-events-auto h-11 gap-2 rounded-full px-4 shadow-xl"
+              onClick={() => navigate(`/marketplace/product/${product.id}?edit=1`)}
+              aria-label="Mahsulotni tahrirlash"
+            >
+              <Pencil className="h-4 w-4" />
+              <span className="text-sm font-semibold">Tahrirlash</span>
+            </Button>
+          )}
+
+          {productMapTarget && (
+            <Button
+              type="button"
+              className="pointer-events-auto h-11 gap-2 rounded-full border border-border/60 bg-background/94 px-4 text-foreground shadow-xl backdrop-blur-xl hover:bg-muted"
+              variant="outline"
+              onClick={() => navigate(productMapTarget)}
+              aria-label="Mahsulot joylashuvini Alsamos Mapda ko‘rish"
+            >
+              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-foreground text-background">
+                <MapPinned className="h-3.5 w-3.5" />
+              </span>
+              <span className="hidden text-sm font-semibold sm:inline">Xaritada ko‘rish</span>
+              <Navigation className="h-3.5 w-3.5 text-muted-foreground" />
+            </Button>
+          )}
         </div>
       )}
 
