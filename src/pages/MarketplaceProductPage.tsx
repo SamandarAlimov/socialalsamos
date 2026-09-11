@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Loader2, MapPinned, Navigation, PackageSearch } from 'lucide-react';
+import { ArrowLeft, Loader2, MapPinned, Navigation, PackageSearch, Pencil } from 'lucide-react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { ProductDetail } from '@/components/marketplace/ProductDetail';
@@ -7,6 +7,7 @@ import { CartSheet } from '@/components/marketplace/CartSheet';
 import { CheckoutSheet } from '@/components/marketplace/CheckoutSheet';
 import { MarketplaceReviewComposer } from '@/components/marketplace/MarketplaceReviewComposer';
 import { MarketplaceReviewMediaWall } from '@/components/marketplace/MarketplaceReviewMediaWall';
+import { useAuth } from '@/contexts/AuthContext';
 import { fetchMarketplaceProductById, Product, useCart } from '@/hooks/useMarketplace';
 import { marketplaceUz } from '@/i18n/marketplace';
 import { parseMarketplaceSelectionFromUrl } from '@/lib/marketplaceChat';
@@ -18,6 +19,7 @@ export default function MarketplaceProductPage() {
   const { productId } = useParams<{ productId: string }>();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const { user } = useAuth();
   const { refresh: refreshCart } = useCart();
   const cachedProduct = productId ? productDetailCache.get(productId) ?? null : null;
 
@@ -221,6 +223,8 @@ export default function MarketplaceProductPage() {
     );
   }
 
+  const canEdit = Boolean(user?.id && product.seller?.user_id === user.id);
+
   return (
     <div className="marketplace-neutral">
       <ProductDetail
@@ -260,21 +264,35 @@ export default function MarketplaceProductPage() {
       <MarketplaceReviewComposer productId={product.id} />
       <MarketplaceReviewMediaWall productId={product.id} />
 
-      {productMapTarget && (
-        <div className="pointer-events-none fixed bottom-24 right-4 z-40 md:bottom-6 md:right-6">
-          <Button
-            type="button"
-            className="pointer-events-auto h-11 gap-2 rounded-full border border-border/60 bg-background/94 px-4 text-foreground shadow-xl backdrop-blur-xl hover:bg-muted"
-            variant="outline"
-            onClick={() => navigate(productMapTarget)}
-            aria-label="Mahsulot joylashuvini Alsamos Mapda ko‘rish"
-          >
-            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-foreground text-background">
-              <MapPinned className="h-3.5 w-3.5" />
-            </span>
-            <span className="hidden text-sm font-semibold sm:inline">Xaritada ko‘rish</span>
-            <Navigation className="h-3.5 w-3.5 text-muted-foreground" />
-          </Button>
+      {(canEdit || productMapTarget) && (
+        <div className="pointer-events-none fixed bottom-24 right-4 z-40 flex flex-col items-end gap-2 md:bottom-6 md:right-6">
+          {canEdit && (
+            <Button
+              type="button"
+              className="pointer-events-auto h-11 gap-2 rounded-full px-4 shadow-xl"
+              onClick={() => navigate(`/marketplace/edit/${product.id}`)}
+              aria-label="Mahsulotni tahrirlash"
+            >
+              <Pencil className="h-4 w-4" />
+              <span className="text-sm font-semibold">Tahrirlash</span>
+            </Button>
+          )}
+
+          {productMapTarget && (
+            <Button
+              type="button"
+              className="pointer-events-auto h-11 gap-2 rounded-full border border-border/60 bg-background/94 px-4 text-foreground shadow-xl backdrop-blur-xl hover:bg-muted"
+              variant="outline"
+              onClick={() => navigate(productMapTarget)}
+              aria-label="Mahsulot joylashuvini Alsamos Mapda ko‘rish"
+            >
+              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-foreground text-background">
+                <MapPinned className="h-3.5 w-3.5" />
+              </span>
+              <span className="hidden text-sm font-semibold sm:inline">Xaritada ko‘rish</span>
+              <Navigation className="h-3.5 w-3.5 text-muted-foreground" />
+            </Button>
+          )}
         </div>
       )}
 
