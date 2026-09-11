@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef } from 'react';
+import { lazy, Suspense, useEffect, useLayoutEffect, useRef } from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import type { Location } from 'react-router-dom';
 import MarketplacePage from '@/pages/MarketplacePage';
@@ -6,6 +6,7 @@ import MarketplaceProductPage from '@/pages/MarketplaceProductPage';
 import MarketplaceChatHandoffPage from '@/pages/MarketplaceChatHandoffPage';
 import MarketplaceStorePage from '@/pages/MarketplaceStorePage';
 
+const MarketplaceProductEditPage = lazy(() => import('@/pages/MarketplaceProductEditPage'));
 const MARKETPLACE_SCROLL_KEY = 'alsamos:marketplace:scroll-top:v2';
 
 function getPlatformScrollRoot() {
@@ -43,12 +44,19 @@ function homeLocationFrom(location: Location): Location {
   };
 }
 
+function EditRouteFallback() {
+  return (
+    <div className="flex min-h-[45vh] items-center justify-center">
+      <div className="h-7 w-7 animate-spin rounded-full border-2 border-muted border-t-foreground" />
+    </div>
+  );
+}
+
 /**
- * Marketplace browse is intentionally kept mounted while a product/store/chat
- * route is open. Product cards, filters, loaded sections and image elements
- * therefore do not get destroyed and fetched again just because the user opens
- * a detail page. The authenticated shell scrolls inside AppLayout <main>, not
- * window, so that exact scroll owner is saved and restored as well.
+ * Marketplace browse keeps its known-good mounted route behavior so cards,
+ * filters and scroll state survive detail navigation. Product editing is loaded
+ * only when /marketplace/edit/:productId is opened; an editor-only dependency
+ * can therefore never break the main Marketplace browse/selling render path.
  */
 export function MarketplaceRouteKeeper() {
   const location = useLocation();
@@ -73,10 +81,6 @@ export function MarketplaceRouteKeeper() {
       persistScrollTop(root.scrollTop);
     };
 
-    // Capture the current position immediately, then keep it fresh. This is
-    // deliberately done while the browse surface is still visible: once the
-    // route switches and that surface becomes display:none, the browser may
-    // clamp main.scrollTop to zero before layout effects run.
     remember();
     root.addEventListener('scroll', remember, { passive: true });
     return () => root.removeEventListener('scroll', remember);
@@ -90,14 +94,10 @@ export function MarketplaceRouteKeeper() {
     }
 
     if (!isHome && previousWasHomeRef.current) {
-      // Do not read scrollTop here: hiding the Marketplace DOM can already have
-      // clamped it to zero. The scroll listener above holds the last real value.
       root.scrollTop = 0;
     } else if (isHome && !previousWasHomeRef.current) {
       const restoreTo = savedScrollTopRef.current || readStoredScrollTop();
       root.scrollTop = restoreTo;
-      // A second assignment after layout protects the exact card position from
-      // late font/image sizing without remounting the browse tree.
       const frame = window.requestAnimationFrame(() => {
         root.scrollTop = restoreTo;
       });
@@ -119,6 +119,14 @@ export function MarketplaceRouteKeeper() {
       {!isHome && (
         <Routes>
           <Route path="/marketplace/product/:productId" element={<MarketplaceProductPage />} />
+          <Route
+            path="/marketplace/edit/:productId"
+            element={
+              <Suspense fallback={<EditRouteFallback />}>
+                <MarketplaceProductEditPage />
+              </Suspense>
+            }
+          />
           <Route path="/marketplace/store/:sellerId" element={<MarketplaceStorePage />} />
           <Route path="/marketplace/chat" element={<MarketplaceChatHandoffPage />} />
           <Route path="*" element={<Navigate to="/marketplace" replace />} />
