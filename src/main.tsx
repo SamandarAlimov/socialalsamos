@@ -20,6 +20,45 @@ function safeInstall(label: string, install: () => void) {
   }
 }
 
+function errorDetails(error: unknown) {
+  if (error instanceof Error) {
+    return { message: error.message, stack: error.stack };
+  }
+
+  if (typeof error === 'string') {
+    return { message: error };
+  }
+
+  try {
+    return { message: JSON.stringify(error) };
+  } catch {
+    return { message: String(error) };
+  }
+}
+
+function reportBootstrapFailure(error: unknown) {
+  try {
+    const details = errorDetails(error);
+    const body = JSON.stringify({
+      kind: 'bootstrap-failure',
+      message: details.message,
+      stack: details.stack,
+      path: window.location.pathname,
+      userAgent: navigator.userAgent,
+      stage: 'app-import-or-render',
+    });
+
+    void fetch('/api/client-error', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body,
+      keepalive: true,
+    }).catch(() => undefined);
+  } catch {
+    // Diagnostics must never become another startup failure.
+  }
+}
+
 function BootFailure() {
   return (
     <main
@@ -106,6 +145,7 @@ async function bootstrap() {
     );
   } catch (error) {
     console.error('[alsamos] Application bootstrap failed', error);
+    reportBootstrapFailure(error);
     root.render(<BootFailure />);
   }
 }
