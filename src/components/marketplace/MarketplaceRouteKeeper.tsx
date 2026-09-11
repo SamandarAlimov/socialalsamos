@@ -72,6 +72,25 @@ export function MarketplaceRouteKeeper() {
   }
 
   useEffect(() => {
+    // Legacy image recovery is Marketplace-only and must never sit on the global
+    // application boot path. If this optional module fails on a browser/device,
+    // Marketplace still renders and modern resilient image components keep
+    // working normally.
+    let cancelled = false;
+    void import('@/lib/marketplaceImageRecovery')
+      .then(({ installMarketplaceImageRecovery }) => {
+        if (!cancelled) installMarketplaceImageRecovery();
+      })
+      .catch(error => {
+        console.warn('Marketplace legacy image recovery unavailable:', error);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     if (!isHome) return;
     const root = getPlatformScrollRoot();
     if (!root) return;
