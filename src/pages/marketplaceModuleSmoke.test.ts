@@ -11,4 +11,9 @@ describe('Marketplace route modules', () => {
     const module = await import('./MarketplaceProductPage');
     expect(module.default).toBeTypeOf('function');
   });
+
+  it('loads the isolated product editor without a module-initialization crash', async () => {
+    const module = await import('./MarketplaceProductEditPage');
+    expect(module.default).toBeTypeOf('function');
+  });
 });
