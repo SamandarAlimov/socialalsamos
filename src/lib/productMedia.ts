@@ -22,6 +22,20 @@ export const MAX_VIDEO_DURATION_SECONDS = 60;
 export const MAX_VIDEO_BYTES = 50 * 1024 * 1024;
 export const MAX_IMAGE_BYTES = 12 * 1024 * 1024;
 
+// Marketplace kartalari va detail sahifasi original 8-12 MB kamera rasmini
+// yuklab yurmasligi kerak. 1920 px katta ekran/retina uchun yetarli, WebP esa
+// odatda kamera JPEG/PNG faylidan bir necha baravar kichik chiqadi.
+const PRODUCT_IMAGE_MAX_EDGE = 1920;
+const PRODUCT_IMAGE_WEBP_QUALITY = 0.82;
+const PRODUCT_IMAGE_OPTIMIZE_FROM_BYTES = 320 * 1024;
+const HEIC_IMAGE_TYPES = new Set([
+  'image/heic',
+  'image/heif',
+  'image/heic-sequence',
+  'image/heif-sequence',
+]);
+const PASS_THROUGH_IMAGE_TYPES = new Set(['image/gif', 'image/svg+xml']);
+
 export const ACCEPTED_VIDEO_TYPES = [
   'video/mp4',
   'video/webm',
@@ -38,6 +52,7 @@ export type ProductMediaErrorCode =
   | 'video_too_long'
   | 'video_too_large'
   | 'image_too_large'
+  | 'image_unreadable'
   | 'video_unreadable'
   | 'poster_failed'
   | 'upload_failed';
@@ -50,6 +65,8 @@ const MESSAGES: Record<ProductMediaErrorCode, string> = {
   video_too_long: `Video ${MAX_VIDEO_DURATION_SECONDS} soniyadan uzun bo'lmasligi kerak.`,
   video_too_large: 'Video hajmi 50 MB dan oshmasligi kerak.',
   image_too_large: 'Rasm hajmi 12 MB dan oshmasligi kerak.',
+  image_unreadable:
+    "Rasmni brauzer o'qiy olmadi. JPG, PNG yoki WebP formatida qayta tanlang.",
   video_unreadable:
     "Videoni o'qib bo'lmadi. Boshqa formatda (MP4) qayta urinib ko'ring.",
   poster_failed:
@@ -81,6 +98,96 @@ export function formatMediaDuration(seconds: number | null | undefined) {
   const minutes = Math.floor(total / 60);
   const rest = total % 60;
   return `${minutes}:${String(rest).padStart(2, '0')}`;
+}
+
+// —— Rasm optimizatsiyasi ————————————————————————————————————————
+
+function loadBrowserImage(file: File) {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const objectUrl = URL.createObjectURL(file);
+    const image = new Image();
+    let settled = false;
+
+    const cleanup = () => {
+      image.onload = null;
+      image.onerror = null;
+      URL.revokeObjectURL(objectUrl);
+    };
+
+    image.onload = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(image);
+    };
+    image.onerror = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(new ProductMediaError('image_unreadable'));
+    };
+    image.src = objectUrl;
+  });
+}
+
+function canvasBlob(
+  canvas: HTMLCanvasElement,
+  type: string,
+  quality: number,
+) {
+  return new Promise<Blob | null>(resolve => canvas.toBlob(resolve, type, quality));
+}
+
+/**
+ * Kamera/iPhone rasmlarini upload oldidan brauzerning o'zida yengillashtiradi.
+ * Muhim jihat: HEIC/HEIF aynan shu yerda web-safe formatga o'tkaziladi. Aks
+ * holda Safari yuklagan fayl Chrome/Windows'da umuman ko'rinmasligi mumkin.
+ */
+async function optimizeProductImage(file: File): Promise<File> {
+  const normalizedType = file.type.toLowerCase();
+  if (PASS_THROUGH_IMAGE_TYPES.has(normalizedType)) return file;
+
+  const mustTranscode = HEIC_IMAGE_TYPES.has(normalizedType);
+  const image = await loadBrowserImage(file);
+  const width = image.naturalWidth;
+  const height = image.naturalHeight;
+  if (!width || !height) throw new ProductMediaError('image_unreadable');
+
+  const scale = Math.min(1, PRODUCT_IMAGE_MAX_EDGE / Math.max(width, height));
+  const needsResize = scale < 0.999;
+  const shouldOptimize =
+    mustTranscode || needsResize || file.size >= PRODUCT_IMAGE_OPTIMIZE_FROM_BYTES;
+  if (!shouldOptimize) return file;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(width * scale));
+  canvas.height = Math.max(1, Math.round(height * scale));
+  const context = canvas.getContext('2d', { alpha: true });
+  if (!context) throw new ProductMediaError('image_unreadable');
+  context.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+  // WebP ishlamaydigan juda eski browser uchun JPEG fallback bor.
+  let blob = await canvasBlob(canvas, 'image/webp', PRODUCT_IMAGE_WEBP_QUALITY);
+  let extension = 'webp';
+  let outputType = 'image/webp';
+  if (!blob || blob.type !== 'image/webp') {
+    blob = await canvasBlob(canvas, 'image/jpeg', 0.84);
+    extension = 'jpg';
+    outputType = 'image/jpeg';
+  }
+  if (!blob) throw new ProductMediaError('image_unreadable');
+
+  // Kichik JPEG/PNG'ni qayta kodlash uni kattalashtirib yuborsa originalni
+  // saqlaymiz. HEIC va resize holatida esa browser-safe natija ustun turadi.
+  if (!mustTranscode && !needsResize && blob.size >= file.size * 0.94) {
+    return file;
+  }
+
+  const baseName = file.name.replace(/\.[^.]+$/, '') || 'product-image';
+  return new File([blob], `${baseName}.${extension}`, {
+    type: outputType,
+    lastModified: file.lastModified,
+  });
 }
 
 // —— Video o'qish yordamchilari ————————————————————————————————————
@@ -196,7 +303,8 @@ async function upload(file: File) {
       visibility: 'public',
     });
     if (!uploaded?.url) throw new ProductMediaError('upload_failed');
-    return uploaded.url as string;
+    // DB uchun preview/signed URL emas, imkon qadar barqaror reference yoziladi.
+    return (uploaded.storageUrl || uploaded.url) as string;
   } catch (error) {
     if (error instanceof ProductMediaError) throw error;
     console.error('Product media upload failed:', error);
@@ -205,9 +313,8 @@ async function upload(file: File) {
 }
 
 /**
- * Bitta faylni tekshiradi, kerak bo'lsa muqova tayyorlaydi va yuklaydi.
- * Xatolar har doim ProductMediaError bo'ladi, ya'ni chaqiruvchi tomon
- * foydalanuvchiga to'g'ridan-to'g'ri o'zbekcha matn ko'rsata oladi.
+ * Bitta faylni tekshiradi, kerak bo'lsa optimallashtiradi/muqova tayyorlaydi va
+ * yuklaydi. Xatolar har doim ProductMediaError bo'ladi.
  */
 export async function prepareProductMedia(
   file: File,
@@ -245,7 +352,8 @@ export async function prepareProductMedia(
     throw new ProductMediaError('image_too_large');
   }
 
-  const url = await upload(file);
+  const optimized = await optimizeProductImage(file);
+  const url = await upload(optimized);
   return { url, mediaType: 'image', thumbnailUrl: null, durationSeconds: null };
 }
 
@@ -291,14 +399,23 @@ function isLegacyProductImagesSchema(error: unknown) {
   );
 }
 
+async function insertLegacyImageRows(productId: string, media: ProductMediaDraft[]) {
+  const legacyRows = media.map((item, index) => ({
+    product_id: productId,
+    url: item.url,
+    position: index,
+  }));
+  return db.from('product_images').insert(legacyRows);
+}
+
 /**
  * product_images ni berilgan ro'yxatga tenglashtiradi. Idempotent: eski
  * satrlar o'chiriladi va yangi tartib to'liq qayta yoziladi.
  *
- * Muhim compatibility: Supabase migration deploy hali productionga yetib
- * bormagan bo'lsa, faqat rasmlardan iborat product uchun legacy uchta ustun
- * (product_id/url/position) bilan qayta uriniladi. Video esa yangi sxemani
- * talab qiladi va jimgina rasm sifatida yozilmaydi.
+ * Rasmlar uchun schema-cache driftga qo'shimcha himoya bor: production yangi
+ * ustunlarni tanimasa legacy uchta ustun bilan qayta yoziladi. Image-only
+ * productda ayrim PostgREST/trigger xatolari noto'g'ri klassifikatsiya qilinsa
+ * ham legacy retry bajariladi — yangi product rasm-siz qolib ketmasin.
  */
 export async function syncProductMedia(
   productId: string,
@@ -328,31 +445,35 @@ export async function syncProductMedia(
   }));
 
   const { error: insertError } = await db.from('product_images').insert(rows);
-
   if (!insertError) return true;
 
-  const canUseLegacySchema =
-    ordered.every(item => item.mediaType === 'image') &&
-    isLegacyProductImagesSchema(insertError);
+  const imageOnly = ordered.every(item => item.mediaType === 'image');
+  if (imageOnly) {
+    if (isLegacyProductImagesSchema(insertError)) {
+      console.warn(
+        'Marketplace product media schema is behind frontend; retrying image persistence with legacy columns.',
+        insertError,
+      );
+    } else {
+      console.warn(
+        'Marketplace product image write failed; retrying the compatibility write before giving up.',
+        insertError,
+      );
+    }
 
-  if (canUseLegacySchema) {
-    console.warn(
-      'Marketplace product media schema is behind frontend; retrying image persistence with legacy columns.',
-      insertError,
-    );
-
-    const legacyRows = ordered.map((item, index) => ({
-      product_id: productId,
-      url: item.url,
-      position: index,
-    }));
-    const { error: legacyInsertError } = await db
+    // Birinchi urinish transaction emas. Retrydan oldin ehtimoliy qisman
+    // yozuvlarni tozalash kerak, aks holda unique position/id constraint uradi.
+    const { error: retryCleanupError } = await db
       .from('product_images')
-      .insert(legacyRows);
-
-    if (!legacyInsertError) return true;
-
-    console.error('Product media legacy write failed:', legacyInsertError);
+      .delete()
+      .eq('product_id', productId);
+    if (!retryCleanupError) {
+      const { error: legacyInsertError } = await insertLegacyImageRows(productId, ordered);
+      if (!legacyInsertError) return true;
+      console.error('Product media compatibility write failed:', legacyInsertError);
+    } else {
+      console.error('Product media retry cleanup failed:', retryCleanupError);
+    }
     return false;
   }
 
