@@ -1,52 +1,55 @@
 /**
  * Shared marketplace formatting + domain helpers.
  *
- * Previously every component hardcoded `$` and `toLocaleString()`, which broke
- * as soon as a product used a different currency and produced inconsistent
- * decimals across the card / detail / cart / checkout / order screens.
+ * Alsamos Marketplace is a UZS marketplace. Historical rows were created while
+ * the products table still defaulted to USD, so passing product.currency
+ * through literally rendered dollar signs even though the entered numbers were
+ * Uzbek so'm amounts. Formatting is intentionally normalized to UZS here while
+ * the database migration fixes the stored currency for old and future rows.
  */
 
-export const DEFAULT_CURRENCY = 'USD';
+export const DEFAULT_CURRENCY = 'UZS';
 
 const CURRENCY_LOCALE: Record<string, string> = {
-  USD: 'en-US',
   UZS: 'uz-UZ',
-  EUR: 'de-DE',
-  RUB: 'ru-RU',
 };
 
-/** Formats a money amount with the correct currency symbol and grouping. */
+/** Marketplace money is always displayed in Uzbek so'm. */
+export function normalizeMarketplaceCurrency(_currency?: string | null): string {
+  return DEFAULT_CURRENCY;
+}
+
+/** Formats a money amount as UZS with locale-aware grouping. */
 export function formatPrice(
   amount: number | null | undefined,
   currency: string = DEFAULT_CURRENCY,
 ): string {
   const value = Number(amount ?? 0);
-  const code = (currency || DEFAULT_CURRENCY).toUpperCase();
-  const locale = CURRENCY_LOCALE[code] ?? 'en-US';
+  const code = normalizeMarketplaceCurrency(currency);
+  const locale = CURRENCY_LOCALE[code] ?? 'uz-UZ';
 
   try {
     return new Intl.NumberFormat(locale, {
       style: 'currency',
       currency: code,
-      // Whole amounts stay clean ($1,200), fractional amounts keep cents.
       minimumFractionDigits: Number.isInteger(value) ? 0 : 2,
       maximumFractionDigits: 2,
     }).format(value);
   } catch {
-    return `${code} ${value.toLocaleString()}`;
+    return `${value.toLocaleString('uz-UZ')} so'm`;
   }
 }
 
-/** Compact form for dense UI (badges, chips): $1.2K, $500K, $1M. */
+/** Compact form for dense UI (badges, chips), still always in UZS. */
 export function formatPriceCompact(
   amount: number | null | undefined,
   currency: string = DEFAULT_CURRENCY,
 ): string {
   const value = Number(amount ?? 0);
   if (value < 10_000) return formatPrice(value, currency);
-  const code = (currency || DEFAULT_CURRENCY).toUpperCase();
+  const code = normalizeMarketplaceCurrency(currency);
   try {
-    return new Intl.NumberFormat(CURRENCY_LOCALE[code] ?? 'en-US', {
+    return new Intl.NumberFormat(CURRENCY_LOCALE[code] ?? 'uz-UZ', {
       style: 'currency',
       currency: code,
       notation: 'compact',

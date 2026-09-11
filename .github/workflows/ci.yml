@@ -42,6 +42,9 @@ jobs:
       - name: Create regression tests
         run: npx vitest run src/lib/videoPipeline.test.ts src/lib/storyPublishing.test.ts
 
+      - name: Marketplace regression smoke tests
+        run: npx vitest run src/pages/marketplaceModuleSmoke.test.ts src/pages/marketplaceRenderSmoke.test.tsx
+
       - name: AI routing regression tests
         run: npx vitest run src/lib/ai/agentClient.test.ts
 
