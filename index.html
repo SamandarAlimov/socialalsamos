@@ -3,6 +3,81 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <script>
+      (function () {
+        var sent = 0;
+        var maxReports = 4;
+
+        function trimText(value, max) {
+          if (value == null) return undefined;
+          var text = String(value);
+          return text.length > max ? text.slice(0, max) : text;
+        }
+
+        function safeResource(value) {
+          if (!value) return undefined;
+          try {
+            var parsed = new URL(String(value), window.location.href);
+            return parsed.origin === window.location.origin
+              ? parsed.pathname
+              : parsed.origin + parsed.pathname;
+          } catch (_) {
+            return trimText(String(value).split('?')[0].split('#')[0], 1600);
+          }
+        }
+
+        function report(payload) {
+          if (sent >= maxReports) return;
+          sent += 1;
+          payload.path = window.location.pathname;
+          payload.userAgent = navigator.userAgent;
+
+          try {
+            window.fetch('/api/client-error', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload),
+              keepalive: true
+            }).catch(function () {});
+          } catch (_) {
+            // Diagnostics must never interfere with application startup.
+          }
+        }
+
+        window.__alsamosReportClientError = report;
+
+        window.addEventListener('error', function (event) {
+          var target = event.target;
+          if (target && target !== window && (target.tagName === 'SCRIPT' || target.tagName === 'LINK')) {
+            report({
+              kind: 'resource-error',
+              tag: target.tagName,
+              resource: safeResource(target.src || target.href),
+              message: 'Startup resource failed to load'
+            });
+            return;
+          }
+
+          report({
+            kind: 'window-error',
+            message: trimText(event.message || 'Unknown browser error', 1200),
+            stack: trimText(event.error && event.error.stack, 4000),
+            file: safeResource(event.filename),
+            line: event.lineno,
+            column: event.colno
+          });
+        }, true);
+
+        window.addEventListener('unhandledrejection', function (event) {
+          var reason = event.reason;
+          report({
+            kind: 'unhandled-rejection',
+            message: trimText(reason && reason.message ? reason.message : reason, 1200),
+            stack: trimText(reason && reason.stack, 4000)
+          });
+        });
+      })();
+    </script>
     <title>Alsamos — Superapp</title>
     <meta name="description" content="Alsamos — xabarlar, hamjamiyatlar, videolar, marketplace, xarita, to‘lovlar, AI va mini ilovalarni bir joyda birlashtirgan superapp." />
     <meta name="author" content="Alsamos" />
