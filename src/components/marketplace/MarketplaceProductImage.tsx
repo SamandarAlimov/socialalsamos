@@ -52,9 +52,14 @@ function installMarketplaceRawImageRecovery() {
       event.stopImmediatePropagation();
 
       let state = rawImageRecovery.get(target);
-      if (!state || state.original !== current && state.tried.size === 0) {
+      // React bir xil <img> DOM node'ni keyingi product/variant uchun qayta
+      // ishlatishi mumkin. Yangi src oldingi recovery zanjiriga tegishli bo'lmasa
+      // yangi original sifatida boshlaymiz. Recovery kandidatini esa src'ga
+      // qo'yishdan oldin tried'ga qo'shamiz, shuning uchun u reset qilinmaydi.
+      if (!state || (state.original !== current && !state.tried.has(current))) {
         state = { original: current, tried: new Set<string>(), resolving: false };
         rawImageRecovery.set(target, state);
+        delete target.dataset.marketplaceRecoveryExhausted;
       }
       if (state.resolving) return;
       state.resolving = true;
