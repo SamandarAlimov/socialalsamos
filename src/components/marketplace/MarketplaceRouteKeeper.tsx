@@ -73,6 +73,11 @@ export function MarketplaceRouteKeeper() {
       persistScrollTop(root.scrollTop);
     };
 
+    // Capture the current position immediately, then keep it fresh. This is
+    // deliberately done while the browse surface is still visible: once the
+    // route switches and that surface becomes display:none, the browser may
+    // clamp main.scrollTop to zero before layout effects run.
+    remember();
     root.addEventListener('scroll', remember, { passive: true });
     return () => root.removeEventListener('scroll', remember);
   }, [isHome]);
@@ -85,16 +90,14 @@ export function MarketplaceRouteKeeper() {
     }
 
     if (!isHome && previousWasHomeRef.current) {
-      // Route changed after the card click, but before the browser paints the
-      // detail page. Capture the Marketplace position before resetting detail.
-      savedScrollTopRef.current = root.scrollTop;
-      persistScrollTop(root.scrollTop);
+      // Do not read scrollTop here: hiding the Marketplace DOM can already have
+      // clamped it to zero. The scroll listener above holds the last real value.
       root.scrollTop = 0;
     } else if (isHome && !previousWasHomeRef.current) {
       const restoreTo = savedScrollTopRef.current || readStoredScrollTop();
       root.scrollTop = restoreTo;
-      // The browse DOM stayed mounted, but a second assignment after layout
-      // protects restoration from late font/image layout work.
+      // A second assignment after layout protects the exact card position from
+      // late font/image sizing without remounting the browse tree.
       const frame = window.requestAnimationFrame(() => {
         root.scrollTop = restoreTo;
       });
