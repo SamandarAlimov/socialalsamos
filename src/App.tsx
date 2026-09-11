@@ -14,6 +14,7 @@ import { ChatWallpaperProvider } from "@/components/chat/ChatWallpaperProvider";
 import { ChatAccentProvider } from "@/components/chat/ChatAccentProvider";
 import { AccountControlGate } from "@/components/auth/AccountControlGate";
 import { MarketplaceDeliveryLocationDock } from "@/components/marketplace/MarketplaceDeliveryLocationDock";
+import { MarketplaceRouteKeeper } from "@/components/marketplace/MarketplaceRouteKeeper";
 
 // Pages
 import AuthPage from "./pages/AuthPage";
@@ -40,10 +41,6 @@ import VideosPage from "./pages/VideosPage";
 import DiscoveryPage from "./pages/DiscoveryPage";
 import SearchPage from "./pages/SearchPage";
 import WebViewerPage from "./pages/WebViewerPage";
-import MarketplacePage from "./pages/MarketplacePage";
-import MarketplaceProductPage from "./pages/MarketplaceProductPage";
-import MarketplaceChatHandoffPage from "./pages/MarketplaceChatHandoffPage";
-import MarketplaceStorePage from "./pages/MarketplaceStorePage";
 import AdminConsolePage from "./pages/AdminConsolePage";
 import AdminUsersPage from "./pages/AdminUsersPage";
 import AdminRegionsPage from "./pages/AdminRegionsPage";
@@ -173,10 +170,7 @@ function AppRoutes() {
         <Route path="/videos" element={<VideosPage />} />
         <Route path="/messages" element={<MessagesPage />} />
         <Route path="/join/:slug" element={<JoinInvitePage />} />
-        <Route path="/marketplace" element={<MarketplacePage />} />
-        <Route path="/marketplace/chat" element={<MarketplaceChatHandoffPage />} />
-        <Route path="/marketplace/product/:productId" element={<MarketplaceProductPage />} />
-        <Route path="/marketplace/store/:sellerId" element={<MarketplaceStorePage />} />
+        <Route path="/marketplace/*" element={<MarketplaceRouteKeeper />} />
         <Route path="/map" element={<MapPage />} />
         <Route path="/notifications" element={<NotificationsPage />} />
         <Route path="/create" element={<CreateEntryPage />} />

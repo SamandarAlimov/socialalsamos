@@ -10,8 +10,44 @@ interface MarketplaceProductImageProps {
   fallbackClassName?: string;
 }
 
+const resolvedCandidateCache = new Map<string, string[]>();
+const workingCandidateCache = new Map<string, string>();
+const inflightCandidateCache = new Map<string, Promise<string[]>>();
+
 function canRenderDirectly(value: string) {
   return /^(https?:|blob:|data:)/i.test(value);
+}
+
+function directCandidates(rawSource: string) {
+  return rawSource && canRenderDirectly(rawSource) ? [rawSource] : [];
+}
+
+function cachedCandidates(rawSource: string) {
+  const cached = resolvedCandidateCache.get(rawSource) ?? directCandidates(rawSource);
+  const working = workingCandidateCache.get(rawSource);
+  if (!working) return cached;
+  return [working, ...cached.filter(candidate => candidate !== working)];
+}
+
+function resolveCandidatesOnce(rawSource: string) {
+  const cached = resolvedCandidateCache.get(rawSource);
+  if (cached) return Promise.resolve(cachedCandidates(rawSource));
+
+  const inflight = inflightCandidateCache.get(rawSource);
+  if (inflight) return inflight;
+
+  const promise = resolveStorageUrlCandidates(rawSource)
+    .then(resolved => {
+      const candidates = resolved.length > 0 ? resolved : directCandidates(rawSource);
+      resolvedCandidateCache.set(rawSource, candidates);
+      return cachedCandidates(rawSource);
+    })
+    .finally(() => {
+      inflightCandidateCache.delete(rawSource);
+    });
+
+  inflightCandidateCache.set(rawSource, promise);
+  return promise;
 }
 
 /**
@@ -19,6 +55,11 @@ function canRenderDirectly(value: string) {
  * the rest of Alsamos. Historical rows may contain storage:// references,
  * expired signed URLs or URLs from buckets whose visibility changed. Rendering
  * product_images.url directly makes those rows look as if they have no image.
+ *
+ * Resolved and known-working candidates are cached at module scope. Switching
+ * Marketplace tabs or reopening the browse surface therefore does not repeat
+ * signing/recovery work and does not flash a placeholder for an image that was
+ * already successfully displayed in this session.
  */
 export function MarketplaceProductImage({
   product,
@@ -26,16 +67,13 @@ export function MarketplaceProductImage({
   fallbackClassName,
 }: MarketplaceProductImageProps) {
   const rawSource = product.images?.[0]?.url?.trim() || '';
-  const [candidates, setCandidates] = useState<string[]>(() =>
-    rawSource && canRenderDirectly(rawSource) ? [rawSource] : [],
-  );
+  const [candidates, setCandidates] = useState<string[]>(() => cachedCandidates(rawSource));
   const [candidateIndex, setCandidateIndex] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
-    const directCandidates = rawSource && canRenderDirectly(rawSource) ? [rawSource] : [];
 
-    setCandidates(directCandidates);
+    setCandidates(cachedCandidates(rawSource));
     setCandidateIndex(0);
 
     if (!rawSource) {
@@ -44,16 +82,16 @@ export function MarketplaceProductImage({
       };
     }
 
-    void resolveStorageUrlCandidates(rawSource)
-      .then((resolved) => {
+    void resolveCandidatesOnce(rawSource)
+      .then(resolved => {
         if (cancelled) return;
-        setCandidates(resolved.length > 0 ? resolved : directCandidates);
+        setCandidates(resolved);
         setCandidateIndex(0);
       })
-      .catch((error) => {
+      .catch(error => {
         if (cancelled) return;
         console.warn('Marketplace product image URL resolve failed:', error);
-        setCandidates(directCandidates);
+        setCandidates(cachedCandidates(rawSource));
         setCandidateIndex(0);
       });
 
@@ -88,7 +126,16 @@ export function MarketplaceProductImage({
       className={className}
       loading="lazy"
       decoding="async"
-      onError={() => setCandidateIndex((current) => current + 1)}
+      onLoad={() => {
+        if (!rawSource) return;
+        workingCandidateCache.set(rawSource, source);
+      }}
+      onError={() => {
+        if (workingCandidateCache.get(rawSource) === source) {
+          workingCandidateCache.delete(rawSource);
+        }
+        setCandidateIndex(current => current + 1);
+      }}
     />
   );
 }
