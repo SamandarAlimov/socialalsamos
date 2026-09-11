@@ -3,6 +3,7 @@ import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import type { Location } from 'react-router-dom';
 import MarketplacePage from '@/pages/MarketplacePage';
 import MarketplaceProductPage from '@/pages/MarketplaceProductPage';
+import MarketplaceProductEditPage from '@/pages/MarketplaceProductEditPage';
 import MarketplaceChatHandoffPage from '@/pages/MarketplaceChatHandoffPage';
 import MarketplaceStorePage from '@/pages/MarketplaceStorePage';
 import { resolveStorageUrlCandidates } from '@/lib/mediaUpload';
@@ -207,6 +208,7 @@ export function MarketplaceRouteKeeper() {
       {!isHome && (
         <Routes>
           <Route path="/marketplace/product/:productId" element={<MarketplaceProductPage />} />
+          <Route path="/marketplace/edit/:productId" element={<MarketplaceProductEditPage />} />
           <Route path="/marketplace/store/:sellerId" element={<MarketplaceStorePage />} />
           <Route path="/marketplace/chat" element={<MarketplaceChatHandoffPage />} />
           <Route path="*" element={<Navigate to="/marketplace" replace />} />
