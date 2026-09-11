@@ -1,5 +1,6 @@
 import { db } from '@/lib/supabaseAny';
 import { uploadMedia } from '@/lib/mediaUpload';
+import { toast } from '@/hooks/use-toast';
 
 export type ProductMediaType = 'image' | 'video';
 
@@ -21,6 +22,12 @@ export const MAX_PRODUCT_VIDEOS = 2;
 export const MAX_VIDEO_DURATION_SECONDS = 60;
 export const MAX_VIDEO_BYTES = 50 * 1024 * 1024;
 export const MAX_IMAGE_BYTES = 12 * 1024 * 1024;
+
+const PRODUCT_IMAGE_MAX_EDGE = 2200;
+const PRODUCT_IMAGE_SKIP_COMPRESSION_BELOW = 900 * 1024;
+const PRODUCT_IMAGE_WEBP_QUALITY = 0.84;
+const OPTIMIZABLE_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
+const NEW_PRODUCT_ROLLBACK_WINDOW_MS = 15 * 60 * 1000;
 
 export const ACCEPTED_VIDEO_TYPES = [
   'video/mp4',
@@ -187,6 +194,57 @@ async function inspectVideo(file: File) {
   }
 }
 
+// —— Rasm optimizatsiyasi ————————————————————————————————————————
+
+/**
+ * Telefon kamerasi 5–12 MB va 4000+ px rasm bera oladi. Bunday originalni
+ * har bir Marketplace cardiga yuborish foydalanuvchiga "og'ir yuklanyapti"
+ * degan hissiyot beradi. JPEG/PNG/WebP rasmlar browserning o'zida 2200px gacha
+ * kichraytiriladi va WebPga o'tkaziladi. GIF/SVG kabi formatlar o'z holicha
+ * qoladi; compression ishlamasa upload hech qachon bloklanmaydi.
+ */
+async function optimizeProductImage(file: File): Promise<File> {
+  if (!OPTIMIZABLE_IMAGE_TYPES.has(file.type)) return file;
+  if (typeof createImageBitmap !== 'function') return file;
+
+  let bitmap: ImageBitmap | null = null;
+  try {
+    bitmap = await createImageBitmap(file);
+    const maxEdge = Math.max(bitmap.width, bitmap.height);
+    const scale = Math.min(1, PRODUCT_IMAGE_MAX_EDGE / Math.max(1, maxEdge));
+
+    if (scale === 1 && file.size <= PRODUCT_IMAGE_SKIP_COMPRESSION_BELOW) {
+      return file;
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+    const context = canvas.getContext('2d', { alpha: true });
+    if (!context) return file;
+    context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+
+    const blob = await new Promise<Blob | null>(resolve => {
+      canvas.toBlob(resolve, 'image/webp', PRODUCT_IMAGE_WEBP_QUALITY);
+    });
+    if (!blob) return file;
+
+    // Compressiondan real foyda bo'lmasa originalni saqlash tezroq va sifatliroq.
+    if (scale === 1 && blob.size >= file.size * 0.95) return file;
+
+    const baseName = file.name.replace(/\.[^.]+$/, '') || 'product';
+    return new File([blob], `${baseName}.webp`, {
+      type: 'image/webp',
+      lastModified: file.lastModified,
+    });
+  } catch (error) {
+    console.warn('Product image optimization skipped:', error);
+    return file;
+  } finally {
+    bitmap?.close();
+  }
+}
+
 // —— Yuklash ——————————————————————————————————————————————
 
 async function upload(file: File) {
@@ -245,7 +303,8 @@ export async function prepareProductMedia(
     throw new ProductMediaError('image_too_large');
   }
 
-  const url = await upload(file);
+  const optimized = await optimizeProductImage(file);
+  const url = await upload(optimized);
   return { url, mediaType: 'image', thumbnailUrl: null, durationSeconds: null };
 }
 
@@ -292,6 +351,61 @@ function isLegacyProductImagesSchema(error: unknown) {
 }
 
 /**
+ * Create flow product rowni media bog'lanishidan oldin yaratadi. Media write
+ * yiqilsa yangi active productni rasm-siz katalogda qoldirish mumkin emas.
+ * Faqat hozirgina yaratilgan active row rollback qilinadi; eski productni edit
+ * qilishdagi media xatosi listingni tasodifan o'chirmaydi.
+ */
+async function rollbackFreshProductAfterMediaFailure(productId: string): Promise<boolean> {
+  try {
+    const { data, error } = await db
+      .from('products')
+      .select('created_at, status')
+      .eq('id', productId)
+      .maybeSingle();
+
+    if (error || !data || data.status !== 'active' || !data.created_at) return false;
+    const createdAt = new Date(data.created_at).getTime();
+    if (!Number.isFinite(createdAt)) return false;
+    if (Date.now() - createdAt > NEW_PRODUCT_ROLLBACK_WINDOW_MS) return false;
+
+    const { error: rollbackError } = await db
+      .from('products')
+      .update({ status: 'deleted' })
+      .eq('id', productId)
+      .eq('status', 'active');
+
+    if (rollbackError) {
+      console.error('Fresh product rollback after media failure failed:', rollbackError);
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.error('Fresh product rollback after media failure crashed:', error);
+    return false;
+  }
+}
+
+async function failProductMediaWrite(productId: string, label: string, error: unknown): Promise<never> {
+  console.error(label, error);
+  const rolledBack = await rollbackFreshProductAfterMediaFailure(productId);
+
+  toast({
+    title: 'Media saqlanmadi',
+    description: rolledBack
+      ? 'Rasm yoki video bazaga bog‘lanmadi. Rasm-siz e’lon chiqib ketmasligi uchun yangi e’lon bekor qilindi. Media fayllarini qayta tanlab, yana urinib ko‘ring.'
+      : 'Rasm yoki video o‘zgarishi saqlanmadi. Media fayllarini qayta tanlab, yana urinib ko‘ring.',
+    variant: 'destructive',
+  });
+
+  // CreateProductDialog has a try/finally around publication. Throwing here is
+  // intentional: a failed media write must stop the success toast + dialog
+  // close path instead of pretending that a rolled-back listing was published.
+  throw new ProductMediaError('upload_failed');
+}
+
+/**
  * product_images ni berilgan ro'yxatga tenglashtiradi. Idempotent: eski
  * satrlar o'chiriladi va yangi tartib to'liq qayta yoziladi.
  *
@@ -312,8 +426,7 @@ export async function syncProductMedia(
     .eq('product_id', productId);
 
   if (deleteError) {
-    console.error('Product media cleanup failed:', deleteError);
-    return false;
+    return failProductMediaWrite(productId, 'Product media cleanup failed:', deleteError);
   }
 
   if (ordered.length === 0) return true;
@@ -352,10 +465,12 @@ export async function syncProductMedia(
 
     if (!legacyInsertError) return true;
 
-    console.error('Product media legacy write failed:', legacyInsertError);
-    return false;
+    return failProductMediaWrite(
+      productId,
+      'Product media legacy write failed:',
+      legacyInsertError,
+    );
   }
 
-  console.error('Product media write failed:', insertError);
-  return false;
+  return failProductMediaWrite(productId, 'Product media write failed:', insertError);
 }
