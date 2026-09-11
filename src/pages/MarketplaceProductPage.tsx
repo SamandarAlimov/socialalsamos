@@ -10,15 +10,19 @@ import { MarketplaceReviewMediaWall } from '@/components/marketplace/Marketplace
 import { fetchMarketplaceProductById, Product, useCart } from '@/hooks/useMarketplace';
 import { marketplaceUz } from '@/i18n/marketplace';
 import { parseMarketplaceSelectionFromUrl } from '@/lib/marketplaceChat';
+import { resolveMarketplaceProductMedia } from '@/lib/marketplaceProductMedia';
+
+const productDetailCache = new Map<string, Product>();
 
 export default function MarketplaceProductPage() {
   const { productId } = useParams<{ productId: string }>();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { refresh: refreshCart } = useCart();
+  const cachedProduct = productId ? productDetailCache.get(productId) ?? null : null;
 
-  const [product, setProduct] = useState<Product | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [product, setProduct] = useState<Product | null>(cachedProduct);
+  const [isLoading, setIsLoading] = useState(!cachedProduct);
   const [loadError, setLoadError] = useState(false);
   const [showCart, setShowCart] = useState(false);
   const [showCheckout, setShowCheckout] = useState(false);
@@ -144,23 +148,35 @@ export default function MarketplaceProductPage() {
 
   useEffect(() => {
     if (!productId) {
+      setProduct(null);
       setLoadError(true);
       setIsLoading(false);
       return;
     }
 
     let cancelled = false;
-    setIsLoading(true);
-    setLoadError(false);
+    const cached = productDetailCache.get(productId) ?? null;
+
+    if (cached) {
+      setProduct(cached);
+      setIsLoading(false);
+      setLoadError(false);
+    } else {
+      setProduct(null);
+      setIsLoading(true);
+      setLoadError(false);
+    }
 
     void fetchMarketplaceProductById(productId)
+      .then(result => result ? resolveMarketplaceProductMedia(result) : null)
       .then(result => {
         if (cancelled) return;
+        if (result) productDetailCache.set(productId, result);
         setProduct(result);
         setLoadError(!result);
       })
       .catch(() => {
-        if (!cancelled) setLoadError(true);
+        if (!cancelled && !cached) setLoadError(true);
       })
       .finally(() => {
         if (!cancelled) setIsLoading(false);
