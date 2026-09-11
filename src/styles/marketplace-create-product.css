@@ -1,5 +1,5 @@
-/* Marketplace create-product dialog: keep the entire form and actions inside the
- * visual viewport on phones, including iOS browser chrome/safe areas. */
+/* Marketplace create-product dialog: keep the entire form and primary action
+ * inside the visual viewport on phones, including iOS browser chrome/safe areas. */
 @media (max-width: 639px) {
   [role="dialog"].marketplace-neutral {
     left: 0 !important;
@@ -12,21 +12,19 @@
     border-radius: 0 !important;
   }
 
+  /* The create form footer itself is the flex row. Keep it visible above the
+   * mobile safe area and let the publish button use all available width. */
   [role="dialog"].marketplace-neutral > .border-t.bg-background {
     width: 100%;
+    min-width: 0;
     padding-left: 0.75rem;
     padding-right: 0.75rem;
     padding-bottom: max(1rem, env(safe-area-inset-bottom)) !important;
   }
 
-  [role="dialog"].marketplace-neutral > .border-t.bg-background > .flex {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    width: 100%;
-  }
-
-  [role="dialog"].marketplace-neutral > .border-t.bg-background > .flex > button {
+  [role="dialog"].marketplace-neutral > .border-t.bg-background > button {
     width: 100%;
     min-width: 0;
+    margin-left: 0 !important;
   }
 }
