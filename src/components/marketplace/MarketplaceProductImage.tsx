@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { CategoryIcon } from '@/components/marketplace/CategoryIcon';
 import type { Product } from '@/hooks/useMarketplace';
-import { resolveStorageUrlCandidates } from '@/lib/mediaUpload';
+import { resolveMarketplaceImageCandidates } from '@/lib/marketplaceImageRecovery';
 import { cn } from '@/lib/utils';
 
 interface MarketplaceProductImageProps {
@@ -15,10 +15,9 @@ function canRenderDirectly(value: string) {
 }
 
 /**
- * Marketplace media must go through the same legacy/storage recovery path as
- * the rest of Alsamos. Historical rows may contain storage:// references,
- * expired signed URLs or URLs from buckets whose visibility changed. Rendering
- * product_images.url directly makes those rows look as if they have no image.
+ * Marketplace media must go through the same storage recovery path everywhere.
+ * Historical rows may contain storage:// references, expired signed URLs or an
+ * absolute Supabase URL from a previous Alsamos storage project.
  */
 export function MarketplaceProductImage({
   product,
@@ -44,7 +43,7 @@ export function MarketplaceProductImage({
       };
     }
 
-    void resolveStorageUrlCandidates(rawSource)
+    void resolveMarketplaceImageCandidates(rawSource)
       .then((resolved) => {
         if (cancelled) return;
         setCandidates(resolved.length > 0 ? resolved : directCandidates);
