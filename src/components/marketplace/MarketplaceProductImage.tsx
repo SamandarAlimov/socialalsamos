@@ -8,11 +8,90 @@ interface MarketplaceProductImageProps {
   product: Product;
   className?: string;
   fallbackClassName?: string;
+  eager?: boolean;
+  fetchPriority?: 'high' | 'low' | 'auto';
 }
 
 function canRenderDirectly(value: string) {
   return /^(https?:|blob:|data:)/i.test(value);
 }
+
+/**
+ * ProductDetail'dagi tarixiy raw <img> lar ham ProductCard bilan bir xil media
+ * recovery yo'lidan foydalanishi kerak. Ularni birdan qayta yozish o'rniga
+ * Marketplace chegarasida capture qilamiz: birinchi 403/404 da React fallback
+ * ko'rsatib rasmni unmount qilishidan oldin fresh storage kandidat sinab ko'riladi.
+ */
+const rawImageRecovery = new WeakMap<
+  HTMLImageElement,
+  { original: string; tried: Set<string>; resolving: boolean }
+>();
+
+function installMarketplaceRawImageRecovery() {
+  if (typeof window === 'undefined') return;
+  const marker = '__alsamosMarketplaceImageRecoveryInstalled__';
+  const markedWindow = window as typeof window & Record<string, unknown>;
+  if (markedWindow[marker]) return;
+  markedWindow[marker] = true;
+
+  window.addEventListener(
+    'error',
+    event => {
+      const target = event.target;
+      if (!(target instanceof HTMLImageElement)) return;
+      if (target.dataset.marketplaceImageManaged === 'true') return;
+      if (target.dataset.marketplaceRecoveryExhausted === 'true') return;
+      if (!target.closest('.marketplace-neutral')) return;
+
+      const current = target.currentSrc || target.src || target.getAttribute('src') || '';
+      if (!current || !canRenderDirectly(current)) return;
+
+      // ProductDetail onError imageFailed=true qilib elementni darhol unmount
+      // qiladi. Recovery kandidatlarini tekshirguncha o'sha handlerni to'xtatamiz.
+      event.preventDefault();
+      event.stopImmediatePropagation();
+
+      let state = rawImageRecovery.get(target);
+      // React bir xil <img> DOM node'ni keyingi product/variant uchun qayta
+      // ishlatishi mumkin. Yangi src oldingi recovery zanjiriga tegishli bo'lmasa
+      // yangi original sifatida boshlaymiz. Recovery kandidatini esa src'ga
+      // qo'yishdan oldin tried'ga qo'shamiz, shuning uchun u reset qilinmaydi.
+      if (!state || (state.original !== current && !state.tried.has(current))) {
+        state = { original: current, tried: new Set<string>(), resolving: false };
+        rawImageRecovery.set(target, state);
+        delete target.dataset.marketplaceRecoveryExhausted;
+      }
+      if (state.resolving) return;
+      state.resolving = true;
+      state.tried.add(current);
+
+      void resolveStorageUrlCandidates(state.original)
+        .then(candidates => {
+          const next = candidates.find(candidate => candidate && !state!.tried.has(candidate));
+          if (next) {
+            state!.tried.add(next);
+            target.src = next;
+            return;
+          }
+
+          // Haqiqatan kandidat qolmagan bo'lsa original React onError yana
+          // ishlashi uchun bitta final error yuboramiz.
+          target.dataset.marketplaceRecoveryExhausted = 'true';
+          target.dispatchEvent(new Event('error'));
+        })
+        .catch(() => {
+          target.dataset.marketplaceRecoveryExhausted = 'true';
+          target.dispatchEvent(new Event('error'));
+        })
+        .finally(() => {
+          if (state) state.resolving = false;
+        });
+    },
+    true,
+  );
+}
+
+installMarketplaceRawImageRecovery();
 
 /**
  * Marketplace media must go through the same legacy/storage recovery path as
@@ -24,6 +103,8 @@ export function MarketplaceProductImage({
   product,
   className,
   fallbackClassName,
+  eager = false,
+  fetchPriority = 'auto',
 }: MarketplaceProductImageProps) {
   const rawSource = product.images?.[0]?.url?.trim() || '';
   const [candidates, setCandidates] = useState<string[]>(() =>
@@ -45,12 +126,12 @@ export function MarketplaceProductImage({
     }
 
     void resolveStorageUrlCandidates(rawSource)
-      .then((resolved) => {
+      .then(resolved => {
         if (cancelled) return;
         setCandidates(resolved.length > 0 ? resolved : directCandidates);
         setCandidateIndex(0);
       })
-      .catch((error) => {
+      .catch(error => {
         if (cancelled) return;
         console.warn('Marketplace product image URL resolve failed:', error);
         setCandidates(directCandidates);
@@ -83,12 +164,14 @@ export function MarketplaceProductImage({
 
   return (
     <img
+      data-marketplace-image-managed="true"
       src={source}
       alt={product.title}
       className={className}
-      loading="lazy"
+      loading={eager ? 'eager' : 'lazy'}
       decoding="async"
-      onError={() => setCandidateIndex((current) => current + 1)}
+      fetchPriority={fetchPriority}
+      onError={() => setCandidateIndex(current => current + 1)}
     />
   );
 }
