@@ -1,6 +1,5 @@
 import { db } from '@/lib/supabaseAny';
 import { uploadMedia } from '@/lib/mediaUpload';
-import { toast } from '@/hooks/use-toast';
 
 export type ProductMediaType = 'image' | 'video';
 
@@ -356,7 +355,7 @@ function isLegacyProductImagesSchema(error: unknown) {
  * Faqat hozirgina yaratilgan active row rollback qilinadi; eski productni edit
  * qilishdagi media xatosi listingni tasodifan o'chirmaydi.
  */
-async function rollbackFreshProductAfterMediaFailure(productId: string): Promise<boolean> {
+async function rollbackFreshProductAfterMediaFailure(productId: string) {
   try {
     const { data, error } = await db
       .from('products')
@@ -364,10 +363,10 @@ async function rollbackFreshProductAfterMediaFailure(productId: string): Promise
       .eq('id', productId)
       .maybeSingle();
 
-    if (error || !data || data.status !== 'active' || !data.created_at) return false;
+    if (error || !data || data.status !== 'active' || !data.created_at) return;
     const createdAt = new Date(data.created_at).getTime();
-    if (!Number.isFinite(createdAt)) return false;
-    if (Date.now() - createdAt > NEW_PRODUCT_ROLLBACK_WINDOW_MS) return false;
+    if (!Number.isFinite(createdAt)) return;
+    if (Date.now() - createdAt > NEW_PRODUCT_ROLLBACK_WINDOW_MS) return;
 
     const { error: rollbackError } = await db
       .from('products')
@@ -377,32 +376,16 @@ async function rollbackFreshProductAfterMediaFailure(productId: string): Promise
 
     if (rollbackError) {
       console.error('Fresh product rollback after media failure failed:', rollbackError);
-      return false;
     }
-
-    return true;
   } catch (error) {
     console.error('Fresh product rollback after media failure crashed:', error);
-    return false;
   }
 }
 
-async function failProductMediaWrite(productId: string, label: string, error: unknown): Promise<never> {
+async function failProductMediaWrite(productId: string, label: string, error: unknown) {
   console.error(label, error);
-  const rolledBack = await rollbackFreshProductAfterMediaFailure(productId);
-
-  toast({
-    title: 'Media saqlanmadi',
-    description: rolledBack
-      ? 'Rasm yoki video bazaga bog‘lanmadi. Rasm-siz e’lon chiqib ketmasligi uchun yangi e’lon bekor qilindi. Media fayllarini qayta tanlab, yana urinib ko‘ring.'
-      : 'Rasm yoki video o‘zgarishi saqlanmadi. Media fayllarini qayta tanlab, yana urinib ko‘ring.',
-    variant: 'destructive',
-  });
-
-  // CreateProductDialog has a try/finally around publication. Throwing here is
-  // intentional: a failed media write must stop the success toast + dialog
-  // close path instead of pretending that a rolled-back listing was published.
-  throw new ProductMediaError('upload_failed');
+  await rollbackFreshProductAfterMediaFailure(productId);
+  return false;
 }
 
 /**

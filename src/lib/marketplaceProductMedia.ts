@@ -3,50 +3,6 @@ import { resolveStorageUrlCandidates } from '@/lib/mediaUpload';
 
 const resolvedUrlCache = new Map<string, string>();
 const inflightUrlCache = new Map<string, Promise<string>>();
-const candidateHealthCache = new Map<string, boolean>();
-const IMAGE_PROBE_TIMEOUT_MS = 8000;
-
-function canProbeImages() {
-  return typeof Image !== 'undefined';
-}
-
-/**
- * resolveStorageUrlCandidates intentionally returns every plausible URL. The
- * first candidate is not guaranteed to be readable: an old public URL may now
- * point at a private bucket, while the following signed URL is valid. Product
- * cards already retry candidates in <img onError>; detail pages need the same
- * guarantee before ProductDetail receives its gallery URLs.
- */
-async function candidateLoads(candidate: string): Promise<boolean> {
-  if (!candidate) return false;
-
-  const cached = candidateHealthCache.get(candidate);
-  if (cached != null) return cached;
-
-  // SSR/tests do not have HTMLImageElement. In that environment we cannot
-  // probe, so keep the resolver deterministic and let the browser verify it.
-  if (!canProbeImages()) return true;
-
-  return new Promise<boolean>(resolve => {
-    const image = new Image();
-    let settled = false;
-
-    const finish = (ok: boolean) => {
-      if (settled) return;
-      settled = true;
-      globalThis.clearTimeout(timer);
-      image.onload = null;
-      image.onerror = null;
-      candidateHealthCache.set(candidate, ok);
-      resolve(ok);
-    };
-
-    const timer = globalThis.setTimeout(() => finish(false), IMAGE_PROBE_TIMEOUT_MS);
-    image.onload = () => finish(true);
-    image.onerror = () => finish(false);
-    image.src = candidate;
-  });
-}
 
 async function resolveProductImageUrl(rawUrl: string) {
   const raw = rawUrl.trim();
@@ -59,19 +15,10 @@ async function resolveProductImageUrl(rawUrl: string) {
   if (inflight) return inflight;
 
   const promise = resolveStorageUrlCandidates(raw)
-    .then(async candidates => {
-      const ordered = candidates.length > 0 ? candidates : [raw];
-
-      for (const candidate of ordered) {
-        if (await candidateLoads(candidate)) {
-          resolvedUrlCache.set(raw, candidate);
-          return candidate;
-        }
-      }
-
-      // Returning the raw value keeps the existing ProductDetail fallback
-      // behaviour if every recovery candidate is genuinely unavailable.
-      return raw;
+    .then(candidates => {
+      const resolved = candidates[0] || raw;
+      resolvedUrlCache.set(raw, resolved);
+      return resolved;
     })
     .catch(error => {
       console.warn('Marketplace detail media resolve failed:', error);
@@ -86,9 +33,11 @@ async function resolveProductImageUrl(rawUrl: string) {
 }
 
 /**
- * Resolve all product images before ProductDetail receives the product. This
- * keeps card/detail/store surfaces consistent for storage:// references,
- * expired signed URLs and buckets whose visibility changed over time.
+ * Product cards already have URL recovery, but the detail gallery historically
+ * rendered product_images.url directly. Resolve the same storage references
+ * before ProductDetail receives the product so card/detail/store surfaces use
+ * one canonical browser URL and old signed/private URLs do not disappear only
+ * on the detail page.
  */
 export async function resolveMarketplaceProductMedia(product: Product): Promise<Product> {
   if (!product.images?.length) return product;

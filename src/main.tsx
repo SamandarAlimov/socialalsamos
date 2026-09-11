@@ -6,7 +6,6 @@ import "./styles/native-interactions.css";
 import "./styles/video-watch.css";
 import "./styles/video-feed.css";
 import "./styles/canonical-engagement.css";
-import "./styles/marketplace-create-product.css";
 import "./i18n";
 import { installMediaUploadFetchFallback } from "./lib/mediaUploadFetchFallback";
 import { installNativeInteractionPolicy } from "./lib/nativeInteractionPolicy";
