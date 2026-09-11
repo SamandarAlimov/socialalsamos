@@ -1,12 +1,17 @@
-import { useEffect, useLayoutEffect, useRef } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, type SyntheticEvent } from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import type { Location } from 'react-router-dom';
 import MarketplacePage from '@/pages/MarketplacePage';
 import MarketplaceProductPage from '@/pages/MarketplaceProductPage';
 import MarketplaceChatHandoffPage from '@/pages/MarketplaceChatHandoffPage';
 import MarketplaceStorePage from '@/pages/MarketplaceStorePage';
+import { resolveStorageUrlCandidates } from '@/lib/mediaUpload';
 
 const MARKETPLACE_SCROLL_KEY = 'alsamos:marketplace:scroll-top:v2';
+const recoveryCandidateCache = new Map<string, string[]>();
+const recoveryInflightCache = new Map<string, Promise<string[]>>();
+const attemptedCandidates = new WeakMap<HTMLImageElement, Set<string>>();
+const recoveringImages = new WeakSet<HTMLImageElement>();
 
 function getPlatformScrollRoot() {
   if (typeof document === 'undefined') return null;
@@ -43,6 +48,88 @@ function homeLocationFrom(location: Location): Location {
   };
 }
 
+function resolveRecoveryCandidates(rawSource: string) {
+  const cached = recoveryCandidateCache.get(rawSource);
+  if (cached) return Promise.resolve(cached);
+
+  const inflight = recoveryInflightCache.get(rawSource);
+  if (inflight) return inflight;
+
+  const promise = resolveStorageUrlCandidates(rawSource)
+    .then(candidates => {
+      const unique = Array.from(new Set(candidates.filter(Boolean)));
+      recoveryCandidateCache.set(rawSource, unique);
+      return unique;
+    })
+    .finally(() => {
+      recoveryInflightCache.delete(rawSource);
+    });
+
+  recoveryInflightCache.set(rawSource, promise);
+  return promise;
+}
+
+function handErrorBackToComponent(image: HTMLImageElement) {
+  image.dataset.marketplaceRecoveryExhausted = 'true';
+  image.dispatchEvent(new Event('error'));
+}
+
+/**
+ * A few older Marketplace surfaces still render product_images.url directly
+ * instead of using MarketplaceProductImage. That made the same photo work in
+ * the main product grid but fail in "Hozir ommabop" or the detail gallery when
+ * the stored URL was an expired signed URL / storage reference. This capture
+ * boundary gives every raw Marketplace <img> the same recovery candidates.
+ *
+ * MarketplaceProductImage marks itself and is deliberately skipped here: it
+ * already owns its retry state and must receive its own onError events.
+ */
+function recoverMarketplaceImageError(event: SyntheticEvent<HTMLDivElement>) {
+  const target = event.target;
+  if (!(target instanceof HTMLImageElement)) return;
+  if (target.dataset.marketplaceResilientImage === 'true') return;
+
+  if (target.dataset.marketplaceRecoveryExhausted === 'true') {
+    delete target.dataset.marketplaceRecoveryExhausted;
+    return;
+  }
+
+  const currentSource = target.getAttribute('src')?.trim() || '';
+  const rawSource = target.dataset.marketplaceRecoverySource || currentSource;
+  if (!rawSource) return;
+
+  // Do not let a component switch to its permanent placeholder until all
+  // storage recovery candidates have actually been tried.
+  event.stopPropagation();
+
+  if (recoveringImages.has(target)) return;
+
+  target.dataset.marketplaceRecoverySource = rawSource;
+  const attempted = attemptedCandidates.get(target) ?? new Set<string>();
+  if (currentSource) attempted.add(currentSource);
+  attemptedCandidates.set(target, attempted);
+  recoveringImages.add(target);
+
+  void resolveRecoveryCandidates(rawSource)
+    .then(candidates => {
+      const next = candidates.find(candidate => !attempted.has(candidate));
+      if (!next) {
+        handErrorBackToComponent(target);
+        return;
+      }
+
+      attempted.add(next);
+      target.src = next;
+    })
+    .catch(error => {
+      console.warn('Marketplace raw image recovery failed:', error);
+      handErrorBackToComponent(target);
+    })
+    .finally(() => {
+      recoveringImages.delete(target);
+    });
+}
+
 /**
  * Marketplace browse is intentionally kept mounted while a product/store/chat
  * route is open. Product cards, filters, loaded sections and image elements
@@ -58,6 +145,7 @@ export function MarketplaceRouteKeeper() {
   );
   const savedScrollTopRef = useRef(readStoredScrollTop());
   const previousWasHomeRef = useRef(isHome);
+  const handleImageErrorCapture = useCallback(recoverMarketplaceImageError, []);
 
   if (isHome) {
     homeLocationRef.current = location;
@@ -109,7 +197,7 @@ export function MarketplaceRouteKeeper() {
   }, [isHome]);
 
   return (
-    <>
+    <div className="contents" onErrorCapture={handleImageErrorCapture}>
       <div className={isHome ? 'contents' : 'hidden'} aria-hidden={!isHome}>
         <Routes location={homeLocationRef.current}>
           <Route path="/marketplace" element={<MarketplacePage />} />
@@ -124,6 +212,6 @@ export function MarketplaceRouteKeeper() {
           <Route path="*" element={<Navigate to="/marketplace" replace />} />
         </Routes>
       )}
-    </>
+    </div>
   );
 }
