@@ -21,6 +21,7 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { formatPrice, getShippingCost, checkoutErrorMessage } from '@/lib/marketplace';
+import { checkoutAddressFromLocationLabel } from '@/lib/marketplaceDeliveryAddress';
 import { getCartItemStock, getCartItemUnitPrice, getVariantOptionsLabel } from '@/hooks/useMarketplace';
 import { useMarketplaceDeliveryLocation } from '@/hooks/useMarketplaceDeliveryLocation';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -194,6 +195,31 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
       setFulfillmentType(restaurantCheckout && !restaurantCanDeliver ? 'pickup' : 'delivery');
     }
   }, [open, restaurantCheckout, restaurantCanDeliver]);
+
+  useEffect(() => {
+    if (!open || isPickup || !location?.label) return;
+    const autofill = checkoutAddressFromLocationLabel(location.label);
+    if (!autofill.street && !autofill.city && !autofill.region) return;
+
+    setAddress(current => {
+      const next = {
+        ...current,
+        street: autofill.street || current.street,
+        city: autofill.city || current.city,
+        region: autofill.region || current.region,
+      };
+
+      if (
+        next.street === current.street &&
+        next.city === current.city &&
+        next.region === current.region
+      ) {
+        return current;
+      }
+
+      return next;
+    });
+  }, [isPickup, location, open]);
 
   useEffect(() => {
     if (!restaurantCheckout) setFulfillmentType('delivery');
