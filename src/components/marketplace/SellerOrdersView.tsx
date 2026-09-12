@@ -67,6 +67,10 @@ function variantOptionsLabel(options?: Record<string, string> | null) {
     .join(' · ');
 }
 
+function hasHandoffCode(order: Order) {
+  return Boolean(String((order as any).handoff_code || '').trim());
+}
+
 export function SellerOrdersView() {
   const { orders, sellerId, isLoading, error, refresh } = useSellerOrders();
   const { updateStatus, cancelOrder, updatingId } = useOrderActions();
@@ -103,6 +107,7 @@ export function SellerOrdersView() {
   const pendingCount = orders.filter(order => order.status === 'pending').length;
   const preparingCount = orders.filter(order => order.status === 'processing').length;
   const readyCount = orders.filter(order => order.status === 'shipped').length;
+  const readyHandoffCount = orders.filter(order => order.status === 'shipped' && hasHandoffCode(order)).length;
 
   const handleAdvance = async (order: Order, to: OrderStatus) => {
     const result = await updateStatus(order.id, to);
@@ -116,16 +121,20 @@ export function SellerOrdersView() {
     if (result.success) await refresh();
   };
 
-  const nextAction = (status: OrderStatus) => {
+  const nextAction = (order: Order) => {
     if (restaurantMode) {
-      if (status === 'pending') return { to: 'processing' as OrderStatus, label: 'Qabul qilish', icon: ChefHat };
-      if (status === 'processing') return { to: 'shipped' as OrderStatus, label: 'Tayyor', icon: CheckCircle };
-      // shipped -> delivered is intentionally scanner/code-only.
+      if (order.status === 'pending') return { to: 'processing' as OrderStatus, label: 'Qabul qilish', icon: ChefHat };
+      if (order.status === 'processing') return { to: 'shipped' as OrderStatus, label: 'Tayyor', icon: CheckCircle };
+      if (order.status === 'shipped' && !hasHandoffCode(order)) {
+        return { to: 'delivered' as OrderStatus, label: 'Topshirildi', icon: Truck };
+      }
       return null;
     }
-    if (status === 'pending') return { to: 'processing' as OrderStatus, label: marketplaceUz.sellerOrders.next.accept, icon: Package };
-    if (status === 'processing') return { to: 'shipped' as OrderStatus, label: marketplaceUz.sellerOrders.next.shipped, icon: Truck };
-    // shipped -> delivered is intentionally scanner/code-only.
+    if (order.status === 'pending') return { to: 'processing' as OrderStatus, label: marketplaceUz.sellerOrders.next.accept, icon: Package };
+    if (order.status === 'processing') return { to: 'shipped' as OrderStatus, label: marketplaceUz.sellerOrders.next.shipped, icon: Truck };
+    if (order.status === 'shipped' && !hasHandoffCode(order)) {
+      return { to: 'delivered' as OrderStatus, label: marketplaceUz.sellerOrders.next.delivered, icon: CheckCircle };
+    }
     return null;
   };
 
@@ -180,7 +189,7 @@ export function SellerOrdersView() {
         </div>
       )}
 
-      {readyCount > 0 && <OrderHandoffScanner onVerified={refresh} />}
+      {readyHandoffCount > 0 && <OrderHandoffScanner onVerified={refresh} />}
 
       <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 scrollbar-none" role="tablist">
         {FILTER_IDS.map(id => (
@@ -210,7 +219,8 @@ export function SellerOrdersView() {
         filtered.map((order, index) => {
           const status = statusConfig[order.status] || statusConfig.pending;
           const StatusIcon = status.icon;
-          const next = nextAction(order.status);
+          const handoffRequired = hasHandoffCode(order);
+          const next = nextAction(order);
           const NextIcon = next?.icon;
           const isBusy = updatingId === order.id;
           const isOpen = expanded === order.id;
@@ -246,7 +256,7 @@ export function SellerOrdersView() {
                 <p className="shrink-0 font-bold tabular-nums text-foreground">{formatPrice(order.total, order.currency)}</p>
               </div>
 
-              {order.status === 'shipped' && (
+              {order.status === 'shipped' && handoffRequired && (
                 <div className="mt-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-[11px] text-emerald-700 dark:text-emerald-400">
                   Buyurtma tayyor. Yakunlash uchun yuqoridagi scanner maydonida mijoz kodi/barcode’ni tasdiqlang.
                 </div>
