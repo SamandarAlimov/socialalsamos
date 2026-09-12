@@ -1,0 +1,161 @@
+name: Build fresh Supabase bootstrap
+
+on:
+  push:
+    branches:
+      - chore/build-fresh-supabase-bootstrap
+    paths:
+      - .github/workflows/build-fresh-supabase-bootstrap.yml
+
+permissions:
+  contents: write
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout socialalsamos
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Checkout Alsamos Superapp migration stream
+        run: git clone --depth 1 https://github.com/SamandarAlimov/alsamos-superapp.git /tmp/alsamos-superapp
+
+      - name: Build deterministic migration union
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib, json, re, shutil
+
+          root = Path.cwd()
+          streams = [
+              ('A-superapp', Path('/tmp/alsamos-superapp/supabase/migrations'), 0),
+              ('B-web', root / 'supabase' / 'migrations', 1),
+          ]
+          excluded_names = {
+              '20260625000001_test_messages_data.sql',
+              '20260625000002_create_test_conversations.sql',
+          }
+          out = root / 'supabase' / 'bootstrap' / 'generated'
+          if out.exists():
+              shutil.rmtree(out)
+          out.mkdir(parents=True, exist_ok=True)
+
+          def timestamp_key(name: str):
+              m = re.match(r'^(\d{8,14})', name)
+              if not m:
+                  return '99999999999999'
+              digits = m.group(1)
+              return digits.ljust(14, '0')
+
+          candidates = []
+          excluded = []
+          for stream, directory, priority in streams:
+              for path in sorted(directory.glob('*.sql')):
+                  if path.name in excluded_names:
+                      excluded.append({'stream': stream, 'file': path.name, 'reason': 'test fixture excluded from fresh backend'})
+                      continue
+                  data = path.read_bytes()
+                  sha = hashlib.sha256(data).hexdigest()
+                  candidates.append({
+                      'stream': stream,
+                      'priority': priority,
+                      'file': path.name,
+                      'path': path,
+                      'sha256': sha,
+                      'timestamp': timestamp_key(path.name),
+                      'bytes': len(data),
+                  })
+
+          candidates.sort(key=lambda x: (x['timestamp'], x['priority'], x['file']))
+
+          seen_hashes = {}
+          ordered = []
+          duplicates = []
+          for item in candidates:
+              prior = seen_hashes.get(item['sha256'])
+              if prior:
+                  duplicates.append({
+                      'stream': item['stream'],
+                      'file': item['file'],
+                      'duplicate_of': f"{prior['stream']}:{prior['file']}",
+                      'sha256': item['sha256'],
+                  })
+                  continue
+              seen_hashes[item['sha256']] = item
+              ordered.append(item)
+
+          # Keep chunks comfortably below connector response limits while never
+          # splitting an individual migration file.
+          max_chunk = 90000
+          chunks = []
+          current = []
+          current_bytes = 0
+          for item in ordered:
+              overhead = 250 + len(item['file']) + len(item['stream'])
+              size = item['bytes'] + overhead
+              if current and current_bytes + size > max_chunk:
+                  chunks.append(current)
+                  current = []
+                  current_bytes = 0
+              current.append(item)
+              current_bytes += size
+          if current:
+              chunks.append(current)
+
+          manifest_chunks = []
+          for idx, chunk in enumerate(chunks, start=1):
+              filename = f'{idx:03d}.sql'
+              parts = [
+                  '-- GENERATED FILE: deterministic fresh Alsamos Supabase bootstrap',
+                  '-- Sources: SamandarAlimov/alsamos-superapp + SamandarAlimov/socialalsamos',
+                  '-- Test fixture migrations are intentionally excluded.',
+                  '-- Do not edit this generated file directly.',
+                  '',
+              ]
+              for item in chunk:
+                  parts += [
+                      f"-- ============================================================================",
+                      f"-- SOURCE {item['stream']}: {item['file']}",
+                      f"-- SHA256 {item['sha256']}",
+                      f"-- ============================================================================",
+                      item['path'].read_text(encoding='utf-8-sig'),
+                      '',
+                  ]
+              text = '\n'.join(parts)
+              (out / filename).write_text(text, encoding='utf-8')
+              manifest_chunks.append({
+                  'file': filename,
+                  'bytes': len(text.encode('utf-8')),
+                  'migrations': [f"{x['stream']}:{x['file']}" for x in chunk],
+              })
+
+          manifest = {
+              'format': 1,
+              'strategy': 'merge by leading timestamp; A-superapp before B-web on exact timestamp; exact-content duplicates applied once',
+              'ordered_migration_count': len(ordered),
+              'duplicate_count': len(duplicates),
+              'excluded_count': len(excluded),
+              'chunks': manifest_chunks,
+              'excluded': excluded,
+              'duplicates': duplicates,
+          }
+          (out / 'manifest.json').write_text(json.dumps(manifest, indent=2), encoding='utf-8')
+          print(json.dumps({k: manifest[k] for k in ['ordered_migration_count','duplicate_count','excluded_count']}, indent=2))
+          print('chunks:', len(chunks))
+          PY
+
+      - name: Commit generated bootstrap
+        shell: bash
+        run: |
+          git config user.name "Alsamos Bootstrap Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add supabase/bootstrap/generated
+          if git diff --cached --quiet; then
+            echo "No generated changes"
+            exit 0
+          fi
+          git commit -m "build: generate fresh Supabase bootstrap"
+          git push origin HEAD:${GITHUB_REF_NAME}
