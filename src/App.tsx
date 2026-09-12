@@ -41,6 +41,8 @@ import DiscoveryPage from "./pages/DiscoveryPage";
 import SearchPage from "./pages/SearchPage";
 import WebViewerPage from "./pages/WebViewerPage";
 import MarketplacePage from "./pages/MarketplacePage";
+import MarketplaceCatalogPage from "./pages/MarketplaceCatalogPage";
+import MarketplaceCartPage from "./pages/MarketplaceCartPage";
 import MarketplaceProductPage from "./pages/MarketplaceProductPage";
 import MarketplaceChatHandoffPage from "./pages/MarketplaceChatHandoffPage";
 import MarketplaceStorePage from "./pages/MarketplaceStorePage";
@@ -174,6 +176,8 @@ function AppRoutes() {
         <Route path="/messages" element={<MessagesPage />} />
         <Route path="/join/:slug" element={<JoinInvitePage />} />
         <Route path="/marketplace" element={<MarketplacePage />} />
+        <Route path="/marketplace/catalog" element={<MarketplaceCatalogPage />} />
+        <Route path="/marketplace/cart" element={<MarketplaceCartPage />} />
         <Route path="/marketplace/chat" element={<MarketplaceChatHandoffPage />} />
         <Route path="/marketplace/product/:productId" element={<MarketplaceProductPage />} />
         <Route path="/marketplace/store/:sellerId" element={<MarketplaceStorePage />} />
