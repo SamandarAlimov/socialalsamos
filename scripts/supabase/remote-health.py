@@ -2,8 +2,9 @@
 """Read-only production schema checks through the Supabase Management API.
 
 Requires SUPABASE_ACCESS_TOKEN and SUPABASE_PROJECT_REF. The token value is never
-printed. This lets CI decide whether a project is truly fresh and verify the
-critical Alsamos backend after migrations without needing a service-role key.
+printed. This lets CI decide whether a project is truly fresh, inspect migration
+history, and verify the critical Alsamos backend after migrations without a
+service-role key.
 """
 
 from __future__ import annotations
@@ -113,6 +114,24 @@ def detect_mode() -> str:
     return "mixed"
 
 
+def migration_versions() -> list[str]:
+    exists = first_row(
+        "select to_regclass('supabase_migrations.schema_migrations') is not null as history_exists;"
+    )
+    if not bool_value(exists, "history_exists"):
+        return []
+
+    rows = query(
+        "select version::text as version from supabase_migrations.schema_migrations order by version;"
+    )
+    versions: list[str] = []
+    for row in rows:
+        value = str(row.get("version") or "").strip()
+        if value.isdigit():
+            versions.append(value)
+    return versions
+
+
 def verify() -> None:
     row = first_row(
         """
@@ -218,6 +237,7 @@ def main() -> int:
 
     mode_parser = sub.add_parser("mode", help="Detect fresh/incremental/mixed schema state")
     mode_parser.add_argument("--github-output", help="Optional path to $GITHUB_OUTPUT")
+    sub.add_parser("migration-versions", help="Print remote migration-history versions")
     sub.add_parser("verify", help="Verify the critical production schema")
     args = parser.parse_args()
 
@@ -227,6 +247,11 @@ def main() -> int:
         if args.github_output:
             with open(args.github_output, "a", encoding="utf-8") as handle:
                 handle.write(f"detected_mode={mode}\n")
+        return 0
+
+    if args.command == "migration-versions":
+        for version in migration_versions():
+            print(version)
         return 0
 
     verify()
