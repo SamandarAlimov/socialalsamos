@@ -12,6 +12,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { ShipmentTimeline } from '@/components/marketplace/ShipmentTimeline';
+import { OrderHandoffCard } from '@/components/marketplace/OrderHandoffCard';
 import { useOrders, useOrderActions, Order } from '@/hooks/useOrders';
 import { formatPrice } from '@/lib/marketplace';
 import { formatDistanceToNow, format } from 'date-fns';
@@ -263,6 +264,8 @@ function OrderDetailSheet({
             )}
 
             <ShipmentTimeline orderId={order.id} orderStatus={order.status} shippingAddress={order.shipping_address} />
+
+            <OrderHandoffCard order={order as any} />
 
             <div className="space-y-2">
               <h4 className="text-sm font-semibold">{marketplaceUz.orders.products}</h4>
