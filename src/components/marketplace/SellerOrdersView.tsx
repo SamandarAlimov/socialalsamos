@@ -10,6 +10,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { SellerShipmentManager } from '@/components/marketplace/SellerShipmentManager';
+import { OrderHandoffScanner } from '@/components/marketplace/OrderHandoffScanner';
 import { useSellerOrders, useOrderActions, Order, OrderStatus } from '@/hooks/useOrders';
 import { statusConfig } from '@/components/marketplace/OrdersView';
 import { formatPrice } from '@/lib/marketplace';
@@ -119,12 +120,12 @@ export function SellerOrdersView() {
     if (restaurantMode) {
       if (status === 'pending') return { to: 'processing' as OrderStatus, label: 'Qabul qilish', icon: ChefHat };
       if (status === 'processing') return { to: 'shipped' as OrderStatus, label: 'Tayyor', icon: CheckCircle };
-      if (status === 'shipped') return { to: 'delivered' as OrderStatus, label: 'Topshirildi', icon: Truck };
+      // shipped -> delivered is intentionally scanner/code-only.
       return null;
     }
     if (status === 'pending') return { to: 'processing' as OrderStatus, label: marketplaceUz.sellerOrders.next.accept, icon: Package };
     if (status === 'processing') return { to: 'shipped' as OrderStatus, label: marketplaceUz.sellerOrders.next.shipped, icon: Truck };
-    if (status === 'shipped') return { to: 'delivered' as OrderStatus, label: marketplaceUz.sellerOrders.next.delivered, icon: CheckCircle };
+    // shipped -> delivered is intentionally scanner/code-only.
     return null;
   };
 
@@ -155,8 +156,8 @@ export function SellerOrdersView() {
           </h3>
           <p className="mt-0.5 text-[11px] text-muted-foreground">
             {restaurantMode
-              ? 'Yangi buyurtmani qabul qiling → tayyorlang → kuryer yoki xaridorga topshiring.'
-              : 'Buyurtmani qabul qiling, kerak bo‘lsa xalqaro shipment yarating va trackingni yangilang.'}
+              ? 'Yangi buyurtmani qabul qiling → tayyorlang → kod/barcode bilan xaridorga topshiring.'
+              : 'Buyurtmani qabul qiling, shipmentni yangilang va yakunda kod/barcode bilan topshiring.'}
           </p>
         </div>
         <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 rounded-lg" onClick={refresh} aria-label={marketplaceUz.sellerOrders.refresh}><RotateCcw className="h-4 w-4" /></Button>
@@ -178,6 +179,8 @@ export function SellerOrdersView() {
           </button>
         </div>
       )}
+
+      {readyCount > 0 && <OrderHandoffScanner onVerified={refresh} />}
 
       <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 scrollbar-none" role="tablist">
         {FILTER_IDS.map(id => (
@@ -242,6 +245,12 @@ export function SellerOrdersView() {
                 </div>
                 <p className="shrink-0 font-bold tabular-nums text-foreground">{formatPrice(order.total, order.currency)}</p>
               </div>
+
+              {order.status === 'shipped' && (
+                <div className="mt-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-[11px] text-emerald-700 dark:text-emerald-400">
+                  Buyurtma tayyor. Yakunlash uchun yuqoridagi scanner maydonida mijoz kodi/barcode’ni tasdiqlang.
+                </div>
+              )}
 
               <button type="button" onClick={() => setExpanded(isOpen ? null : order.id)} className="mt-2 flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground" aria-expanded={isOpen}>
                 {isOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
