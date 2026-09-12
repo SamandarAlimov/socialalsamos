@@ -1,5 +1,5 @@
 import { Keyboard, Loader2, ScanLine } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { db } from '@/lib/db';
@@ -12,6 +12,7 @@ const HANDOFF_ERRORS: Record<string, string> = {
   not_authorized: 'Bu buyurtma sizning savdo nuqtangizga tegishli emas.',
   already_verified: 'Bu kod avval ishlatilgan.',
   not_ready: 'Buyurtma hali “Tayyor / yo‘lda” holatiga o‘tkazilmagan.',
+  verification_required: 'Buyurtmani yakunlash uchun mijoz kodi yoki barcode tasdig‘i kerak.',
 };
 
 function errorCode(message?: string | null) {
@@ -24,6 +25,11 @@ export function OrderHandoffScanner({ onVerified }: { onVerified?: () => void | 
   const inputRef = useRef<HTMLInputElement>(null);
   const [code, setCode] = useState('');
   const [isVerifying, setIsVerifying] = useState(false);
+
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => inputRef.current?.focus());
+    return () => cancelAnimationFrame(frame);
+  }, []);
 
   const verify = async () => {
     if (isVerifying) return;
