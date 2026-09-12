@@ -33,6 +33,8 @@ export function MarketplaceBottomNav({
   itemCount = 0,
   savedCount = 0,
   onBrowse,
+  onCatalog,
+  onCart,
   onSaved,
   onOrders,
 }: MarketplaceBottomNavProps) {
@@ -50,14 +52,14 @@ export function MarketplaceBottomNav({
       id: 'catalog' as const,
       label: 'Katalog',
       icon: Grid3X3,
-      onClick: () => navigate('/marketplace/catalog'),
+      onClick: () => (onCatalog ? onCatalog() : navigate('/marketplace/catalog')),
       badge: 0,
     },
     {
       id: 'cart' as const,
       label: 'Savat',
       icon: ShoppingBag,
-      onClick: () => navigate('/marketplace/cart'),
+      onClick: () => (onCart ? onCart() : navigate('/marketplace/cart')),
       badge: itemCount,
     },
     {
@@ -74,18 +76,28 @@ export function MarketplaceBottomNav({
       onClick: () => (onOrders ? onOrders() : navigate('/marketplace?tab=orders')),
       badge: 0,
     },
-    {
-      id: 'selling' as const,
-      label: 'Sotish',
-      icon: Plus,
-      onClick: () => navigate('/marketplace?tab=selling'),
-      badge: 0,
-    },
   ];
 
   return (
     <>
       <div aria-hidden="true" className="h-24 shrink-0" />
+
+      <button
+        type="button"
+        aria-label="Sotuvchi markazi"
+        aria-current={activeTab === 'selling' ? 'page' : undefined}
+        onClick={() => navigate('/marketplace?tab=selling')}
+        className={cn(
+          'fixed bottom-[calc(env(safe-area-inset-bottom)+88px)] right-4 z-[70] flex h-12 items-center gap-2 rounded-full border px-4 text-xs font-extrabold backdrop-blur-3xl transition duration-200 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/30 md:hidden',
+          activeTab === 'selling'
+            ? 'border-foreground bg-foreground text-background shadow-[0_14px_34px_rgba(0,0,0,0.22)]'
+            : 'border-foreground/[0.12] bg-background/[0.98] text-foreground shadow-[0_14px_34px_rgba(0,0,0,0.16)] ring-1 ring-foreground/[0.04]',
+        )}
+      >
+        <Plus className="h-4 w-4" strokeWidth={2.3} />
+        Sotish
+      </button>
+
       <nav
         aria-label="Marketplace navigatsiyasi"
         className="fixed bottom-[calc(env(safe-area-inset-bottom)+12px)] left-1/2 z-[70] flex w-[calc(100%-24px)] max-w-[900px] -translate-x-1/2 items-stretch justify-around rounded-[28px] border border-foreground/[0.12] bg-background/[0.97] px-1.5 py-2 text-foreground shadow-[0_18px_50px_rgba(0,0,0,0.20)] ring-1 ring-foreground/[0.04] backdrop-blur-3xl sm:px-2.5"
