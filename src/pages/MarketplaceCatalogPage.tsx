@@ -1,6 +1,5 @@
 import { FormEvent, useMemo, useState } from 'react';
 import {
-  ArrowLeft,
   ChevronRight,
   Search,
   SlidersHorizontal,
@@ -70,17 +69,6 @@ export default function MarketplaceCatalogPage() {
     <div className="marketplace-neutral min-h-screen min-w-0 overflow-x-clip bg-background pb-8">
       <header className="sticky top-0 z-40 border-b border-border/40 bg-background/94 backdrop-blur-2xl">
         <div className="mx-auto flex w-full max-w-7xl min-w-0 items-center gap-2.5 px-4 py-3 lg:px-6">
-          <Button
-            type="button"
-            variant="outline"
-            size="icon"
-            className="h-11 w-11 shrink-0 rounded-2xl"
-            onClick={() => navigate('/marketplace')}
-            aria-label="Bozorga qaytish"
-          >
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-
           <form onSubmit={submitSearch} className="relative min-w-0 flex-1">
             <Search className="pointer-events-none absolute left-3.5 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
