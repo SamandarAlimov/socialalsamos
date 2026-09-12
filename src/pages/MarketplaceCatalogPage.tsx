@@ -1,11 +1,19 @@
 import { FormEvent, useMemo, useState } from 'react';
-import { ArrowLeft, ChevronRight, Grid3X3, Search, Sparkles } from 'lucide-react';
+import {
+  ArrowLeft,
+  ChevronRight,
+  Search,
+  SlidersHorizontal,
+  Sparkles,
+  X,
+} from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { MarketplaceBottomNav } from '@/components/marketplace/MarketplaceBottomNav';
 import { CategoryIcon } from '@/components/marketplace/CategoryIcon';
 import { ProductCard } from '@/components/marketplace/ProductCard';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { useCart, useCategories, useProducts, useSavedProducts } from '@/hooks/useMarketplace';
 import { cn } from '@/lib/utils';
 import '@/styles/marketplace-premium.css';
@@ -13,16 +21,30 @@ import '@/styles/marketplace-premium.css';
 export default function MarketplaceCatalogPage() {
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
+  const [onlyWithProducts, setOnlyWithProducts] = useState(false);
   const { categories, isLoading: categoriesLoading, error: categoriesError, refresh: refreshCategories } = useCategories();
   const { products, isLoading: productsLoading } = useProducts('all', '');
   const { itemCount } = useCart();
   const { products: savedProducts } = useSavedProducts();
 
+  const productCountByCategory = useMemo(() => {
+    const counts = new Map<string, number>();
+    products.forEach(product => {
+      if (!product.category_id) return;
+      counts.set(product.category_id, (counts.get(product.category_id) || 0) + 1);
+    });
+    return counts;
+  }, [products]);
+
   const filteredCategories = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase();
-    if (!needle) return categories;
-    return categories.filter(category => category.name.toLocaleLowerCase().includes(needle));
-  }, [categories, query]);
+    return categories.filter(category => {
+      if (onlyWithProducts && (productCountByCategory.get(category.id) || 0) === 0) return false;
+      if (!needle) return true;
+      return category.name.toLocaleLowerCase().includes(needle);
+    });
+  }, [categories, onlyWithProducts, productCountByCategory, query]);
 
   const featuredProducts = useMemo(
     () => [...products]
@@ -47,24 +69,57 @@ export default function MarketplaceCatalogPage() {
   return (
     <div className="marketplace-neutral min-h-screen min-w-0 overflow-x-clip bg-background pb-8">
       <header className="sticky top-0 z-40 border-b border-border/40 bg-background/94 backdrop-blur-2xl">
-        <div className="mx-auto flex w-full max-w-7xl items-center gap-3 px-4 py-3 lg:px-6">
+        <div className="mx-auto flex w-full max-w-7xl min-w-0 items-center gap-2.5 px-4 py-3 lg:px-6">
           <Button
             type="button"
-            variant="ghost"
+            variant="outline"
             size="icon"
-            className="h-10 w-10 shrink-0 rounded-2xl"
+            className="h-11 w-11 shrink-0 rounded-2xl"
             onClick={() => navigate('/marketplace')}
             aria-label="Bozorga qaytish"
           >
             <ArrowLeft className="h-5 w-5" />
           </Button>
-          <div className="min-w-0 flex-1">
-            <h1 className="truncate text-lg font-extrabold tracking-tight sm:text-xl">Katalog</h1>
-            <p className="hidden text-xs text-muted-foreground sm:block">Barcha turkumlar va mashhur mahsulotlar</p>
-          </div>
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-foreground text-background">
-            <Grid3X3 className="h-5 w-5" />
-          </span>
+
+          <form onSubmit={submitSearch} className="relative min-w-0 flex-1">
+            <Search className="pointer-events-none absolute left-3.5 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              type="search"
+              inputMode="search"
+              value={query}
+              onChange={event => setQuery(event.target.value)}
+              placeholder="Mahsulot, brend yoki turkum qidiring"
+              aria-label="Katalog qidiruvi"
+              className="h-11 w-full rounded-2xl border-border/60 bg-muted/45 pl-10 pr-10 text-sm shadow-none transition focus:bg-background"
+            />
+            {query && (
+              <button
+                type="button"
+                aria-label="Qidiruvni tozalash"
+                className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-1 text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                onClick={() => setQuery('')}
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </form>
+
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className={cn(
+              'relative h-11 w-11 shrink-0 rounded-2xl',
+              onlyWithProducts && 'border-foreground/30 bg-foreground text-background',
+            )}
+            onClick={() => setShowFilters(true)}
+            aria-label="Katalog filtrlari"
+          >
+            <SlidersHorizontal className="h-4 w-4" />
+            {onlyWithProducts && (
+              <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-destructive ring-2 ring-background" />
+            )}
+          </Button>
         </div>
       </header>
 
@@ -83,20 +138,6 @@ export default function MarketplaceCatalogPage() {
             <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground sm:text-base">
               Elektronika, transport, uy-ro‘zg‘or, moda va boshqa yo‘nalishlar — barchasi tartibli katalogda.
             </p>
-
-            <form onSubmit={submitSearch} className="relative mt-5 max-w-2xl">
-              <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                value={query}
-                onChange={event => setQuery(event.target.value)}
-                placeholder="Katalog yoki mahsulot qidiring"
-                aria-label="Katalog qidiruvi"
-                className="h-12 rounded-2xl border-border/60 bg-background/90 pl-11 pr-24 shadow-sm"
-              />
-              <Button type="submit" size="sm" className="absolute right-1.5 top-1.5 h-9 rounded-xl px-4">
-                Qidirish
-              </Button>
-            </form>
           </div>
         </section>
 
@@ -137,7 +178,7 @@ export default function MarketplaceCatalogPage() {
                 featured
               />
               {filteredCategories.map(category => {
-                const categoryCount = products.filter(product => product.category_id === category.id).length;
+                const categoryCount = productCountByCategory.get(category.id) || 0;
                 return (
                   <CategoryCard
                     key={category.id}
@@ -155,7 +196,9 @@ export default function MarketplaceCatalogPage() {
             <div className="mt-3 rounded-3xl border border-dashed border-border/70 px-5 py-10 text-center">
               <Search className="mx-auto h-8 w-8 text-muted-foreground/40" />
               <p className="mt-3 font-bold">Bunday kategoriya topilmadi</p>
-              <p className="mt-1 text-sm text-muted-foreground">Boshqa nom bilan qidirib ko‘ring.</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {onlyWithProducts ? 'Filtrni o‘chirib yoki boshqa nom bilan qidirib ko‘ring.' : 'Boshqa nom bilan qidirib ko‘ring.'}
+              </p>
             </div>
           )}
         </section>
@@ -206,6 +249,56 @@ export default function MarketplaceCatalogPage() {
         itemCount={itemCount}
         savedCount={savedProducts.length}
       />
+
+      <Sheet open={showFilters} onOpenChange={setShowFilters}>
+        <SheetContent side="bottom" className="rounded-t-[30px] border-x border-t border-border/60 px-5 pb-[calc(env(safe-area-inset-bottom)+24px)] pt-5">
+          <SheetHeader className="text-left">
+            <SheetTitle>Katalog filtri</SheetTitle>
+            <p className="text-xs text-muted-foreground">Katalogda ko‘rinadigan turkumlarni moslang.</p>
+          </SheetHeader>
+
+          <button
+            type="button"
+            role="switch"
+            aria-checked={onlyWithProducts}
+            onClick={() => setOnlyWithProducts(value => !value)}
+            className="mt-5 flex w-full items-center justify-between gap-4 rounded-2xl border border-border/60 bg-muted/25 p-4 text-left"
+          >
+            <span className="min-w-0">
+              <span className="block text-sm font-bold">Faqat mahsuloti bor turkumlar</span>
+              <span className="mt-1 block text-xs leading-5 text-muted-foreground">Hozir mahsuloti yo‘q kategoriyalarni yashiradi.</span>
+            </span>
+            <span
+              className={cn(
+                'relative h-7 w-12 shrink-0 rounded-full transition',
+                onlyWithProducts ? 'bg-foreground' : 'bg-muted-foreground/25',
+              )}
+            >
+              <span
+                className={cn(
+                  'absolute top-1 h-5 w-5 rounded-full bg-background shadow-sm transition-transform',
+                  onlyWithProducts ? 'translate-x-6' : 'translate-x-1',
+                )}
+              />
+            </span>
+          </button>
+
+          <div className="mt-5 grid grid-cols-2 gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="h-11 rounded-xl"
+              onClick={() => setOnlyWithProducts(false)}
+              disabled={!onlyWithProducts}
+            >
+              Tozalash
+            </Button>
+            <Button type="button" className="h-11 rounded-xl" onClick={() => setShowFilters(false)}>
+              Tayyor
+            </Button>
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
