@@ -18,6 +18,23 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Validate Supabase deployment tooling
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n scripts/supabase/deploy-database.sh
+          bash -n scripts/supabase/deploy-functions.sh
+          python3 -m py_compile \
+            scripts/supabase/runtime-secrets.py \
+            scripts/supabase/remote-health.py
+          python3 - <<'PY'
+          import tomllib
+          from pathlib import Path
+          config = tomllib.loads(Path('supabase/config.toml').read_text(encoding='utf-8'))
+          assert config.get('project_id') == 'socialalsamos'
+          print('Supabase deployment tooling syntax/config validation passed')
+          PY
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:

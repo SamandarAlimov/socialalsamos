@@ -1,4 +1,7 @@
-project_id = "tcykulflvagvwuygwgmu"
+project_id = "socialalsamos"
+
+# The hosted project ref is supplied by CI through SUPABASE_PROJECT_REF.
+# Do not commit production project identifiers or credentials here.
 
 # =====================================================================
 # Hosted Auth configuration
