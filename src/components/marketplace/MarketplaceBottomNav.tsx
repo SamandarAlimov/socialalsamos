@@ -33,8 +33,6 @@ export function MarketplaceBottomNav({
   itemCount = 0,
   savedCount = 0,
   onBrowse,
-  onCatalog,
-  onCart,
   onSaved,
   onOrders,
 }: MarketplaceBottomNavProps) {
@@ -52,14 +50,14 @@ export function MarketplaceBottomNav({
       id: 'catalog' as const,
       label: 'Katalog',
       icon: Grid3X3,
-      onClick: () => (onCatalog ? onCatalog() : navigate('/marketplace/catalog')),
+      onClick: () => navigate('/marketplace/catalog'),
       badge: 0,
     },
     {
       id: 'cart' as const,
       label: 'Savat',
       icon: ShoppingBag,
-      onClick: () => (onCart ? onCart() : navigate('/marketplace/cart')),
+      onClick: () => navigate('/marketplace/cart'),
       badge: itemCount,
     },
     {
