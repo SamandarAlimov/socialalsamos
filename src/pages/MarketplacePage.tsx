@@ -94,7 +94,6 @@ export default function MarketplacePage() {
   const [showCart, setShowCart] = useState(false);
   const [showDashboard, setShowDashboard] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
-  const [showCatalog, setShowCatalog] = useState(false);
   const [gridLayout, setGridLayout] = useState<'grid' | 'list'>('grid');
   const [sortBy, setSortBy] = useState('newest');
   const [priceRange, setPriceRange] = useState<[number, number] | null>(null);
@@ -205,7 +204,6 @@ export default function MarketplacePage() {
     triggerHaptic('light');
     setSelectedCategory(slug);
     setActiveTab('browse');
-    setShowCatalog(false);
 
     const next = new URLSearchParams(searchParams);
     next.delete('tab');
@@ -471,7 +469,7 @@ export default function MarketplacePage() {
       )}
 
       <section className="space-y-3 lg:hidden">
-        <SectionHeading title="Kategoriyalar" action="Barchasi" onAction={() => setShowCatalog(true)} />
+        <SectionHeading title="Kategoriyalar" action="Barchasi" onAction={() => navigate('/marketplace/catalog')} />
         <div className="marketplace-x-rail -mx-4 flex gap-3 overflow-x-auto px-4 pb-1 sm:mx-0 sm:px-0">
           <CategoryTile
             active={selectedCategory === 'all'}
@@ -808,7 +806,7 @@ export default function MarketplacePage() {
                 'hidden h-11 shrink-0 rounded-2xl px-3 sm:inline-flex',
                 selectedCategory !== 'all' && 'border-foreground/20 bg-foreground/[0.05]',
               )}
-              onClick={() => setShowCatalog(true)}
+              onClick={() => navigate('/marketplace/catalog')}
               aria-label="Katalogni ochish"
             >
               <Grid3X3 className="h-4 w-4 xl:mr-1.5" />
@@ -849,11 +847,11 @@ export default function MarketplacePage() {
             </Button>
 
             <Button
-              className="hidden h-11 shrink-0 rounded-2xl md:inline-flex"
+              className="h-11 shrink-0 rounded-2xl px-3 text-xs font-extrabold md:px-4"
               onClick={() => selectTab('selling')}
             >
-              <Plus className="mr-1.5 h-4 w-4" />
-              Sotish
+              <Plus className="h-4 w-4 min-[390px]:mr-1.5" />
+              <span className="hidden min-[390px]:inline">Sotish</span>
             </Button>
           </div>
 
@@ -1084,8 +1082,6 @@ export default function MarketplacePage() {
         itemCount={itemCount}
         savedCount={savedProducts.length}
         onBrowse={() => selectTab('browse')}
-        onCatalog={() => setShowCatalog(true)}
-        onCart={() => setShowCart(true)}
         onSaved={() => selectTab('saved')}
         onOrders={() => selectTab('orders')}
       />
@@ -1112,44 +1108,6 @@ export default function MarketplacePage() {
         }}
         onProductSelect={handleProductSelect}
       />
-
-      <Sheet open={showCatalog} onOpenChange={setShowCatalog}>
-        <SheetContent
-          side={isMobile ? 'bottom' : 'right'}
-          className={cn(
-            'p-0',
-            isMobile
-              ? 'max-h-[88dvh] rounded-t-[30px] border-x border-t border-border/60'
-              : 'w-[430px] border-l border-border/60 sm:max-w-[430px]',
-          )}
-        >
-          <SheetHeader className="border-b border-border/50 px-5 py-4 text-left">
-            <SheetTitle>Katalog</SheetTitle>
-            <p className="text-xs text-muted-foreground">
-              Kerakli turkumni tanlang. Katalog sahifa bilan birga scroll bo‘lmaydi.
-            </p>
-          </SheetHeader>
-          <div className="max-h-[calc(88dvh-84px)] overflow-y-auto px-4 py-4">
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              <CategoryListButton
-                active={selectedCategory === 'all'}
-                label="Barcha mahsulotlar"
-                icon={<span className="flex h-9 w-9 items-center justify-center rounded-xl bg-violet-500/12 text-violet-600 dark:text-violet-400"><Sparkles className="h-[18px] w-[18px]" /></span>}
-                onClick={() => handleCategorySelect('all')}
-              />
-              {categories.map(category => (
-                <CategoryListButton
-                  key={category.id}
-                  active={selectedCategory === category.slug}
-                  label={category.name}
-                  icon={<CategoryIcon slug={category.slug} name={category.name} boxed />}
-                  onClick={() => handleCategorySelect(category.slug)}
-                />
-              ))}
-            </div>
-          </div>
-        </SheetContent>
-      </Sheet>
 
       <Sheet open={showFilters} onOpenChange={setShowFilters}>
         <SheetContent
@@ -1290,36 +1248,6 @@ function CategoryTile({
       <span className={cn('mt-1.5 block line-clamp-2 text-[11px] leading-tight', active && 'font-bold')}>
         {label}
       </span>
-    </button>
-  );
-}
-
-function CategoryListButton({
-  active,
-  label,
-  icon,
-  onClick,
-}: {
-  active: boolean;
-  label: string;
-  icon: React.ReactNode;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      className={cn(
-        'flex min-w-0 items-center gap-3 rounded-2xl border px-3 py-2.5 text-left transition',
-        active
-          ? 'border-foreground/15 bg-foreground/[0.055] text-foreground shadow-sm'
-          : 'border-transparent bg-muted/30 text-foreground hover:border-border/60 hover:bg-muted/60',
-      )}
-    >
-      {icon}
-      <span className="min-w-0 flex-1 truncate text-sm font-semibold">{label}</span>
-      <ChevronRight className="h-4 w-4 shrink-0 opacity-35" />
     </button>
   );
 }
