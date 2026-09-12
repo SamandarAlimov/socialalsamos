@@ -210,6 +210,11 @@ export async function resolveStorageUrl(
       : externalReference?.key ?? null;
 
   if (externalKey) {
+    // Provider adapters such as Cloudinary may persist their HTTPS delivery URL
+    // as the external object key. Keep it provider-native instead of rewriting
+    // it through media.alsamos.com. Public Alsamos content permalinks remain
+    // /p, /reels and /stories; this URL is only the binary delivery layer.
+    if (isBrowserMediaUrl(externalKey)) return externalKey;
     if (externalKey.startsWith('private/')) {
       return signExternalMediaKey(externalKey);
     }
@@ -416,9 +421,11 @@ async function readError(response: Response, fallback: string): Promise<string> 
 }
 
 type ExternalPresignResponse = {
+  provider?: string;
   upload_url?: string;
   method?: string;
   headers?: Record<string, string>;
+  fields?: Record<string, string>;
   public_url?: string;
   key?: string;
   bucket?: string;
@@ -458,37 +465,79 @@ async function uploadViaExternalApi(
     throw new Error('Media server noto\'liq presign javobi qaytardi');
   }
 
-  const uploadHeaders: Record<string, string> = {
-    ...(signed.headers ?? { 'Content-Type': contentType }),
-  };
-  if (!uploadHeaders['Content-Type']) uploadHeaders['Content-Type'] = contentType;
-  if (apiVisibility === 'private') {
-    uploadHeaders['Cache-Control'] = 'private, no-store, max-age=0';
-  }
+  let upload: Response;
+  let providerPublicUrl: string | null = null;
 
-  const upload = await fetch(signed.upload_url, {
-    method: signed.method || 'PUT',
-    headers: uploadHeaders,
-    body: file,
-  });
+  if (signed.fields && Object.keys(signed.fields).length > 0) {
+    // Cloudinary and similar providers use a signed multipart form. The API
+    // secret never reaches the browser: /api/media-presign only returns the
+    // short-lived signature and public API key fields required for this file.
+    const form = new FormData();
+    for (const [field, value] of Object.entries(signed.fields)) {
+      form.append(field, value);
+    }
+    form.append('file', file, filename);
 
-  if (!upload.ok) {
-    throw new Error(await readError(upload, 'Media serverga fayl yozilmadi'));
+    upload = await fetch(signed.upload_url, {
+      method: signed.method || 'POST',
+      body: form,
+    });
+
+    if (!upload.ok) {
+      throw new Error(await readError(upload, 'Media providerga fayl yozilmadi'));
+    }
+
+    try {
+      const providerResult = (await upload.clone().json()) as {
+        secure_url?: string;
+        url?: string;
+      };
+      providerPublicUrl = providerResult.secure_url || providerResult.url || null;
+    } catch {
+      providerPublicUrl = null;
+    }
+
+    if (signed.provider === 'cloudinary' && !providerPublicUrl) {
+      throw new Error('Cloudinary upload tugadi, lekin delivery URL qaytmadi');
+    }
+  } else {
+    const uploadHeaders: Record<string, string> = {
+      ...(signed.headers ?? { 'Content-Type': contentType }),
+    };
+    if (!uploadHeaders['Content-Type']) uploadHeaders['Content-Type'] = contentType;
+    if (apiVisibility === 'private') {
+      uploadHeaders['Cache-Control'] = 'private, no-store, max-age=0';
+    }
+
+    upload = await fetch(signed.upload_url, {
+      method: signed.method || 'PUT',
+      headers: uploadHeaders,
+      body: file,
+    });
+
+    if (!upload.ok) {
+      throw new Error(await readError(upload, 'Media serverga fayl yozilmadi'));
+    }
   }
 
   const storageUrl =
     apiVisibility === 'public'
-      ? signed.public_url || `${EXTERNAL_MEDIA_PUBLIC_BASE}/${encodeMediaPath(signed.key)}`
+      ? providerPublicUrl ||
+        signed.public_url ||
+        `${EXTERNAL_MEDIA_PUBLIC_BASE}/${encodeMediaPath(signed.key)}`
       : makeAlsamosMediaReference(signed.key);
   const url =
     apiVisibility === 'public'
       ? storageUrl
       : await signExternalMediaKey(signed.key);
+  const resultKey = apiVisibility === 'public' && providerPublicUrl
+    ? providerPublicUrl
+    : signed.key;
 
   return {
     url,
     storageUrl,
-    key: signed.key,
+    key: resultKey,
     bucket: EXTERNAL_MEDIA_BUCKET,
     type: contentType,
     name: filename,
