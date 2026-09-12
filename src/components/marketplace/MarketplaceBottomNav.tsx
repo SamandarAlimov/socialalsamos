@@ -1,7 +1,10 @@
+import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   ClipboardList,
   Grid3X3,
   Heart,
+  Plus,
   ShoppingBag,
   Store,
 } from 'lucide-react';
@@ -36,6 +39,22 @@ export function MarketplaceBottomNav({
   onOrders,
 }: MarketplaceBottomNavProps) {
   const navigate = useNavigate();
+  const [mobileSellHost, setMobileSellHost] = useState<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (activeTab === 'catalog' || activeTab === 'cart') {
+      setMobileSellHost(null);
+      return;
+    }
+
+    // The marketplace landing page owns a nested flex row inside its sticky
+    // header. Portal the mobile sell action into that row so it stays with the
+    // search/filter actions instead of floating above the bottom navigation.
+    const host = document.querySelector<HTMLElement>(
+      '.marketplace-neutral > header > div > .flex',
+    );
+    setMobileSellHost(host);
+  }, [activeTab]);
 
   const items = [
     {
@@ -75,8 +94,30 @@ export function MarketplaceBottomNav({
     },
   ];
 
+  const mobileSellAction = mobileSellHost
+    ? createPortal(
+        <button
+          type="button"
+          aria-label="Sotish"
+          aria-current={activeTab === 'selling' ? 'page' : undefined}
+          onClick={() => navigate('/marketplace?tab=selling')}
+          className={cn(
+            'flex h-11 shrink-0 items-center gap-1.5 rounded-2xl border px-3 text-xs font-extrabold transition active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/25 md:hidden',
+            activeTab === 'selling'
+              ? 'border-foreground bg-foreground text-background'
+              : 'border-border/60 bg-background text-foreground hover:bg-muted/60',
+          )}
+        >
+          <Plus className="h-4 w-4" strokeWidth={2.3} />
+          <span className="hidden min-[360px]:inline">Sotish</span>
+        </button>,
+        mobileSellHost,
+      )
+    : null;
+
   return (
     <>
+      {mobileSellAction}
       <div aria-hidden="true" className="h-24 shrink-0" />
 
       <nav
