@@ -71,7 +71,7 @@ function formatReadyTime(date: Date) {
 }
 
 export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetProps) {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const navigate = useNavigate();
   const { placeOrder, isProcessing, cartItems, cartTotal } = useCheckout();
   const { location, isLocating, error: locationError, locate } = useMarketplaceDeliveryLocation();
@@ -90,6 +90,20 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
     total?: number;
     error?: string;
   } | null>(null);
+
+  const savedCustomerName = useMemo(() => {
+    const profileName = profile?.display_name?.trim();
+    if (profileName) return profileName;
+    const metadataName = user?.user_metadata?.display_name;
+    return typeof metadataName === 'string' ? metadataName.trim() : '';
+  }, [profile?.display_name, user?.user_metadata?.display_name]);
+
+  const savedCustomerPhone = useMemo(() => {
+    const authPhone = user?.phone?.trim();
+    if (authPhone) return authPhone;
+    const metadataPhone = user?.user_metadata?.phone;
+    return typeof metadataPhone === 'string' ? metadataPhone.trim() : '';
+  }, [user?.phone, user?.user_metadata?.phone]);
 
   const currency = cartItems[0]?.product?.currency || 'USD';
   const selectedProvider = ENABLED_PAYMENT_PROVIDERS.find(provider => provider.id === paymentProviderId)
@@ -167,6 +181,16 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
     unavailableItems.length === 0 &&
     !walletInsufficient &&
     Boolean(selectedProvider);
+
+  useEffect(() => {
+    if (!open) return;
+    setAddress(current => {
+      const fullName = current.full_name.trim() ? current.full_name : savedCustomerName;
+      const phone = current.phone.trim() ? current.phone : savedCustomerPhone;
+      if (fullName === current.full_name && phone === current.phone) return current;
+      return { ...current, full_name: fullName, phone };
+    });
+  }, [open, savedCustomerName, savedCustomerPhone]);
 
   useEffect(() => {
     if (!open || !user) return;
