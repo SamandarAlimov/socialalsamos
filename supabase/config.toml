@@ -1,6 +1,27 @@
 project_id = "tcykulflvagvwuygwgmu"
 
 # =====================================================================
+# Hosted Auth configuration
+#
+# @alsamos.com is currently an Alsamos identity namespace. mail.alsamos.com is
+# not yet available, so signup must create an authenticated session immediately
+# and must not depend on an email-confirmation link.
+# =====================================================================
+[auth]
+site_url = "https://alsamos.com"
+additional_redirect_urls = [
+  "https://www.alsamos.com",
+  "https://alsamos.com/reset-password",
+  "https://www.alsamos.com/reset-password"
+]
+enable_signup = true
+
+[auth.email]
+enable_signup = true
+enable_confirmations = false
+double_confirm_changes = true
+
+# =====================================================================
 # verify_jwt policy
 #
 # verify_jwt = false means Supabase does NOT check a JWT before the
@@ -126,20 +147,17 @@ verify_jwt = false
 [functions.sso-session]
 verify_jwt = false
 
-
 # --- Public transport realtime --------------------------------------------
 # Public read gateway for map clients. Upstream GTFS/GTFS-RT credentials stay
 # in Supabase secrets; the function exposes only normalized transport data.
 [functions.transit-realtime]
 verify_jwt = false
 
-
 # --- First-party Global Search crawler --------------------------------------
 # Search results are built from Alsamos' own crawler/index. The crawler is
 # called by a scheduler/admin process and authenticates with CRAWLER_SECRET.
 [functions.web-crawler]
 verify_jwt = false
-
 
 # --- Realtime Global Search ------------------------------------------------
 # Public search endpoint. Provider credentials stay in Supabase secrets.
