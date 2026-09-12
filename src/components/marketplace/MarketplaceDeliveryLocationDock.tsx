@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ArrowLeft, ChevronRight, MapPin } from 'lucide-react';
+import { ChevronRight, MapPin, X } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { useLocation, useNavigate } from 'react-router-dom';
 
@@ -24,7 +24,7 @@ function safeInternalRoute(value: string | null) {
  * - desktop browse mounts a compact address control beside the marketplace tabs;
  * - mobile browse keeps a small full-width control under the search row;
  * - product/cart/checkout can open the same picker through the shared event;
- * - the mobile Marketplace back action is mounted into the sticky header row.
+ * - the mobile Marketplace close action is mounted into the sticky header row.
  *
  * MarketplacePage can be replaced once on mobile when responsive hooks settle,
  * so the observer deliberately keeps the portal targets synchronized while the
@@ -167,9 +167,9 @@ export function MarketplaceDeliveryLocationDock() {
               size="icon"
               className="order-first h-11 w-11 shrink-0 rounded-2xl border-border/60 bg-background/90 shadow-sm md:hidden"
               onClick={goBack}
-              aria-label="Oldingi sahifaga qaytish"
+              aria-label="Marketplace’dan chiqish"
             >
-              <ArrowLeft className="h-5 w-5" />
+              <X className="h-5 w-5" />
             </Button>,
             headerRowTarget,
           )
