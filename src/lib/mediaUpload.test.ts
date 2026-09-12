@@ -36,6 +36,13 @@ describe('historical media provider resolution', () => {
     expect(mocks.from).not.toHaveBeenCalled();
   });
 
+  it('keeps a provider-native HTTPS delivery URL for external media', async () => {
+    const original = 'https://res.cloudinary.com/demo/image/upload/v1/alsamos/example.jpg';
+    const candidates = await resolveStorageUrlCandidates(original, 'alsamos-media', original);
+    expect(candidates).toEqual([original]);
+    expect(mocks.from).not.toHaveBeenCalled();
+  });
+
   it('keeps the original public reference when legacy signing is denied', async () => {
     mocks.createSignedUrl.mockResolvedValue({ data: null, error: { message: 'Access denied' } });
     const original = 'https://mbhjganbihamoiqmankv.supabase.co/storage/v1/object/public/message-attachments/author/clip.mp4';
