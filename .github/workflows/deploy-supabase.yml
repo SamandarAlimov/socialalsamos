@@ -1,10 +1,30 @@
-name: Deploy Supabase
+name: Deploy Supabase Production
 
-# Production Supabase deploys are manual while the new project is being rebuilt.
-# Re-enable push triggers after the migration/security audit is complete and the
-# required repository secrets are configured.
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'supabase/config.toml'
+      - 'supabase/migrations/**'
+      - 'supabase/functions/**'
+      - 'supabase/bootstrap/generated/**'
+      - 'scripts/supabase/**'
+      - '.github/workflows/deploy-supabase.yml'
   workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Database mode. auto is safest for the first rebuild; normal pushes are incremental.'
+        required: true
+        default: auto
+        type: choice
+        options:
+          - auto
+          - incremental
+          - fresh
+
+permissions:
+  contents: read
 
 concurrency:
   group: supabase-production
@@ -12,124 +32,190 @@ concurrency:
 
 jobs:
   deploy:
+    name: Schema + Auth config + Secrets + Edge Functions + Health
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 60
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+
+      # Optional provider/runtime credentials. Values are only synced when the
+      # corresponding GitHub Secret exists; no secret value is committed.
       ALSAMOS_SEARCH_API_KEY: ${{ secrets.ALSAMOS_SEARCH_API_KEY }}
       FIRECRAWL_API_KEY: ${{ secrets.FIRECRAWL_API_KEY }}
       CRAWLER_SECRET: ${{ secrets.CRAWLER_SECRET }}
+      CRON_SECRET: ${{ secrets.CRON_SECRET }}
+      GIPHY_API_KEY: ${{ secrets.GIPHY_API_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       PAYME_MERCHANT_ID: ${{ secrets.PAYME_MERCHANT_ID }}
       PAYME_LOGIN: ${{ secrets.PAYME_LOGIN }}
       PAYME_KEY: ${{ secrets.PAYME_KEY }}
       PAYME_TEST_KEY: ${{ secrets.PAYME_TEST_KEY }}
       PAYME_CHECKOUT_URL: ${{ secrets.PAYME_CHECKOUT_URL }}
       ALSAMOS_APP_URL: ${{ secrets.ALSAMOS_APP_URL }}
-      PROJECT_REF: tcykulflvagvwuygwgmu
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Check deployment credentials
-        id: gate
+      - name: Validate production deployment credentials
         shell: bash
         run: |
-          if [ -n "$SUPABASE_ACCESS_TOKEN" ] && [ -n "$SUPABASE_DB_PASSWORD" ]; then
-            echo "enabled=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "enabled=false" >> "$GITHUB_OUTPUT"
-            echo "::error::Production Supabase deploy is NOT configured. Add SUPABASE_ACCESS_TOKEN and SUPABASE_DB_PASSWORD repository secrets."
+          set -euo pipefail
+          missing=0
+          for name in SUPABASE_ACCESS_TOKEN SUPABASE_DB_PASSWORD SUPABASE_PROJECT_REF; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::$name repository secret is missing."
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            echo "Add the three required secrets in GitHub -> Settings -> Secrets and variables -> Actions."
             exit 1
           fi
 
       - name: Setup Supabase CLI
-        if: steps.gate.outputs.enabled == 'true'
         uses: supabase/setup-cli@v1
         with:
           version: latest
 
-      - name: Link production project
-        if: steps.gate.outputs.enabled == 'true'
+      - name: Prepare deployment scripts
         shell: bash
-        run: supabase link --project-ref "$PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
+        run: chmod +x scripts/supabase/*.sh scripts/supabase/*.py
 
-      - name: Sync optional search and payment secrets
-        if: steps.gate.outputs.enabled == 'true'
+      - name: Link production project
         shell: bash
         run: |
-          if [ -n "$ALSAMOS_SEARCH_API_KEY" ]; then
-            supabase secrets set ALSAMOS_SEARCH_API_KEY="$ALSAMOS_SEARCH_API_KEY" --project-ref "$PROJECT_REF"
-          fi
-          if [ -n "$FIRECRAWL_API_KEY" ]; then
-            supabase secrets set FIRECRAWL_API_KEY="$FIRECRAWL_API_KEY" --project-ref "$PROJECT_REF"
-          fi
-          if [ -n "$CRAWLER_SECRET" ]; then
-            supabase secrets set CRAWLER_SECRET="$CRAWLER_SECRET" --project-ref "$PROJECT_REF"
-          fi
-          if [ -n "$PAYME_MERCHANT_ID" ]; then
-            supabase secrets set PAYME_MERCHANT_ID="$PAYME_MERCHANT_ID" --project-ref "$PROJECT_REF"
-          fi
-          if [ -n "$PAYME_LOGIN" ]; then
-            supabase secrets set PAYME_LOGIN="$PAYME_LOGIN" --project-ref "$PROJECT_REF"
-          fi
-          if [ -n "$PAYME_KEY" ]; then
-            supabase secrets set PAYME_KEY="$PAYME_KEY" --project-ref "$PROJECT_REF"
-          fi
-          if [ -n "$PAYME_TEST_KEY" ]; then
-            supabase secrets set PAYME_TEST_KEY="$PAYME_TEST_KEY" --project-ref "$PROJECT_REF"
-          fi
-          if [ -n "$PAYME_CHECKOUT_URL" ]; then
-            supabase secrets set PAYME_CHECKOUT_URL="$PAYME_CHECKOUT_URL" --project-ref "$PROJECT_REF"
-          fi
-          if [ -n "$ALSAMOS_APP_URL" ]; then
-            supabase secrets set ALSAMOS_APP_URL="$ALSAMOS_APP_URL" --project-ref "$PROJECT_REF"
+          set -euo pipefail
+          supabase link \
+            --project-ref "$SUPABASE_PROJECT_REF" \
+            --password "$SUPABASE_DB_PASSWORD"
+
+      - name: Detect safe database mode
+        id: mode
+        shell: bash
+        env:
+          REQUESTED_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'incremental' }}
+        run: |
+          set -euo pipefail
+          detected="$(python3 scripts/supabase/remote-health.py mode)"
+          requested="$REQUESTED_MODE"
+
+          if [ "$requested" = "auto" ]; then
+            selected="$detected"
           else
-            supabase secrets set ALSAMOS_APP_URL="https://www.alsamos.com/payment?topup=return" --project-ref "$PROJECT_REF"
+            selected="$requested"
           fi
 
-      - name: Push database migrations
-        if: steps.gate.outputs.enabled == 'true'
-        shell: bash
-        run: supabase db push --linked --include-all
+          if [ "$detected" = "mixed" ]; then
+            echo "::error::Remote schema is partially populated: some Alsamos core tables exist and some are missing. Refusing automatic repair because a fresh bootstrap could overwrite/conflict with real data."
+            exit 1
+          fi
 
-      - name: Deploy Global Search
-        if: steps.gate.outputs.enabled == 'true'
-        shell: bash
-        run: supabase functions deploy global-search --project-ref "$PROJECT_REF" --no-verify-jwt
+          if [ "$selected" = "fresh" ] && [ "$detected" != "fresh" ]; then
+            echo "::error::Fresh mode is allowed only when the public schema is truly empty. Detected state: $detected"
+            exit 1
+          fi
 
-      - name: Deploy Payme wallet checkout
-        if: steps.gate.outputs.enabled == 'true'
-        shell: bash
-        run: supabase functions deploy wallet-payme-create --project-ref "$PROJECT_REF"
+          if [ "$selected" = "incremental" ] && [ "$detected" = "fresh" ]; then
+            echo "::error::The project is empty. Run this workflow manually once with mode=auto (or fresh) so the full historical Alsamos bootstrap is applied."
+            exit 1
+          fi
 
-      - name: Deploy Payme Merchant API
-        if: steps.gate.outputs.enabled == 'true'
-        shell: bash
-        run: supabase functions deploy wallet-payme-merchant --project-ref "$PROJECT_REF" --no-verify-jwt
+          echo "selected_mode=$selected" >> "$GITHUB_OUTPUT"
+          echo "Detected database state: $detected"
+          echo "Selected deployment mode: $selected"
 
-      - name: Deploy web crawler
-        if: steps.gate.outputs.enabled == 'true'
+      - name: Deploy database schema and reconcile migration history
         shell: bash
-        run: supabase functions deploy web-crawler --project-ref "$PROJECT_REF" --no-verify-jwt
+        run: scripts/supabase/deploy-database.sh "${{ steps.mode.outputs.selected_mode }}"
 
-      - name: Deploy AI assistant fallback
-        if: steps.gate.outputs.enabled == 'true'
+      - name: Push hosted Auth and function configuration
         shell: bash
-        run: supabase functions deploy ai-assistant --project-ref "$PROJECT_REF" --no-verify-jwt
+        run: supabase config push --project-ref "$SUPABASE_PROJECT_REF"
 
-      - name: Deploy AI code sandbox
-        if: steps.gate.outputs.enabled == 'true'
+      - name: Sync configured Edge Function runtime secrets
         shell: bash
-        run: supabase functions deploy code-sandbox --project-ref "$PROJECT_REF" --no-verify-jwt
+        run: |
+          set -euo pipefail
+          sync_secret() {
+            local name="$1"
+            local value="$2"
+            if [ -n "$value" ]; then
+              echo "Syncing Supabase secret name: $name"
+              supabase secrets set "$name=$value" --project-ref "$SUPABASE_PROJECT_REF" >/dev/null
+            fi
+          }
 
-      - name: Deploy full AI agent
-        if: steps.gate.outputs.enabled == 'true'
-        shell: bash
-        run: supabase functions deploy ai-agent --project-ref "$PROJECT_REF" --no-verify-jwt
+          sync_secret ALSAMOS_SEARCH_API_KEY "${ALSAMOS_SEARCH_API_KEY:-}"
+          sync_secret FIRECRAWL_API_KEY "${FIRECRAWL_API_KEY:-}"
+          sync_secret CRAWLER_SECRET "${CRAWLER_SECRET:-}"
+          sync_secret CRON_SECRET "${CRON_SECRET:-}"
+          sync_secret GIPHY_API_KEY "${GIPHY_API_KEY:-}"
+          sync_secret OPENAI_API_KEY "${OPENAI_API_KEY:-}"
+          sync_secret PAYME_MERCHANT_ID "${PAYME_MERCHANT_ID:-}"
+          sync_secret PAYME_LOGIN "${PAYME_LOGIN:-}"
+          sync_secret PAYME_KEY "${PAYME_KEY:-}"
+          sync_secret PAYME_TEST_KEY "${PAYME_TEST_KEY:-}"
+          sync_secret PAYME_CHECKOUT_URL "${PAYME_CHECKOUT_URL:-}"
 
-      - name: Deploy GitHub connector
-        if: steps.gate.outputs.enabled == 'true'
+          if [ -n "${ALSAMOS_APP_URL:-}" ]; then
+            sync_secret ALSAMOS_APP_URL "$ALSAMOS_APP_URL"
+          else
+            # Not sensitive; this is the canonical payment return fallback.
+            supabase secrets set \
+              ALSAMOS_APP_URL="https://www.alsamos.com/payment?topup=return" \
+              --project-ref "$SUPABASE_PROJECT_REF" >/dev/null
+          fi
+
+      - name: Inventory all custom Edge Function secret names
         shell: bash
-        run: supabase functions deploy github-connector --project-ref "$PROJECT_REF" --no-verify-jwt
+        run: |
+          set -euo pipefail
+          python3 scripts/supabase/runtime-secrets.py \
+            --output /tmp/alsamos-edge-runtime-secrets.txt \
+            --details
+          {
+            echo '### Edge Function runtime secret inventory'
+            echo
+            echo 'Values are never printed. These are source-referenced custom secret names:'
+            echo '```text'
+            cat /tmp/alsamos-edge-runtime-secrets.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload runtime secret-name inventory
+        uses: actions/upload-artifact@v4
+        with:
+          name: supabase-runtime-secret-names
+          path: /tmp/alsamos-edge-runtime-secrets.txt
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Deploy every Supabase Edge Function
+        shell: bash
+        run: scripts/supabase/deploy-functions.sh
+
+      - name: Verify production backend health
+        shell: bash
+        run: python3 scripts/supabase/remote-health.py verify
+
+      - name: Show migration state
+        shell: bash
+        run: supabase migration list --linked --password "$SUPABASE_DB_PASSWORD"
+
+      - name: Deployment summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '### Alsamos Supabase production deployment'
+            echo
+            echo "- database mode: ${{ steps.mode.outputs.selected_mode || 'not-selected' }}"
+            echo '- database: migrations are versioned and non-destructive by default'
+            echo '- auth config: managed from supabase/config.toml'
+            echo '- Edge Functions: auto-discovered from supabase/functions/*/index.ts'
+            echo '- verify_jwt: derived from supabase/config.toml per function'
+            echo '- health gate: social + marketplace + search + wallet + Auth-profile + RLS'
+          } >> "$GITHUB_STEP_SUMMARY"
