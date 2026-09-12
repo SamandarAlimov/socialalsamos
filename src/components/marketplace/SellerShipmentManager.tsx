@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
-  CheckCircle2,
   Clock3,
   PackageCheck,
   Plane,
@@ -45,7 +44,6 @@ const EVENT_PRESETS: Array<{
   { status: 'customs_import', code: 'import_customs', label: 'Import bojxonasi', description: 'Qabul qiluvchi mamlakat bojxonasida tekshiruv boshlandi.' },
   { status: 'customs_hold', code: 'customs_hold', label: 'Bojxonada ushlab turish', description: 'Qo‘shimcha hujjat yoki to‘lov talab qilinmoqda.' },
   { status: 'out_for_delivery', code: 'last_mile', label: 'Mahalliy kuryerda', description: 'Yetkazma oxirgi manzilga olib borilmoqda.' },
-  { status: 'delivered', code: 'delivered', label: 'Yetkazildi', description: 'Buyurtma qabul qiluvchiga topshirildi.' },
 ];
 
 function ModeIcon({ mode }: { mode: ShipmentTransportMode }) {
@@ -179,8 +177,6 @@ export function SellerShipmentManager({
       ['handed_over','customs_export','in_transit','customs_import','customs_hold','out_for_delivery'].includes(preset.status)
     ) {
       await onOrderStatusChange?.('shipped');
-    } else if (order.status === 'shipped' && preset.status === 'delivered') {
-      await onOrderStatusChange?.('delivered');
     }
 
     setEventLocation('');
@@ -299,12 +295,18 @@ export function SellerShipmentManager({
 
           <div className="grid grid-cols-2 gap-2">
             {eventPresets.map(preset => (
-              <Button key={preset.status} type="button" variant={preset.status === 'delivered' ? 'default' : 'outline'} className="min-h-10 h-auto justify-start rounded-xl px-3 py-2 text-left text-[10px]" disabled={isSaving} onClick={() => void handleEvent(preset)}>
-                {preset.status.includes('customs') ? <ShieldCheck className="mr-1.5 h-3.5 w-3.5 shrink-0" /> : preset.status === 'delivered' ? <CheckCircle2 className="mr-1.5 h-3.5 w-3.5 shrink-0" /> : <Truck className="mr-1.5 h-3.5 w-3.5 shrink-0" />}
+              <Button key={preset.status} type="button" variant="outline" className="min-h-10 h-auto justify-start rounded-xl px-3 py-2 text-left text-[10px]" disabled={isSaving} onClick={() => void handleEvent(preset)}>
+                {preset.status.includes('customs') ? <ShieldCheck className="mr-1.5 h-3.5 w-3.5 shrink-0" /> : <Truck className="mr-1.5 h-3.5 w-3.5 shrink-0" />}
                 {preset.label}
               </Button>
             ))}
           </div>
+
+          {order.status === 'shipped' && (
+            <p className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-[10px] text-emerald-700 dark:text-emerald-400">
+              Yakuniy “Yetkazildi” holati faqat mijozning topshirish kodi/barcode tasdiqlangandan keyin qo‘yiladi.
+            </p>
+          )}
 
           {international && (
             <>
