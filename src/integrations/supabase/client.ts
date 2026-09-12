@@ -8,40 +8,54 @@ import type { Database } from './types';
 import { sharedSupabaseStorage } from './sharedCookieStorage';
 import { AUTH_STORAGE_KEY } from '@/lib/authConstants';
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+// Client-side Supabase project configuration is public by design. Keep the
+// canonical project here as a safe migration fallback so a stale hosting env
+// cannot accidentally send the web app back to the retired Lovable project.
+// Hosting env values still take precedence unless they point at that retired
+// project.
+const CANONICAL_PROJECT_REF = 'tcykulflvagvwuygwgmu';
+const RETIRED_PROJECT_REF = 'mbhjganbihamoiqmankv';
+const CANONICAL_SUPABASE_URL = `https://${CANONICAL_PROJECT_REF}.supabase.co`;
+const CANONICAL_SUPABASE_PUBLISHABLE_KEY =
+  'sb_publishable_ZfK2a0Rut0mlFYVaLpKt9g_YmX-Ppu1';
+
+const configuredUrl = String(import.meta.env.VITE_SUPABASE_URL || '').trim();
+const configuredKey = String(import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || '').trim();
+const configuredProjectId = String(import.meta.env.VITE_SUPABASE_PROJECT_ID || '').trim();
+
+const pointsToRetiredProject =
+  configuredProjectId === RETIRED_PROJECT_REF ||
+  configuredUrl.includes(RETIRED_PROJECT_REF);
+
+const SUPABASE_URL =
+  !configuredUrl || pointsToRetiredProject
+    ? CANONICAL_SUPABASE_URL
+    : configuredUrl;
+
+const SUPABASE_PUBLISHABLE_KEY =
+  !configuredKey || pointsToRetiredProject
+    ? CANONICAL_SUPABASE_PUBLISHABLE_KEY
+    : configuredKey;
 
 /**
  * Env validatsiyasi.
  *
- * Ilgari bu qiymatlar tekshirilmasdan `createClient` ga berilardi. Agar
- * production build'da `VITE_SUPABASE_URL` yoki `VITE_SUPABASE_PUBLISHABLE_KEY`
- * bo'lmasa (masalan Vercel env sozlanmagan yoki build boshqa muhitda qilingan),
- * har bir so'rov "Failed to fetch" / "Invalid API key" bilan yiqilardi va
- * foydalanuvchi hamma sahifada sababsiz "yuklab bo'lmadi" xatosini ko'rardi.
- *
- * Endi sabab darhol ko'rinadi: modul yuklanishida aniq xabar bilan xato
- * tashlanadi va konsolga qanday tuzatish kerakligi yoziladi.
+ * Client config has a canonical fallback during the backend migration. Invalid
+ * custom hosting values still fail fast so deployments do not silently point at
+ * an unintended project.
  */
-function requireEnv(name: string, value: unknown): string {
+function requireValue(name: string, value: unknown): string {
   if (typeof value === 'string' && value.trim().length > 0) {
     return value.trim();
   }
 
-  const message =
-    `[alsamos] Supabase sozlanmagan: ${name} env o'zgaruvchisi yo'q yoki bo'sh. ` +
-    `Bu holatda ilovaning hamma sahifasi ma'lumot yuklay olmaydi. ` +
-    `Lokalda .env faylga (.env.example dan ko'chirib) qo'shing, ` +
-    `productionda esa hosting (Vercel) Environment Variables bo'limiga qo'shib, ` +
-    `qayta deploy qiling. VITE_ bilan boshlanadigan o'zgaruvchilar faqat build ` +
-    `vaqtida o'qiladi, shuning uchun env qo'shgandan keyin redeploy shart.`;
-
+  const message = `[alsamos] Supabase sozlanmagan: ${name} qiymati yo'q yoki bo'sh.`;
   console.error(message);
   throw new Error(message);
 }
 
-const supabaseUrl = requireEnv('VITE_SUPABASE_URL', SUPABASE_URL);
-const supabaseKey = requireEnv('VITE_SUPABASE_PUBLISHABLE_KEY', SUPABASE_PUBLISHABLE_KEY);
+const supabaseUrl = requireValue('VITE_SUPABASE_URL', SUPABASE_URL);
+const supabaseKey = requireValue('VITE_SUPABASE_PUBLISHABLE_KEY', SUPABASE_PUBLISHABLE_KEY);
 
 if (!/^https?:\/\//.test(supabaseUrl)) {
   const message =
