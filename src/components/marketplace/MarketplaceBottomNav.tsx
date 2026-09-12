@@ -2,7 +2,6 @@ import {
   ClipboardList,
   Grid3X3,
   Heart,
-  Plus,
   ShoppingBag,
   Store,
 } from 'lucide-react';
@@ -79,22 +78,6 @@ export function MarketplaceBottomNav({
   return (
     <>
       <div aria-hidden="true" className="h-24 shrink-0" />
-
-      <button
-        type="button"
-        aria-label="Sotuvchi markazi"
-        aria-current={activeTab === 'selling' ? 'page' : undefined}
-        onClick={() => navigate('/marketplace?tab=selling')}
-        className={cn(
-          'fixed bottom-[calc(env(safe-area-inset-bottom)+88px)] right-4 z-[70] flex h-12 items-center gap-2 rounded-full border px-4 text-xs font-extrabold backdrop-blur-3xl transition duration-200 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/30 md:hidden',
-          activeTab === 'selling'
-            ? 'border-foreground bg-foreground text-background shadow-[0_14px_34px_rgba(0,0,0,0.22)]'
-            : 'border-foreground/[0.12] bg-background/[0.98] text-foreground shadow-[0_14px_34px_rgba(0,0,0,0.16)] ring-1 ring-foreground/[0.04]',
-        )}
-      >
-        <Plus className="h-4 w-4" strokeWidth={2.3} />
-        Sotish
-      </button>
 
       <nav
         aria-label="Marketplace navigatsiyasi"
