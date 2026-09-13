@@ -91,7 +91,11 @@
       "destination": "https://media.alsamos.com/:path*"
     },
     {
-      "source": "/((?!api/.*|mp/.*|__media/.*).*)",
+      "source": "/__supabase-media/:path*",
+      "destination": "https://tcykulflvagvwuygwgmu.supabase.co/storage/v1/object/public/media/:path*"
+    },
+    {
+      "source": "/((?!api/.*|mp/.*|__media/.*|__supabase-media/.*).*)",
       "destination": "/index.html"
     }
   ],
