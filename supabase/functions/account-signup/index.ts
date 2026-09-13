@@ -1,10 +1,10 @@
 // POST /account-signup
 //
 // Creates the primary Alsamos identity without depending on an email or SMS
-// delivery service. Email and phone are both required, but only the email is
-// marked confirmed for Auth so the user can sign in immediately. The phone is
-// stored as an unverified identity/contact-discovery attribute until Alsamos
-// adds an OTP provider.
+// delivery service. Email and phone are both required. The email is confirmed
+// server-side so the user can sign in immediately. The phone is also stored on
+// the Supabase Auth user (so it appears in Authentication > Users) but remains
+// unverified until Alsamos adds a real OTP provider.
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -171,8 +171,10 @@ serve(async (req) => {
 
   const { data: created, error: createError } = await admin.auth.admin.createUser({
     email,
+    phone,
     password,
     email_confirm: true,
+    phone_confirm: false,
     user_metadata: {
       username,
       display_name: displayName || username,
