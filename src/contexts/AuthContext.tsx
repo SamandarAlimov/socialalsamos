@@ -7,16 +7,18 @@ import {
   AlsamosAuthError,
   authErrorMessage,
   DIRECT_SESSION_TICKET,
-  directPasswordLogin,
-  isAlsamosEmail,
   isUsernameValid,
   LoginStepResult,
   normalizePhoneInput,
   requestAccountSession,
+  requestLoginTicket,
   toIdentityEmail,
   TOS_VERSION,
 } from '@/lib/alsamosAuth';
 import { checkPassword } from '@/lib/passwordStrength';
+import {
+  registerFirstPartyIdentity,
+} from '@/lib/firstPartyIdentity';
 import {
   clearSlot,
   getActiveSlot,
@@ -53,7 +55,7 @@ interface AuthContextType {
   isLoading: boolean;
   /**
    * Step 1: verify the password and get the account list + ticket.
-   * `identifier` may be an email, a username or a phone number.
+   * `identifier` is an Alsamos username or a phone number.
    */
   beginLogin: (identifier: string, password: string) => Promise<LoginStepResult>;
   /** Step 2: open a session for one of the identity's accounts. */
@@ -63,12 +65,11 @@ interface AuthContextType {
   signup: (params: {
     email: string;
     password: string;
-    phone?: string;
+    phone: string;
     displayName?: string;
     username?: string;
     acceptedTerms: boolean;
   }) => Promise<AuthResult & { needsEmailConfirmation?: boolean }>;
-  requestPasswordReset: (email: string) => Promise<AuthResult>;
   updatePassword: (newPassword: string) => Promise<AuthResult>;
   logout: () => Promise<void>;
   updateProfile: (updates: Partial<Profile>) => Promise<void>;
@@ -192,13 +193,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // ---------------------------------------------------------------------
   // Login
   //
-  // Signing in talks ONLY to Supabase Auth (/auth/v1/token), exactly like the
-  // original implementation. No edge function is involved, so an undeployed or
-  // CORS-blocked `account-login` can never prevent anyone from logging in.
+  // Public authentication is username/phone based and flows through
+  // the identity endpoint so rate limits, TOTP and account selection are enforced.
   // ---------------------------------------------------------------------
   const beginLogin = async (identifier: string, password: string): Promise<LoginStepResult> => {
-    return directPasswordLogin(identifier, password);
-  };
+  return requestLoginTicket(identifier, password);
+};
 
   const completeLogin = async (ticket: string, accountId?: string): Promise<AuthResult> => {
     // Sign-in already opened the session; nothing left to exchange.
@@ -267,8 +267,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   // ---------------------------------------------------------------------
-  // Signup (identity creation) - the identity email must be @alsamos.com,
-  // while login later accepts email, username or phone.
+  // Signup (identity creation) - @alsamos.com is an internal credential only.
+  // Public login accepts username or phone; no mailbox is required.
   // ---------------------------------------------------------------------
   const signup: AuthContextType['signup'] = async ({
     email,
@@ -278,21 +278,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     username,
     acceptedTerms,
   }) => {
-    const identityEmail = toIdentityEmail(email);
-
-    if (!isAlsamosEmail(identityEmail)) {
-      const error = new AlsamosAuthError('EMAIL_DOMAIN_NOT_ALLOWED');
-      toast({
-        title: 'Ro’yxatdan o’tish amalga oshmadi',
-        description: error.message,
-        variant: 'destructive',
-      });
+    const contactEmail = email.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactEmail) || contactEmail.length > 254) {
+      const error = new Error('Email manzilni to’g’ri kiriting.');
+      toast({ title: 'Email xato', description: error.message, variant: 'destructive' });
       return { error };
     }
 
-    const finalUsername = (username || identityEmail.split('@')[0])
+    const finalUsername = (username || contactEmail.split('@')[0])
       .toLowerCase()
       .replace(/[^a-z0-9_]/g, '');
+    const identityEmail = toIdentityEmail(finalUsername);
 
     if (!isUsernameValid(finalUsername)) {
       const error = new AlsamosAuthError('USERNAME_INVALID');
@@ -300,19 +296,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { error };
     }
 
-    // Phone is optional, but when present it must be a valid E.164 number:
-    // it becomes a login identifier, so a broken value would lock the user out.
-    let normalizedPhone: string | null = null;
-    if (phone && phone.trim()) {
-      normalizedPhone = normalizePhoneInput(phone);
-      if (!normalizedPhone) {
-        const error = new AlsamosAuthError('PHONE_INVALID');
-        toast({ title: 'Telefon raqam xato', description: error.message, variant: 'destructive' });
-        return { error };
-      }
+    // Phone is mandatory: besides login, it powers privacy-preserving
+    // contact discovery/user suggestions. Persist only the normalized E.164 form.
+    const normalizedPhone = normalizePhoneInput(phone);
+    if (!normalizedPhone) {
+      const error = new AlsamosAuthError('PHONE_INVALID');
+      toast({ title: 'Telefon raqam xato', description: error.message, variant: 'destructive' });
+      return { error };
     }
 
-    const strength = checkPassword(password, [identityEmail, finalUsername]);
+    const strength = checkPassword(password, [contactEmail, identityEmail, finalUsername, normalizedPhone]);
     if (!strength.valid) {
       const error = new Error(strength.problems[0]);
       toast({ title: 'Parol juda kuchsiz', description: error.message, variant: 'destructive' });
@@ -327,69 +320,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     setIsLoading(true);
 
-    const { data, error } = await supabase.auth.signUp({
-      email: identityEmail,
+    try {
+    const { repaired } = await registerFirstPartyIdentity({
+      email: contactEmail,
       password,
-      options: {
-        emailRedirectTo: `${window.location.origin}/`,
-        data: {
-          display_name: displayName || finalUsername,
-          username: finalUsername,
-          phone: normalizedPhone,
-          tos_version: TOS_VERSION,
-        },
-      },
+      username: finalUsername,
+      displayName: displayName || finalUsername,
+      phone: normalizedPhone,
+      tosVersion: TOS_VERSION,
     });
 
-    setIsLoading(false);
-
-    if (error) {
-      // Never confirm whether an address is already registered.
-      const message = /already|registered|exists/i.test(error.message)
-        ? 'Agar bu manzil bo’sh bo’lsa, tasdiqlash xati yuborildi.'
-        : error.message;
-      toast({
-        title: 'Ro’yxatdan o’tish',
-        description: message,
-        variant: 'destructive',
-      });
-      return { error };
-    }
-
-    const needsEmailConfirmation = !data.session;
-
     toast({
-      title: 'Akkaunt yaratildi',
-      description: needsEmailConfirmation
-        ? 'Emailingizga tasdiqlash havolasi yuborildi. Havolani bosgach kirishingiz mumkin.'
+      title: repaired ? 'Akkaunt tiklandi' : 'Akkaunt yaratildi',
+      description: repaired
+        ? 'Oldingi tasdiqlanmagan Alsamos identifikatori xavfsiz tiklandi va tizimga kirdingiz.'
         : 'Alsamosga xush kelibsiz!',
     });
 
-    return { error: null, needsEmailConfirmation };
+    return { error: null, needsEmailConfirmation: false };
+  } catch (e) {
+    const error = e instanceof Error ? e : new Error('Ro’yxatdan o’tish amalga oshmadi.');
+    toast({
+      title: 'Ro’yxatdan o’tish amalga oshmadi',
+      description: error.message,
+      variant: 'destructive',
+    });
+    return { error };
+  } finally {
+    setIsLoading(false);
+  }
   };
 
   // ---------------------------------------------------------------------
   // Password recovery / change
   // ---------------------------------------------------------------------
-  const requestPasswordReset = async (email: string): Promise<AuthResult> => {
-    const identityEmail = toIdentityEmail(email);
-
-    if (!isAlsamosEmail(identityEmail)) {
-      const error = new AlsamosAuthError('EMAIL_DOMAIN_NOT_ALLOWED');
-      toast({ title: 'Email xato', description: error.message, variant: 'destructive' });
-      return { error };
-    }
-
-    const { error } = await supabase.auth.resetPasswordForEmail(identityEmail, {
-      redirectTo: `${window.location.origin}/reset-password`,
-    });
-
-    // The UI shows the same message either way, so a missing account cannot
-    // be detected from the outside.
-    if (error) console.error('resetPasswordForEmail failed', error);
-
-    return { error: null };
-  };
 
   const updatePassword = async (newPassword: string): Promise<AuthResult> => {
     const strength = checkPassword(newPassword, [user?.email ?? '', profile?.username ?? '']);
@@ -483,7 +447,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         completeLogin,
         login,
         signup,
-        requestPasswordReset,
         updatePassword,
         logout,
         updateProfile,

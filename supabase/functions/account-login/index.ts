@@ -1,14 +1,15 @@
 // POST /account-login
 //
 // Step 1 of the Alsamos login.
-//   in : { identifier: "<email | username | phone>", password, device_id? }
+//   in : { identifier: "<username | phone>", password, device_id? }
 //   out: { ticket, accounts[], identity } | { mfa_required: true, ticket }
 //
-// Accepted identifiers:
-//   * <name>@alsamos.com  - identity email
-//   * old email address   - preserved legacy address (gmail.com etc.)
-//   * username            - of ANY account owned by the identity
-//   * phone number        - identity phone (E.164, any human formatting)
+// Public identifiers:
+//   * username     - of ANY account owned by the identity
+//   * phone number - identity phone (E.164, any human formatting)
+//
+// @alsamos.com remains an internal Supabase credential namespace. It is never
+// accepted as a public login identifier by this endpoint.
 //
 // Security properties:
 //   * the identifier is resolved inside the database with service_role only;
@@ -55,9 +56,7 @@ serve(async (req) => {
   let password = "";
   try {
     const body = await req.json();
-    // `email` is still accepted for backwards compatibility.
-    const raw = body?.identifier ?? body?.email;
-    identifier = typeof raw === "string" ? raw.trim() : "";
+    identifier = typeof body?.identifier === "string" ? body.identifier.trim() : "";
     password = typeof body?.password === "string" ? body.password : "";
   } catch {
     return authError(req, "INVALID_REQUEST", 400);
@@ -83,12 +82,16 @@ serve(async (req) => {
     return authError(req, "TOO_MANY_ATTEMPTS", 429);
   }
 
-  if (kind === "invalid") {
+  // Email is deliberately rejected at the server boundary as defence in depth.
+  // The browser already validates username/phone only, but callers must not be
+  // able to bypass that rule by invoking this Edge Function directly.
+  if (kind === "invalid" || kind === "email") {
     await recordAttempt(admin, identifierHash, ip, "failure");
     await audit(admin, req, {
       eventType: "login",
       outcome: "failure",
-      reason: "malformed_identifier",
+      reason: kind === "email" ? "email_login_disabled" : "malformed_identifier",
+      metadata: { identifier_kind: kind },
     });
     return authError(req, "INVALID_CREDENTIALS", 401);
   }
@@ -110,10 +113,37 @@ serve(async (req) => {
   // Verify the password with an anonymous client, then drop the session:
   // the browser must not receive a session before choosing an account.
   const anon = anonClient();
-  const { data: signIn, error: signInError } = await anon.auth.signInWithPassword({
+  let { data: signIn, error: signInError } = await anon.auth.signInWithPassword({
     email: resolved.loginEmail,
     password,
   });
+
+  if (signInError && /not confirmed/i.test(signInError.message ?? "")) {
+    const { data: verifiedUserId } = await admin.rpc("verify_alsamos_identity_password", {
+      _email: resolved.loginEmail,
+      _password: password,
+    });
+    if (typeof verifiedUserId === "string" && verifiedUserId) {
+      const { error: confirmError } = await admin.auth.admin.updateUserById(verifiedUserId, {
+        email_confirm: true,
+      });
+      if (!confirmError) {
+        const retry = await anon.auth.signInWithPassword({
+          email: resolved.loginEmail,
+          password,
+        });
+        signIn = retry.data;
+        signInError = retry.error;
+        await audit(admin, req, {
+          eventType: "identity_confirmation_repair",
+          outcome: retry.error ? "failure" : "success",
+          reason: retry.error?.message ?? null,
+          identityId: resolved.identityId,
+          userId: verifiedUserId,
+        });
+      }
+    }
+  }
 
   if (signInError || !signIn?.user) {
     await recordAttempt(admin, identifierHash, ip, "failure");
@@ -128,17 +158,17 @@ serve(async (req) => {
   }
 
   const userId = signIn.user.id;
-  await anon.auth.signOut({ scope: "global" }).catch(() => {});
+  await anon.auth.signOut({ scope: "local" }).catch(() => {});
 
   if (!signIn.user.email_confirmed_at) {
     await audit(admin, req, {
       eventType: "login",
       outcome: "blocked",
-      reason: "email_not_confirmed",
+      reason: "identity_confirmation_unavailable",
       identityId: resolved.identityId,
       userId,
     });
-    return authError(req, "EMAIL_NOT_CONFIRMED", 403);
+    return authError(req, "IDENTITY_UNAVAILABLE", 403);
   }
 
   const { data: identity } = await admin

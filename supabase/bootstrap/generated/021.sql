@@ -920,6 +920,97 @@ GRANT EXECUTE ON FUNCTION public.marketplace_verify_order_handoff(text) TO authe
 
 
 -- ============================================================================
+-- SOURCE B-web: 20260913062000_first_party_auth_password_verifier.sql
+-- SHA256 b1e7b76851c3d5d771c4c67f2c92f40666715adfc824f298d240552a494c4c8e
+-- ============================================================================
+-- Alsamos @alsamos.com addresses are an internal identity namespace, not
+-- deliverable mailboxes. This helper lets the trusted account-signup Edge
+-- Function repair a user that was accidentally created while Supabase's
+-- Confirm Email setting was enabled.
+--
+-- SECURITY: the function is deliberately service_role-only. It never returns
+-- password material; it returns the user id only when the supplied password
+-- matches auth.users.encrypted_password.
+
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+CREATE OR REPLACE FUNCTION public.verify_alsamos_identity_password(
+  _email text,
+  _password text
+)
+RETURNS uuid
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, auth, extensions
+AS $$
+DECLARE
+  v_email text := lower(trim(coalesce(_email, '')));
+  v_user_id uuid;
+  v_hash text;
+BEGIN
+  IF v_email !~ '^[a-z0-9._%+\-]{1,64}@alsamos\.com$'
+     OR v_email LIKE '%@accounts.alsamos.com'
+     OR coalesce(_password, '') = '' THEN
+    RETURN NULL;
+  END IF;
+
+  SELECT u.id, u.encrypted_password
+    INTO v_user_id, v_hash
+  FROM auth.users u
+  WHERE lower(u.email) = v_email
+  LIMIT 1;
+
+  IF v_user_id IS NULL OR coalesce(v_hash, '') = '' THEN
+    RETURN NULL;
+  END IF;
+
+  IF v_hash = crypt(_password, v_hash) THEN
+    RETURN v_user_id;
+  END IF;
+
+  RETURN NULL;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.verify_alsamos_identity_password(text, text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.verify_alsamos_identity_password(text, text) FROM anon;
+REVOKE ALL ON FUNCTION public.verify_alsamos_identity_password(text, text) FROM authenticated;
+GRANT EXECUTE ON FUNCTION public.verify_alsamos_identity_password(text, text) TO service_role;
+
+COMMENT ON FUNCTION public.verify_alsamos_identity_password(text, text) IS
+  'Server-only ownership proof for @alsamos.com identities accidentally left unconfirmed. Never expose to browser roles.';
+
+
+-- ============================================================================
+-- SOURCE B-web: 20260913090000_backfill_existing_auth_profiles.sql
+-- SHA256 a3c59b7fccaa6ea0fb5d900b78505e4d9b68312bda367fcdd487b73f1498e28b
+-- ============================================================================
+-- Users may have been created in Supabase Auth before the Alsamos public schema
+-- was restored. The auth.users -> public.profiles trigger only runs for future
+-- inserts, so backfill any already-existing Auth users after profiles exists.
+--
+-- Username is intentionally left NULL for backfilled rows to avoid colliding
+-- with an existing unique username. The normal profile/onboarding flow can set
+-- it later. public.profiles.id is the critical FK used by posts/messages/etc.
+
+INSERT INTO public.profiles (id, display_name, avatar_url)
+SELECT
+  u.id,
+  COALESCE(
+    NULLIF(u.raw_user_meta_data ->> 'display_name', ''),
+    NULLIF(split_part(COALESCE(u.email, ''), '@', 1), ''),
+    'Foydalanuvchi'
+  ) AS display_name,
+  NULLIF(u.raw_user_meta_data ->> 'avatar_url', '') AS avatar_url
+FROM auth.users AS u
+LEFT JOIN public.profiles AS p ON p.id = u.id
+WHERE p.id IS NULL
+ON CONFLICT (id) DO NOTHING;
+
+NOTIFY pgrst, 'reload schema';
+
+
+-- ============================================================================
 -- SOURCE A-superapp: _combined_phase1_3_idempotent.sql
 -- SHA256 b4ac5e87548fa3c5d7e21f89333b6a795acf279df362241c446b6233307de30d
 -- ============================================================================

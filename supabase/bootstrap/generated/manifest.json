@@ -1,7 +1,7 @@
 {
   "format": 1,
   "strategy": "merge by leading timestamp; A-superapp before B-web on exact timestamp; exact-content duplicates applied once",
-  "ordered_migration_count": 266,
+  "ordered_migration_count": 268,
   "duplicate_count": 45,
   "excluded_count": 2,
   "chunks": [
@@ -386,7 +386,7 @@
     },
     {
       "file": "021.sql",
-      "bytes": 51298,
+      "bytes": 54697,
       "migrations": [
         "B-web:20260908155500_marketplace_international_checkout_v1.sql",
         "B-web:20260908160500_marketplace_auto_seed_international_shipment.sql",
@@ -394,6 +394,8 @@
         "B-web:20260911070000_marketplace_currency_uzs.sql",
         "B-web:20260912093000_order_handoff_verification.sql",
         "B-web:20260912094500_require_handoff_scan_for_delivery.sql",
+        "B-web:20260913062000_first_party_auth_password_verifier.sql",
+        "B-web:20260913090000_backfill_existing_auth_profiles.sql",
         "A-superapp:_combined_phase1_3_idempotent.sql"
       ]
     }

@@ -26,10 +26,8 @@ import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
-  ALSAMOS_MAIL_DOMAIN,
   AlsamosAuthError,
   classifyIdentifier,
-  isAlsamosEmail,
   isRecoveryCode,
   isTotpCode,
   LEGAL_ROUTES,
@@ -37,7 +35,6 @@ import {
   MAX_ACCOUNTS_PER_IDENTITY,
   normalizePhoneInput,
   PublicAccount,
-  toIdentityEmail,
   verifyMfaLogin,
 } from '@/lib/alsamosAuth';
 import { checkPassword, passwordStrengthColor } from '@/lib/passwordStrength';
@@ -45,14 +42,17 @@ import { checkPassword, passwordStrengthColor } from '@/lib/passwordStrength';
 type AuthMode = 'login' | 'signup';
 type LoginStep = 'credentials' | 'mfa' | 'chooseAccount';
 
-/** Login accepts an email, a username or a phone number. */
+/** Public login accepts only an Alsamos username or a phone number. */
 const identifierField = z
   .string()
   .trim()
-  .min(3, 'Email, username yoki telefon raqamni kiriting')
+  .min(3, 'Username yoki telefon raqamni kiriting')
   .max(255)
-  .refine((value) => classifyIdentifier(value) !== 'invalid', {
-    message: 'Email, username yoki telefon raqamni to’g’ri kiriting',
+  .refine((value) => {
+    const kind = classifyIdentifier(value);
+    return kind === 'username' || kind === 'phone';
+  }, {
+    message: 'Username yoki telefon raqamni to’g’ri kiriting',
   });
 
 const loginSchema = z.object({
@@ -60,15 +60,13 @@ const loginSchema = z.object({
   password: z.string().min(1, 'Parolni kiriting').max(128),
 });
 
-/** Signup still creates an @alsamos.com identity. */
-const signupEmailField = z
+/** Signup creates an internal identity from the public username. */
+const contactEmailField = z
   .string()
   .trim()
   .min(3, 'Emailni kiriting')
-  .max(255)
-  .refine((value) => isAlsamosEmail(toIdentityEmail(value)), {
-    message: `Ro’yxatdan o’tish faqat @${ALSAMOS_MAIL_DOMAIN} manzili bilan`,
-  });
+  .max(254)
+  .email('Email manzilni to’g’ri kiriting');
 
 const signupSchema = z
   .object({
@@ -79,7 +77,7 @@ const signupSchema = z
       .min(3, 'Username kamida 3 ta belgi')
       .max(30)
       .regex(/^[a-z0-9_]+$/, 'Username: faqat kichik harflar, raqamlar va _'),
-    email: signupEmailField,
+    email: contactEmailField,
     phone: z
       .string()
       .trim()
@@ -129,8 +127,8 @@ export default function AuthPage() {
     rawNext && rawNext.startsWith('/') && !rawNext.startsWith('//') ? rawNext : '/home';
 
   const strength = useMemo(
-    () => checkPassword(password, [email, username, fullName]),
-    [password, email, username, fullName],
+    () => checkPassword(password, [email, username, fullName, phone]),
+    [password, email, username, fullName, phone],
   );
 
   const resetForm = () => {
@@ -276,8 +274,8 @@ export default function AuthPage() {
       return;
     }
 
-    const { error, needsEmailConfirmation } = await signup({
-      email: toIdentityEmail(parsed.data.email),
+    const { error } = await signup({
+      email: parsed.data.email,
       password: parsed.data.password,
       phone: parsed.data.phone,
       displayName: parsed.data.fullName,
@@ -286,12 +284,6 @@ export default function AuthPage() {
     });
 
     if (error) return;
-
-    if (needsEmailConfirmation) {
-      setMode('login');
-      resetForm();
-      return;
-    }
 
     navigate(nextPath);
   };
@@ -421,8 +413,8 @@ export default function AuthPage() {
               <div className="text-center">
                 <h2 className="text-lg font-semibold">Akkauntni tanlang</h2>
                 <p className="text-sm text-muted-foreground">
-                  {loginStep.identity.email} · {loginStep.identity.used}/
-                  {loginStep.identity.max || MAX_ACCOUNTS_PER_IDENTITY}
+                  {loginStep.identity.used}/
+                  {loginStep.identity.max || MAX_ACCOUNTS_PER_IDENTITY} akkaunt
                 </p>
               </div>
 
@@ -502,10 +494,10 @@ export default function AuthPage() {
 
               <form onSubmit={handleSubmit} className="space-y-4">
                 {mode === 'login' ? (
-                  /* Email, username or phone number */
+                  /* Username or phone number */
                   <Input
                     type="text"
-                    placeholder="Email, username yoki telefon raqam"
+                    placeholder="Username yoki telefon raqam"
                     value={identifier}
                     onChange={(e) => setIdentifier(e.target.value)}
                     icon={<UserRound className="h-4 w-4" />}
@@ -540,9 +532,10 @@ export default function AuthPage() {
                       required
                     />
 
+
                     <Input
                       type="email"
-                      placeholder={`username@${ALSAMOS_MAIL_DOMAIN}`}
+                      placeholder="Email"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       icon={<Mail className="h-4 w-4" />}
