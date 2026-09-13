@@ -1,24 +1,28 @@
-name: One-shot Post Visibility Repair
+name: One-shot Signup Backend Diagnostic
 
 on:
   push:
     branches: [main]
     paths:
-      - "api/repair-post-visibility.ts"
       - ".github/workflows/invoke-post-repair.yml"
 
 jobs:
-  repair:
+  diagnostic:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Wait for production deploy and repair
+      - name: Exercise production Auth create path
         shell: bash
         run: |
           set -euo pipefail
-          sleep 25
           TMP="$(mktemp)"
-          STATUS="$(curl --silent --show-error --max-time 45 -o "$TMP" -w '%{http_code}' https://www.alsamos.com/api/repair-post-visibility)"
+          STATUS="$(curl --silent --show-error --max-time 45 -o "$TMP" -w '%{http_code}' \
+            -X POST \
+            -H 'Content-Type: application/json' \
+            -H 'Origin: https://alsamos.com' \
+            -H 'x-alsamos-diagnostic: full-signup-selftest' \
+            --data '{}' \
+            https://tcykulflvagvwuygwgmu.supabase.co/functions/v1/account-signup)"
           echo "HTTP $STATUS"
           cat "$TMP"
           echo
