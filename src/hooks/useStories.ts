@@ -5,6 +5,15 @@ import { useToast } from '@/hooks/use-toast';
 import { resolveStorageUrl } from '@/lib/mediaUpload';
 import { db } from '@/lib/db';
 
+const SUPABASE_PUBLIC_MEDIA_PREFIX =
+  'https://tcykulflvagvwuygwgmu.supabase.co/storage/v1/object/public/media/';
+
+function throughSameOriginMediaProxy(value?: string | null): string | null {
+  if (!value) return null;
+  if (!value.startsWith(SUPABASE_PUBLIC_MEDIA_PREFIX)) return value;
+  return `/__supabase-media/${value.slice(SUPABASE_PUBLIC_MEDIA_PREFIX.length)}`;
+}
+
 export interface Story {
   id: string;
   user_id: string;
@@ -106,8 +115,18 @@ export function useStories() {
               story.storage_bucket ? String(story.storage_bucket) : null,
               story.storage_key ? String(story.storage_key) : null,
             );
+            const profile = story.profile
+              ? {
+                  ...story.profile,
+                  avatar_url: throughSameOriginMediaProxy(story.profile.avatar_url),
+                }
+              : story.profile;
 
-            return { ...story, media_url: mediaUrl } as Story & {
+            return {
+              ...story,
+              media_url: throughSameOriginMediaProxy(mediaUrl) ?? '',
+              profile,
+            } as Story & {
               profile?: Story['profile'];
             };
           } catch (resolveError) {
