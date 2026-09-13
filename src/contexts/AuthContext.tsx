@@ -18,6 +18,10 @@ import {
 } from '@/lib/alsamosAuth';
 import { checkPassword } from '@/lib/passwordStrength';
 import {
+  registerFirstPartyIdentity,
+  repairFirstPartyIdentity,
+} from '@/lib/firstPartyIdentity';
+import {
   clearSlot,
   getActiveSlot,
   occupiedSlots,
@@ -197,8 +201,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // CORS-blocked `account-login` can never prevent anyone from logging in.
   // ---------------------------------------------------------------------
   const beginLogin = async (identifier: string, password: string): Promise<LoginStepResult> => {
-    return directPasswordLogin(identifier, password);
-  };
+  try {
+    return await directPasswordLogin(identifier, password);
+  } catch (e) {
+    if (e instanceof AlsamosAuthError && e.code === 'EMAIL_NOT_CONFIRMED') {
+      // Old production builds could create @alsamos.com identities while
+      // hosted Confirm Email was accidentally enabled. There is no real
+      // mailbox for these identities. Prove the same password server-side,
+      // confirm the user through the trusted admin API, then retry login.
+      await repairFirstPartyIdentity(toIdentityEmail(identifier), password);
+      return directPasswordLogin(identifier, password);
+    }
+    throw e;
+  }
+};
 
   const completeLogin = async (ticket: string, accountId?: string): Promise<AuthResult> => {
     // Sign-in already opened the session; nothing left to exchange.
@@ -327,45 +343,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     setIsLoading(true);
 
-    const { data, error } = await supabase.auth.signUp({
+    try {
+    const { repaired } = await registerFirstPartyIdentity({
       email: identityEmail,
       password,
-      options: {
-        emailRedirectTo: `${window.location.origin}/`,
-        data: {
-          display_name: displayName || finalUsername,
-          username: finalUsername,
-          phone: normalizedPhone,
-          tos_version: TOS_VERSION,
-        },
-      },
+      username: finalUsername,
+      displayName: displayName || finalUsername,
+      phone: normalizedPhone,
+      tosVersion: TOS_VERSION,
     });
 
-    setIsLoading(false);
-
-    if (error) {
-      // Never confirm whether an address is already registered.
-      const message = /already|registered|exists/i.test(error.message)
-        ? 'Agar bu manzil bo’sh bo’lsa, tasdiqlash xati yuborildi.'
-        : error.message;
-      toast({
-        title: 'Ro’yxatdan o’tish',
-        description: message,
-        variant: 'destructive',
-      });
-      return { error };
-    }
-
-    const needsEmailConfirmation = !data.session;
-
     toast({
-      title: 'Akkaunt yaratildi',
-      description: needsEmailConfirmation
-        ? 'Emailingizga tasdiqlash havolasi yuborildi. Havolani bosgach kirishingiz mumkin.'
+      title: repaired ? 'Akkaunt tiklandi' : 'Akkaunt yaratildi',
+      description: repaired
+        ? 'Oldingi tasdiqlanmagan Alsamos identifikatori xavfsiz tiklandi va tizimga kirdingiz.'
         : 'Alsamosga xush kelibsiz!',
     });
 
-    return { error: null, needsEmailConfirmation };
+    return { error: null, needsEmailConfirmation: false };
+  } catch (e) {
+    const error = e instanceof Error ? e : new Error('Ro’yxatdan o’tish amalga oshmadi.');
+    toast({
+      title: 'Ro’yxatdan o’tish amalga oshmadi',
+      description: error.message,
+      variant: 'destructive',
+    });
+    return { error };
+  } finally {
+    setIsLoading(false);
+  }
   };
 
   // ---------------------------------------------------------------------

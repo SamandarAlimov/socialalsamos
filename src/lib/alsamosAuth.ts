@@ -207,7 +207,7 @@ export function authErrorMessage(code: AuthErrorCode): string {
     case 'EMAIL_DOMAIN_NOT_ALLOWED':
       return `Ro’yxatdan o’tish faqat @${ALSAMOS_MAIL_DOMAIN} manzili bilan.`;
     case 'EMAIL_NOT_CONFIRMED':
-      return 'Email hali tasdiqlanmagan. Pochtangizdagi havolani bosing.';
+      return 'Alsamos identifikatori eski tasdiqlash holatida qolgan. Parolingiz bilan xavfsiz tiklash urinishi bajariladi.';
     case 'TOO_MANY_ATTEMPTS':
       return 'Juda ko’p urinish. 15 daqiqadan keyin qayta urinib ko’ring.';
     case 'TICKET_INVALID':
