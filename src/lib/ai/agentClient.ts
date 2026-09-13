@@ -34,6 +34,9 @@ class AgentUnavailableError extends Error {}
 const SERVER_CODE_INTENT =
   /\b(code|coding|debug|debugging|bug|python|javascript|typescript|node(?:js)?|react|sql|algorithm|compile|compiler|runtime|sandbox|execute|execution|terminal|script|function|regex|json|csv|calculate|calculation|formula|equation|math|mathematics|kod|dastur|dasturlash|xato|hisobla|hisoblash|formula|algoritm|ishga\s+tushir|tekshir|питон|код|отлад|ошибк|алгоритм|вычисл|запусти)\b/i;
 
+const CONFIG_UNAVAILABLE =
+  /(?:sozlanmagan|not configured|credentials?|api\s*key|kalit(?:lar)?\s+topilmadi|shared key pool|provider unavailable)/i;
+
 function latestUserMessage(messages: StreamAgentOptions['messages']): string {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     if (messages[index]?.role === 'user') return messages[index].content;
@@ -123,6 +126,13 @@ async function streamFromAgent(options: StreamAgentOptions): Promise<void> {
       else if (json?.error) message = json.error;
     } catch {
       // e'tiborsiz
+    }
+
+    // A stale/misconfigured rich agent must not take the whole AI page down.
+    // Fall through to the independent assistant/server path for configuration
+    // outages while preserving real user/auth/validation errors as hard errors.
+    if (res.status >= 500 && CONFIG_UNAVAILABLE.test(message)) {
+      throw new AgentUnavailableError(message);
     }
     throw new Error(message);
   }
@@ -413,7 +423,8 @@ async function sandboxError(response: Response): Promise<string> {
 /**
  * Artifact panelidagi "Ishga tushirish" tugmasi.
  * Birinchi yo'l — serverdagi network-isolated, non-root Kubernetes Job.
- * Eski Edge sandbox faqat JavaScript uchun vaqtinchalik fallback.
+ * Ikkinchi yo'l — Supabase code-sandbox; u o'z navbatida SANDBOX_API_URL
+ * mavjud bo'lsa TypeScript/Python/JS ni real remote sandboxda bajaradi.
  */
 export async function runInSandbox(
   code: string,
@@ -436,21 +447,18 @@ export async function runInSandbox(
       if (error instanceof Error && error.message.startsWith('Server sandbox xatosi:')) {
         throw error;
       }
-      // Server deployment o'tish davrida bo'lsa JS uchun eski Edge fallback qoladi.
+      // Server deployment o'tish davrida bo'lsa Edge sandbox fallback qoladi.
     }
-  }
-
-  if (language !== 'javascript') {
-    throw new Error('Server sandbox vaqtincha mavjud emas; TypeScript/Python Edge fallbackda bajarilmaydi.');
   }
 
   const res = await fetch(`${FUNCTIONS_BASE}/code-sandbox`, {
     method: 'POST',
     headers: await authHeaders(),
-    body: JSON.stringify({ code, timeoutMs }),
+    body: JSON.stringify({ code, timeoutMs, language }),
   });
   if (!res.ok) {
-    throw new Error(`Sandbox xatosi (HTTP ${res.status}). Server va Edge sandboxni tekshiring.`);
+    const detail = await sandboxError(res);
+    throw new Error(`Sandbox xatosi: ${detail}`);
   }
   return (await res.json()) as SandboxRun;
 }
