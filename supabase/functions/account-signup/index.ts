@@ -120,7 +120,7 @@ serve(async (req) => {
       reason: "TOO_MANY_ATTEMPTS",
       mode: "on",
       metadata: { limit: SIGNUP_LIMIT_PER_HOUR, windowMinutes: 60 },
-    }).catch(() => {});
+    });
     return json(
       req,
       { error: "TOO_MANY_ATTEMPTS", message: "Juda ko'p ro'yxatdan o'tish urinishlari. Birozdan so'ng qayta urinib ko'ring." },
@@ -136,7 +136,7 @@ serve(async (req) => {
     reason: null,
     mode: "on",
     metadata: { stage: "signup_attempt" },
-  }).catch(() => {});
+  });
 
   const body = await req.json().catch(() => null);
   if (!body || typeof body !== "object") {
