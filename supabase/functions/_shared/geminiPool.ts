@@ -118,8 +118,6 @@ async function refreshDatabaseKeys(force = false): Promise<void> {
       );
 
       if (!response.ok) {
-        // Older deployments may not have the optional table yet. Env-backed
-        // keys keep working, so this is deliberately non-fatal.
         console.warn(`Gemini key pool database refresh failed: HTTP ${response.status}`);
         return;
       }
@@ -153,7 +151,6 @@ export function geminiKeys(): string[] {
   return cachedKeys;
 }
 
-/** Preload/refresh the optional server-side database key pool. */
 export async function ensureGeminiKeys(): Promise<string[]> {
   await refreshDatabaseKeys();
   return geminiKeys();
@@ -162,9 +159,7 @@ export async function ensureGeminiKeys(): Promise<string[]> {
 export function hasGeminiKeys(): boolean {
   if (geminiKeys().length > 0) return true;
 
-  // Edge Functions always have service-role credentials. Returning true here
-  // lets aiFetch perform the async database refresh before deciding that no
-  // Gemini key exists, instead of ai-assistant rejecting the request too early.
+  // Let aiFetch perform the async database refresh before rejecting a request.
   return Boolean(
     Deno.env.get('SUPABASE_URL') && Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'),
   );
@@ -270,7 +265,7 @@ export async function aiFetch(options: AiFetchOptions): Promise<AiFetchResult> {
     }
 
     lastStatus = response.status;
-    lastDetail = await response.text().catch(() => '');
+    lastDetail = await response.clone().text().catch(() => '');
 
     if (shouldRotate(response.status)) {
       markCooldown(key, response.status);
@@ -280,7 +275,6 @@ export async function aiFetch(options: AiFetchOptions): Promise<AiFetchResult> {
       continue;
     }
 
-    // A non-retryable request-shape error will be identical on the next key.
     if (lovableKey) return lovableFetch(body, lovableKey, signal);
     return { response, provider: 'gemini', keyIndex: attempt + 1 };
   }
@@ -341,7 +335,7 @@ export async function googleFetch(
     }
 
     lastStatus = response.status;
-    lastDetail = await response.text().catch(() => '');
+    lastDetail = await response.clone().text().catch(() => '');
 
     if (shouldRotate(response.status)) {
       markCooldown(key, response.status);
