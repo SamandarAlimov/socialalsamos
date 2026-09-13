@@ -61,7 +61,7 @@ create policy "posts_select_visible"
 -- post_hashtags eski DBlarda noma'lum SELECT policy bilan kelgan bo'lishi mumkin.
 -- Barcha SELECT policy nomlarini katalogdan olib tashlab, bitta canonical policy
 -- yaratamiz. Write'lar posts triggeri orqali SECURITY DEFINER bilan bajariladi.
-do $
+do $$
 declare
   v_policy record;
 begin
@@ -78,7 +78,7 @@ begin
     );
   end loop;
 end
-$;
+$$;
 
 create policy "post_hashtags_select"
   on public.post_hashtags
@@ -92,7 +92,7 @@ returns trigger
 language plpgsql
 security definer
 set search_path = public
-as $
+as $$
 declare
   v_id uuid;
 begin
@@ -110,7 +110,7 @@ begin
 
   return null;
 end
-$;
+$$;
 
 update public.hashtags h
 set posts_count = (
@@ -127,18 +127,18 @@ language sql
 stable
 security definer
 set search_path = public
-as $
+as $$
   with q as (select lower(trim(both '#' from coalesce(p_query, ''))) as term)
   select h.id, h.tag, h.posts_count
   from public.hashtags h, q
   where h.posts_count > 0
-    and (q.term = '' or h.tag like q.term || '%' or h.tag % q.term)
+    and (q.term = '' or h.tag like q.term || '%' or h.tag OPERATOR(extensions.%) q.term)
   order by
     case when q.term <> '' and h.tag like q.term || '%' then 0 else 1 end,
     h.posts_count desc,
     h.last_used_at desc
   limit greatest(1, least(coalesce(p_limit, 12), 50));
-$;
+$$;
 
 -- ---------------------------------------------------------------------------
 -- 2. Stable Storage references

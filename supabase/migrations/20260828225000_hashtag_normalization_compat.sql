@@ -10,7 +10,7 @@
 --   * public.post_hashtags.hashtag_id UUID
 -- =============================================================================
 
-do $
+do $$
 declare
   v_kind "char";
 begin
@@ -27,7 +27,7 @@ begin
     execute 'alter materialized view public.hashtags rename to hashtags_legacy_view';
   end if;
 end
-$;
+$$;
 
 create table if not exists public.hashtags (
   id uuid primary key default gen_random_uuid(),
@@ -57,7 +57,7 @@ alter table public.post_hashtags
 -- Legacy sxemada primary key (post_id, hashtag) bo'lishi mumkin.
 -- PK hashtag ustunini NOT NULL qiladi, shuning uchun avval aynan shu PKni
 -- katalogdan topib olib tashlaymiz. Yangi unique(post_id, hashtag_id) quyida yaratiladi.
-do $
+do $$
 declare
   v_constraint record;
 begin
@@ -84,7 +84,7 @@ begin
     );
   end loop;
 end
-$;
+$$;
 
 -- The old hashtag column was required. New inserts are normalized through
 -- hashtag_id, therefore the legacy text column must be optional.
@@ -147,9 +147,29 @@ create unique index if not exists post_hashtags_post_hashtag_uniq
   on public.post_hashtags (post_id, hashtag_id);
 
 -- Keep the legacy aggregate view name alive for older readers.
-create or replace view public.hashtags_aggregated as
-select
-  h.tag,
-  h.posts_count::bigint as post_count,
-  h.last_used_at
-from public.hashtags h;
+-- hashtags_aggregated compatibility is handled by relation kind so this migration
+-- is safe on legacy installs where the name is already a materialized view.
+do $$
+declare
+  v_kind "char";
+begin
+  select c.relkind into v_kind
+  from pg_class c
+  join pg_namespace n on n.oid = c.relnamespace
+  where n.nspname = 'public' and c.relname = 'hashtags_aggregated';
+
+  if v_kind is null then
+    execute $sql$
+      create view public.hashtags_aggregated as
+      select h.tag, h.posts_count::bigint as post_count, h.last_used_at
+      from public.hashtags h
+    $sql$;
+  elsif v_kind = 'v' then
+    execute $sql$
+      create or replace view public.hashtags_aggregated as
+      select h.tag, h.posts_count::bigint as post_count, h.last_used_at
+      from public.hashtags h
+    $sql$;
+  end if;
+end
+$$;

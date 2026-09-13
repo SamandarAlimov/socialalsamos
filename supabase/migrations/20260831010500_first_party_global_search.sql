@@ -42,10 +42,10 @@ create index if not exists web_search_documents_fts_idx
   on public.web_search_documents using gin (search_vector);
 
 create index if not exists web_search_documents_title_trgm_idx
-  on public.web_search_documents using gin (title gin_trgm_ops);
+  on public.web_search_documents using gin (title extensions.gin_trgm_ops);
 
 create index if not exists web_search_documents_domain_trgm_idx
-  on public.web_search_documents using gin (domain gin_trgm_ops);
+  on public.web_search_documents using gin (domain extensions.gin_trgm_ops);
 
 create index if not exists web_search_documents_kind_idx
   on public.web_search_documents (kind, indexed_at desc);
@@ -136,8 +136,8 @@ as $$
       d.*,
       (
         5.0 * ts_rank_cd(d.search_vector, websearch_to_tsquery('simple', params.q)) +
-        2.0 * similarity(lower(d.title), lower(params.q)) +
-        0.8 * similarity(lower(d.domain), lower(params.q)) +
+        2.0 * extensions.similarity(lower(d.title), lower(params.q)) +
+        0.8 * extensions.similarity(lower(d.domain), lower(params.q)) +
         coalesce(d.rank_score, 0) +
         case
           when d.published_at is not null and d.published_at > now() - interval '30 days' then 0.4
@@ -150,8 +150,8 @@ as $$
     where params.q is not null
       and (
         d.search_vector @@ websearch_to_tsquery('simple', params.q)
-        or lower(d.title) % lower(params.q)
-        or lower(d.domain) % lower(params.q)
+        or lower(d.title) OPERATOR(extensions.%) lower(params.q)
+        or lower(d.domain) OPERATOR(extensions.%) lower(params.q)
       )
       and (
         params.cat = 'all'
@@ -195,8 +195,8 @@ as $$
   from ranked r
   cross join params
   order by r.computed_score desc, r.rank_score desc, r.indexed_at desc
-  limit params.lim
-  offset params.off;
+  limit (select lim from params)
+  offset (select off from params);
 $$;
 
 revoke all on function public.search_web_index(text,text,integer,integer,text) from public;

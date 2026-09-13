@@ -159,7 +159,7 @@ create unique index if not exists places_external_uniq
   on public.places (external_source, external_id)
   where external_source is not null and external_id is not null;
 create index if not exists places_coords_idx on public.places (latitude, longitude);
-create index if not exists places_name_trgm_idx on public.places using gin (name gin_trgm_ops);
+create index if not exists places_name_trgm_idx on public.places using gin (name extensions.gin_trgm_ops);
 
 alter table public.places enable row level security;
 
@@ -301,7 +301,7 @@ begin
   if v_poll.allow_multiple
      and v_poll.max_choices is not null
      and v_existing >= v_poll.max_choices then
-    raise exception 'Eng ko''p % variant tanlash mumkin', v_poll.max_choices;
+    raise exception 'Eng ko''p OPERATOR(extensions.%) variant tanlash mumkin', v_poll.max_choices;
   end if;
 
   return new;
@@ -424,7 +424,7 @@ create table if not exists public.hashtags (
 );
 
 create unique index if not exists hashtags_tag_uniq on public.hashtags (tag);
-create index if not exists hashtags_tag_trgm_idx on public.hashtags using gin (tag gin_trgm_ops);
+create index if not exists hashtags_tag_trgm_idx on public.hashtags using gin (tag extensions.gin_trgm_ops);
 create index if not exists hashtags_popular_idx on public.hashtags (posts_count desc, last_used_at desc);
 
 create table if not exists public.post_hashtags (
@@ -514,7 +514,7 @@ as $$
   with q as (select lower(trim(both '#' from coalesce(p_query, ''))) as term)
   select h.id, h.tag, h.posts_count
   from public.hashtags h, q
-  where q.term = '' or h.tag like q.term || '%' or h.tag % q.term
+  where q.term = '' or h.tag like q.term || '%' or h.tag OPERATOR(extensions.%) q.term
   order by
     case when q.term <> '' and h.tag like q.term || '%' then 0 else 1 end,
     h.posts_count desc,
@@ -570,7 +570,7 @@ create unique index if not exists music_tracks_external_uniq
   on public.music_tracks (source, external_id)
   where external_id is not null;
 create index if not exists music_tracks_title_trgm_idx
-  on public.music_tracks using gin (title gin_trgm_ops);
+  on public.music_tracks using gin (title extensions.gin_trgm_ops);
 create index if not exists music_tracks_popular_idx
   on public.music_tracks (is_public, uses_count desc);
 
