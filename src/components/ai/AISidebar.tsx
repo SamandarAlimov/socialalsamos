@@ -60,18 +60,27 @@ export function AISidebar(props: Props) {
     return active?.userId === user.id ? active.project.id : null;
   }, [localProjects, location.search, useLocalProjects, user?.id]);
 
-  // Database-backed project links (/ai?project=<id>) used to activate only the
-  // local fallback store. Apply the URL selection to the real AI project state
-  // as soon as the database project list is available.
+  // Database-backed project links (/ai?project=<id>) should behave like a
+  // real project workspace, not like a filter that lands on a blank screen.
+  // Open the project's latest conversation when possible; otherwise start the
+  // empty project workspace ready for a new chat.
   useEffect(() => {
     if (useLocalProjects || !props.onSelectProject) return;
     const projectId = new URLSearchParams(location.search).get('project');
     if (!projectId || projectId === props.activeProjectId) return;
     if (!props.projects.some((project) => project.id === projectId)) return;
-    props.onSelectProject(projectId);
+
+    const latest = props.conversations
+      .filter((conversation) => conversation.projectId === projectId)
+      .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0];
+
+    if (latest) props.onSelect(latest);
+    else props.onSelectProject(projectId);
   }, [
     location.search,
     props.activeProjectId,
+    props.conversations,
+    props.onSelect,
     props.onSelectProject,
     props.projects,
     useLocalProjects,
@@ -118,7 +127,18 @@ export function AISidebar(props: Props) {
 
   const selectBackendProject = (projectId: string | null) => {
     syncProjectQuery(projectId);
-    props.onSelectProject?.(projectId);
+
+    if (!projectId) {
+      props.onSelectProject?.(null);
+      return;
+    }
+
+    const latest = props.conversations
+      .filter((conversation) => conversation.projectId === projectId)
+      .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0];
+
+    if (latest) props.onSelect(latest);
+    else props.onSelectProject?.(projectId);
   };
 
   const selectConversation = (conversation: AIConversation) => {
