@@ -60,24 +60,21 @@ export async function registerFirstPartyIdentity(params: {
   password: string;
   username: string;
   displayName?: string;
-  phone?: string | null;
+  phone: string;
   tosVersion?: string | null;
 }): Promise<{ repaired: boolean }> {
-  const email = toIdentityEmail(params.email);
-  if (!isAlsamosEmail(email)) {
-    throw new AlsamosAuthError(
-      'EMAIL_DOMAIN_NOT_ALLOWED',
-      `Ro’yxatdan o’tish faqat @${ALSAMOS_MAIL_DOMAIN} identifikatori bilan.`,
-    );
+  const contactEmail = params.email.trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactEmail) || contactEmail.length > 254) {
+    throw new Error('Email manzilni to’g’ri kiriting.');
   }
 
   const result = await invokeIdentity({
     action: 'signup',
-    email,
+    contact_email: contactEmail,
     password: params.password,
     username: params.username,
     display_name: params.displayName ?? params.username,
-    phone: params.phone ?? null,
+    phone: params.phone,
     tos_version: params.tosVersion ?? null,
   });
 

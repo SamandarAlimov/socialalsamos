@@ -7,7 +7,6 @@ import {
   AlsamosAuthError,
   authErrorMessage,
   DIRECT_SESSION_TICKET,
-  isAlsamosEmail,
   isUsernameValid,
   LoginStepResult,
   normalizePhoneInput,
@@ -66,7 +65,7 @@ interface AuthContextType {
   signup: (params: {
     email: string;
     password: string;
-    phone?: string;
+    phone: string;
     displayName?: string;
     username?: string;
     acceptedTerms: boolean;
@@ -279,21 +278,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     username,
     acceptedTerms,
   }) => {
-    const identityEmail = toIdentityEmail(email);
-
-    if (!isAlsamosEmail(identityEmail)) {
-      const error = new AlsamosAuthError('EMAIL_DOMAIN_NOT_ALLOWED');
-      toast({
-        title: 'Ro’yxatdan o’tish amalga oshmadi',
-        description: error.message,
-        variant: 'destructive',
-      });
+    const contactEmail = email.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactEmail) || contactEmail.length > 254) {
+      const error = new Error('Email manzilni to’g’ri kiriting.');
+      toast({ title: 'Email xato', description: error.message, variant: 'destructive' });
       return { error };
     }
 
-    const finalUsername = (username || identityEmail.split('@')[0])
+    const finalUsername = (username || contactEmail.split('@')[0])
       .toLowerCase()
       .replace(/[^a-z0-9_]/g, '');
+    const identityEmail = toIdentityEmail(finalUsername);
 
     if (!isUsernameValid(finalUsername)) {
       const error = new AlsamosAuthError('USERNAME_INVALID');
@@ -301,19 +296,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { error };
     }
 
-    // Phone is optional, but when present it must be a valid E.164 number:
-    // it becomes a login identifier, so a broken value would lock the user out.
-    let normalizedPhone: string | null = null;
-    if (phone && phone.trim()) {
-      normalizedPhone = normalizePhoneInput(phone);
-      if (!normalizedPhone) {
-        const error = new AlsamosAuthError('PHONE_INVALID');
-        toast({ title: 'Telefon raqam xato', description: error.message, variant: 'destructive' });
-        return { error };
-      }
+    // Phone is mandatory: besides login, it powers privacy-preserving
+    // contact discovery/user suggestions. Persist only the normalized E.164 form.
+    const normalizedPhone = normalizePhoneInput(phone);
+    if (!normalizedPhone) {
+      const error = new AlsamosAuthError('PHONE_INVALID');
+      toast({ title: 'Telefon raqam xato', description: error.message, variant: 'destructive' });
+      return { error };
     }
 
-    const strength = checkPassword(password, [identityEmail, finalUsername]);
+    const strength = checkPassword(password, [contactEmail, identityEmail, finalUsername, normalizedPhone]);
     if (!strength.valid) {
       const error = new Error(strength.problems[0]);
       toast({ title: 'Parol juda kuchsiz', description: error.message, variant: 'destructive' });
@@ -330,7 +322,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     try {
     const { repaired } = await registerFirstPartyIdentity({
-      email: identityEmail,
+      email: contactEmail,
       password,
       username: finalUsername,
       displayName: displayName || finalUsername,

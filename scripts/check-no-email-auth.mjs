@@ -45,12 +45,14 @@ requireText(context, 'registerFirstPartyIdentity({', 'first-party signup client'
 requireText(context, 'requestLoginTicket(identifier, password)', 'first-party login ticket client');
 forbidText(context, 'directPasswordLogin(', 'direct browser password login bypass');
 
-// The visible form must expose username/phone rather than an email mailbox.
-forbidText(authPage, 'type="email"', 'email login/signup input');
-forbidText(authPage, 'autoComplete="email"', 'email autocomplete input');
+// Public login is username/phone only, but registration MUST collect a
+// real contact email and phone. Contact email is data, not a confirmation gate.
 requireText(authPage, 'Username yoki telefon raqam', 'username/phone login label');
+requireText(authPage, 'type="email"', 'required contact email signup input');
+requireText(authPage, 'autoComplete="email"', 'contact email autocomplete');
 requireText(authPage, 'Username', 'username signup field');
-requireText(authPage, 'Telefon raqam', 'phone signup field');
+requireText(authPage, 'type="tel"', 'required phone signup field');
+requireText(authPage, 'required', 'required signup fields');
 
 // Defence in depth: even a hand-written call to account-login must not accept
 // an email identifier. Email remains an internal Supabase credential only.
@@ -65,6 +67,10 @@ requireText(loginFn, 'email_confirm: true', 'server-side legacy identity confirm
 requireText(loginFn, 'signOut({ scope: "local" })', 'temporary login session local signout');
 
 requireText(signupFn, 'email_confirm: true', 'server-side auto-confirm');
+requireText(signupFn, 'body.contact_email ?? body.email', 'required real contact email input');
+requireText(signupFn, '`${username}@alsamos.com`', 'hidden internal auth credential');
+requireText(signupFn, '!phone', 'mandatory normalized phone');
+requireText(signupFn, 'contact_email: contactEmail', 'contact email persistence');
 requireText(signupFn, 'verify_alsamos_identity_password', 'signup repair ownership proof');
 requireText(signupFn, 'action === "repair"', 'legacy account repair path');
 requireText(verifier, 'GRANT EXECUTE ON FUNCTION public.verify_alsamos_identity_password(text, text) TO service_role;', 'service-role-only verifier grant');

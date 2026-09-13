@@ -10,6 +10,7 @@ import {
   KeyRound,
   Loader2,
   Lock,
+  Mail,
   Phone,
   ShieldCheck,
   User,
@@ -34,7 +35,6 @@ import {
   MAX_ACCOUNTS_PER_IDENTITY,
   normalizePhoneInput,
   PublicAccount,
-  toIdentityEmail,
   verifyMfaLogin,
 } from '@/lib/alsamosAuth';
 import { checkPassword, passwordStrengthColor } from '@/lib/passwordStrength';
@@ -61,6 +61,13 @@ const loginSchema = z.object({
 });
 
 /** Signup creates an internal identity from the public username. */
+const contactEmailField = z
+  .string()
+  .trim()
+  .min(3, 'Emailni kiriting')
+  .max(254)
+  .email('Email manzilni to’g’ri kiriting');
+
 const signupSchema = z
   .object({
     fullName: z.string().trim().min(2, 'Ism kamida 2 ta belgidan iborat bo’lsin').max(100),
@@ -70,6 +77,7 @@ const signupSchema = z
       .min(3, 'Username kamida 3 ta belgi')
       .max(30)
       .regex(/^[a-z0-9_]+$/, 'Username: faqat kichik harflar, raqamlar va _'),
+    email: contactEmailField,
     phone: z
       .string()
       .trim()
@@ -92,6 +100,7 @@ export default function AuthPage() {
   const [identifier, setIdentifier] = useState('');
 
   // Signup
+  const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [fullName, setFullName] = useState('');
   const [username, setUsername] = useState('');
@@ -118,12 +127,13 @@ export default function AuthPage() {
     rawNext && rawNext.startsWith('/') && !rawNext.startsWith('//') ? rawNext : '/home';
 
   const strength = useMemo(
-    () => checkPassword(password, [username, fullName, phone]),
-    [password, username, fullName, phone],
+    () => checkPassword(password, [email, username, fullName, phone]),
+    [password, email, username, fullName, phone],
   );
 
   const resetForm = () => {
     setIdentifier('');
+    setEmail('');
     setPhone('');
     setPassword('');
     setConfirmPassword('');
@@ -243,6 +253,7 @@ export default function AuthPage() {
     const parsed = signupSchema.safeParse({
       fullName,
       username,
+      email,
       phone,
       password,
       confirmPassword,
@@ -264,7 +275,7 @@ export default function AuthPage() {
     }
 
     const { error } = await signup({
-      email: toIdentityEmail(parsed.data.username),
+      email: parsed.data.email,
       password: parsed.data.password,
       phone: parsed.data.phone,
       displayName: parsed.data.fullName,
@@ -521,6 +532,18 @@ export default function AuthPage() {
                       required
                     />
 
+
+                    <Input
+                      type="email"
+                      placeholder="Email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      icon={<Mail className="h-4 w-4" />}
+                      autoComplete="email"
+                      autoCapitalize="none"
+                      spellCheck={false}
+                      required
+                    />
 
                     <Input
                       type="tel"

@@ -90,11 +90,15 @@ serve(async (req) => {
   }
 
   const action: SignupAction = body.action === "repair" ? "repair" : "signup";
-  const email = normalizeEmail(body.email);
+  const contactEmail = action === "signup"
+    ? normalizeEmail(body.contact_email ?? body.email)
+    : "";
+  const repairEmail = action === "repair" ? normalizeEmail(body.email) : "";
   const password = typeof body.password === "string" ? body.password : "";
   const username = typeof body.username === "string"
     ? body.username.trim().toLowerCase()
-    : email.split("@")[0] ?? "";
+    : repairEmail.split("@")[0] ?? "";
+  const email = action === "repair" ? repairEmail : `${username}@alsamos.com`;
   const displayName = typeof body.display_name === "string"
     ? body.display_name.trim().slice(0, 100)
     : username;
@@ -109,7 +113,10 @@ serve(async (req) => {
   if (action === "signup" && !isUsernameValid(username)) {
     return authError(req, "USERNAME_INVALID", 400);
   }
-  if (body.phone && !phone) {
+  if (action === "signup" && (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactEmail) || contactEmail.length > 254)) {
+    return authError(req, "INVALID_REQUEST", 400);
+  }
+  if (action === "signup" && !phone) {
     return authError(req, "PHONE_INVALID", 400);
   }
 
@@ -174,6 +181,7 @@ serve(async (req) => {
       username,
       display_name: displayName || username,
       phone,
+      contact_email: contactEmail,
       tos_version: tosVersion,
       alsamos_identity: true,
     },
@@ -199,6 +207,19 @@ serve(async (req) => {
     repaired = true;
   }
 
+  // Contact fields are first-class identity data. The address is
+  // deliberately NOT marked verified here: signup does not send/require email
+  // confirmation. Phone is normalized for contact discovery matching.
+  const { error: contactPersistError } = await admin
+    .from("auth_identities")
+    .update({ contact_email: contactEmail, phone })
+    .eq("user_id", userId);
+
+  if (contactPersistError) {
+    console.error("Failed to persist identity contact fields", contactPersistError.message);
+    return authError(req, "ACCOUNT_CREATE_FAILED", 500);
+  }
+
   let tokenHash: string | null;
   if (repaired) {
     tokenHash = await confirmAndMint(admin, userId, email);
@@ -215,7 +236,7 @@ serve(async (req) => {
     eventType: repaired ? "identity_signup_repair" : "identity_signup",
     outcome: "success",
     userId,
-    metadata: { username },
+    metadata: { username, contact_email_supplied: true, phone_supplied: true },
   });
 
   return jsonResponse(req, {
