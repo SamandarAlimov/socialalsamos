@@ -1,10 +1,11 @@
 // POST /account-signup
 //
 // Creates the primary Alsamos identity without depending on an email or SMS
-// delivery service. Email and phone are both required. The email is confirmed
-// server-side so the user can sign in immediately. The phone is also stored on
-// the Supabase Auth user (so it appears in Authentication > Users) but remains
-// unverified until Alsamos adds a real OTP provider.
+// delivery service. Email and phone are both required, but only the email is
+// written to Supabase Auth until a real phone OTP provider is enabled. The
+// normalized phone remains in user metadata and public.auth_identities so it
+// can be used for uniqueness/contact discovery without making Auth treat an
+// unverified phone as a login identity.
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -169,12 +170,15 @@ serve(async (req) => {
   if (usernameTaken) return json(req, { error: "USERNAME_TAKEN", message: "Bu username band." }, 409);
   if (phoneTaken) return json(req, { error: "PHONE_TAKEN", message: "Bu telefon raqami allaqachon ishlatilgan." }, 409);
 
+  // Important: do not pass `phone`/`phone_confirm` here. On projects where the
+  // phone Auth provider is disabled, making an unverified phone part of the
+  // Auth identity can turn user creation into a server-side 500. We keep the
+  // normalized phone in metadata; the DB identity trigger persists it in the
+  // application's canonical auth_identities row.
   const { data: created, error: createError } = await admin.auth.admin.createUser({
     email,
-    phone,
     password,
     email_confirm: true,
-    phone_confirm: false,
     user_metadata: {
       username,
       display_name: displayName || username,
@@ -184,6 +188,11 @@ serve(async (req) => {
   });
 
   if (createError || !created?.user) {
+    console.error(`[${FUNCTION_NAME}] createUser failed`, {
+      code: (createError as { code?: string } | null)?.code ?? null,
+      message: createError?.message ?? "missing_user",
+    });
+
     const duplicate = /already|registered|exists/i.test(createError?.message ?? "");
     return json(req, {
       error: duplicate ? "ACCOUNT_EXISTS" : "SIGNUP_FAILED",
