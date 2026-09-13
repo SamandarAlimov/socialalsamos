@@ -1,10 +1,7 @@
 // POST /account-signup
-//
-// Creates the primary Alsamos identity without depending on an email or SMS
-// delivery service. Email and phone are both required, but only the email is
-// marked confirmed for Auth so the user can sign in immediately. The phone is
-// stored as an unverified identity/contact-discovery attribute until Alsamos
-// adds an OTP provider.
+// Creates the primary Alsamos identity. This endpoint is public before a session
+// exists, so it validates input, rate-limits by hashed IP, and uses service-role
+// Auth only after uniqueness checks.
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -81,6 +78,36 @@ function normalizeUsername(value: unknown): string {
   return typeof value === "string" ? value.trim().toLowerCase() : "";
 }
 
+function authErrorDetails(error: any) {
+  if (!error) return { message: "Auth did not return a user", code: null, status: null, name: null };
+  return {
+    message: typeof error.message === "string" ? error.message.slice(0, 500) : String(error).slice(0, 500),
+    code: typeof error.code === "string" ? error.code.slice(0, 120) : null,
+    status: typeof error.status === "number" ? error.status : null,
+    name: typeof error.name === "string" ? error.name.slice(0, 120) : null,
+  };
+}
+
+function classifyAuthFailure(details: ReturnType<typeof authErrorDetails>) {
+  const text = `${details.code ?? ""} ${details.message ?? ""}`.toLowerCase();
+  if (/already|registered|exists|user_already_exists/.test(text)) {
+    return { status: 409, error: "ACCOUNT_EXISTS", message: "Bu email bilan akkaunt allaqachon mavjud." };
+  }
+  if (/weak.?password|password.*weak|password.*least|password.*character|password.*pwn|password.*comprom/.test(text)) {
+    return { status: 400, error: "WEAK_PASSWORD", message: "Bu parol xavfsizlik talablariga javob bermaydi. Kuchliroq parol kiriting." };
+  }
+  if (/invalid.*email|email.*invalid/.test(text)) {
+    return { status: 400, error: "INVALID_EMAIL", message: "Email manzilini to'g'ri kiriting." };
+  }
+  if (details.status === 429 || /rate.?limit|too many/.test(text)) {
+    return { status: 429, error: "TOO_MANY_ATTEMPTS", message: "Juda ko'p urinish bo'ldi. Birozdan so'ng qayta urinib ko'ring." };
+  }
+  if (details.status && details.status >= 400 && details.status < 500) {
+    return { status: 400, error: "SIGNUP_REJECTED", message: "Ro'yxatdan o'tish ma'lumotlari qabul qilinmadi. Kiritilgan ma'lumotlarni tekshiring." };
+  }
+  return { status: 500, error: "SIGNUP_FAILED", message: "Akkaunt yaratilmadi. Qaytadan urinib ko'ring." };
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: corsHeaders(req) });
@@ -101,13 +128,17 @@ serve(async (req) => {
 
   const ipHash = await sha256Hex(`${FUNCTION_NAME}:${clientIp(req)}`);
   const since = new Date(Date.now() - 60 * 60_000).toISOString();
-  const { count: recentAttempts } = await admin
+  const { count: recentAttempts, error: usageReadError } = await admin
     .from("function_usage")
     .select("id", { count: "exact", head: true })
     .eq("function_name", FUNCTION_NAME)
     .eq("ip_hash", ipHash)
     .in("outcome", ["allowed", "blocked"])
     .gte("created_at", since);
+
+  if (usageReadError) {
+    return json(req, { error: "SERVER_ERROR", message: "Ro'yxatdan o'tish xizmati vaqtincha mavjud emas." }, 500);
+  }
 
   if ((recentAttempts ?? 0) >= SIGNUP_LIMIT_PER_HOUR) {
     await admin.from("function_usage").insert({
@@ -161,10 +192,27 @@ serve(async (req) => {
     return json(req, { error: "INVALID_REQUEST", message: "Foydalanish shartlarini qabul qilish talab etiladi." }, 400);
   }
 
-  const [{ data: usernameTaken }, { data: phoneTaken }] = await Promise.all([
+  const [{ data: usernameTaken, error: usernameCheckError }, { data: phoneTaken, error: phoneCheckError }] = await Promise.all([
     admin.from("profiles").select("id").eq("username", username).maybeSingle(),
     admin.from("auth_identities").select("id").eq("phone", phone).maybeSingle(),
   ]);
+
+  if (usernameCheckError || phoneCheckError) {
+    await admin.from("function_usage").insert({
+      function_name: FUNCTION_NAME,
+      user_id: null,
+      ip_hash: ipHash,
+      outcome: "would_block",
+      reason: "SIGNUP_PRECHECK_FAILED",
+      mode: "log",
+      metadata: {
+        stage: "precheck",
+        username_error: usernameCheckError ? { message: usernameCheckError.message, code: usernameCheckError.code } : null,
+        phone_error: phoneCheckError ? { message: phoneCheckError.message, code: phoneCheckError.code } : null,
+      },
+    });
+    return json(req, { error: "SERVER_ERROR", message: "Ro'yxatdan o'tish tekshiruvi bajarilmadi." }, 500);
+  }
 
   if (usernameTaken) return json(req, { error: "USERNAME_TAKEN", message: "Bu username band." }, 409);
   if (phoneTaken) return json(req, { error: "PHONE_TAKEN", message: "Bu telefon raqami allaqachon ishlatilgan." }, 409);
@@ -182,11 +230,18 @@ serve(async (req) => {
   });
 
   if (createError || !created?.user) {
-    const duplicate = /already|registered|exists/i.test(createError?.message ?? "");
-    return json(req, {
-      error: duplicate ? "ACCOUNT_EXISTS" : "SIGNUP_FAILED",
-      message: duplicate ? "Bu email bilan akkaunt allaqachon mavjud." : "Akkaunt yaratilmadi. Qaytadan urinib ko'ring.",
-    }, duplicate ? 409 : 500);
+    const details = authErrorDetails(createError);
+    const classified = classifyAuthFailure(details);
+    await admin.from("function_usage").insert({
+      function_name: FUNCTION_NAME,
+      user_id: null,
+      ip_hash: ipHash,
+      outcome: "would_block",
+      reason: "AUTH_CREATE_FAILED",
+      mode: "log",
+      metadata: { stage: "auth_create", auth_error: details, classified_error: classified.error },
+    });
+    return json(req, { error: classified.error, message: classified.message }, classified.status);
   }
 
   return json(req, {
