@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - chore/build-fresh-supabase-bootstrap
+      - fix/first-party-no-email-auth
     paths:
       - .github/workflows/build-fresh-supabase-bootstrap.yml
 
