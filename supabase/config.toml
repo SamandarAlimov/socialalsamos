@@ -40,6 +40,13 @@ double_confirm_changes = true
 [functions.account-login]
 verify_jwt = false
 
+# First-party @alsamos.com registration and one-time repair of identities that
+# were created while hosted Confirm Email was accidentally enabled. The repair
+# path proves the supplied password through a service_role-only SQL function
+# before confirming the account; the function is also server-rate-limited.
+[functions.account-signup]
+verify_jwt = false
+
 [functions.account-session]
 verify_jwt = false
 
