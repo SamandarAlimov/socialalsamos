@@ -18,8 +18,8 @@ const LOCAL_LIMIT = 32;
  * Telegramdagi "tez-tez ishlatiladigan stikerlar" ro'yxati.
  *
  * Ikki qatlamda ishlaydi:
- * 1) Supabase `sticker_usage` jadvali - qurilmalar orasida sinxron,
- * 2) localStorage - internet yoki sessiya bo'lmasa ham panel darhol to'ladi.
+ * 1) Supabase `sticker_recents` + RPC'lari - qurilmalar orasida sinxron,
+ * 2) localStorage - internet yoki server imkoniyati vaqtincha bo'lmasa ham panel darhol to'ladi.
  */
 function readLocal(): RecentSticker[] {
   try {
@@ -83,14 +83,15 @@ export async function trackStickerUse(
     });
     if (!error) return;
 
-    // Legacy schema fallback.
+    // Older production clients/databases may still expose the compatibility RPC.
+    // A metrics failure must never block sending media.
     await db.rpc('touch_sticker_usage', {
       p_file_url: fileUrl,
       p_kind: kind,
       p_sticker_id: stickerId ?? null,
     });
   } catch {
-    // Local history remains authoritative when server capability is absent.
+    // Local history remains authoritative when server capability is unavailable.
   }
 }
 
@@ -101,48 +102,31 @@ export async function fetchRecentStickers(
 ): Promise<RecentSticker[]> {
   try {
     const current = await db.rpc('top_sticker_recents', { p_limit: limit });
-    if (!current.error && Array.isArray(current.data)) {
-      return (current.data as Array<Record<string, unknown>>)
-        .map((row) => {
-          const serverKind = String(row.kind ?? 'image');
-          const mappedKind: StickerKind = serverKind === 'gif' ? 'gif' : 'sticker';
-          const fileUrl = String(
-            row.full_url ?? row.preview_url ?? row.sticker_key ?? ''
-          ).trim();
-          if (!fileUrl) return null;
-          return {
-            fileUrl,
-            kind: mappedKind,
-            stickerId: (row.sticker_id as string | null) ?? null,
-            useCount: Number(row.use_count ?? 1),
-            lastUsedAt: String(row.used_at ?? new Date().toISOString()),
-          } as RecentSticker;
-        })
-        .filter((item): item is RecentSticker => Boolean(item))
-        .filter((item) => !kind || item.kind === kind)
-        .slice(0, limit);
+    if (current.error || !Array.isArray(current.data)) {
+      // `sticker_usage` eski jadvali canonical schema'da yo'q. Uni so'rab 404 chiqarish
+      // o'rniga local tarixga qaytamiz.
+      return getLocalRecentStickers(kind).slice(0, limit);
     }
 
-    // Legacy schema compatibility.
-    let query = db
-      .from('sticker_usage')
-      .select('file_url, kind, sticker_id, use_count, last_used_at')
-      .order('use_count', { ascending: false })
-      .order('last_used_at', { ascending: false })
-      .limit(limit);
-
-    if (kind) query = query.eq('kind', kind);
-
-    const { data, error } = await query;
-    if (error || !data) return getLocalRecentStickers(kind).slice(0, limit);
-
-    return data.map((row: Record<string, unknown>) => ({
-      fileUrl: String(row.file_url),
-      kind: (row.kind as StickerKind) || 'sticker',
-      stickerId: (row.sticker_id as string | null) ?? null,
-      useCount: Number(row.use_count ?? 1),
-      lastUsedAt: String(row.last_used_at ?? new Date().toISOString()),
-    }));
+    return (current.data as Array<Record<string, unknown>>)
+      .map((row) => {
+        const serverKind = String(row.kind ?? 'image');
+        const mappedKind: StickerKind = serverKind === 'gif' ? 'gif' : 'sticker';
+        const fileUrl = String(
+          row.full_url ?? row.preview_url ?? row.sticker_key ?? ''
+        ).trim();
+        if (!fileUrl) return null;
+        return {
+          fileUrl,
+          kind: mappedKind,
+          stickerId: (row.sticker_id as string | null) ?? null,
+          useCount: Number(row.use_count ?? 1),
+          lastUsedAt: String(row.used_at ?? new Date().toISOString()),
+        } as RecentSticker;
+      })
+      .filter((item): item is RecentSticker => Boolean(item))
+      .filter((item) => !kind || item.kind === kind)
+      .slice(0, limit);
   } catch {
     return getLocalRecentStickers(kind).slice(0, limit);
   }
