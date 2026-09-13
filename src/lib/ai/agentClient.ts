@@ -19,10 +19,15 @@ export type StreamAgentOptions = {
 };
 
 const FUNCTIONS_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
-const AGENT_SERVER_BASE = (
-  (import.meta.env.VITE_ALSAMOS_AGENT_SERVER_URL as string | undefined) ||
-  'https://api.alsamos.com/ai'
-).replace(/\/+$/, '');
+const configuredAgentServerBase = String(
+  import.meta.env.VITE_ALSAMOS_AGENT_SERVER_URL ?? '',
+).trim();
+// The external Oracle/K3s agent is optional. Do not probe api.alsamos.com from
+// browsers unless hosting explicitly configured a reachable, CORS-enabled
+// server. This prevents a dead preflight from polluting every AI request.
+const AGENT_SERVER_BASE = configuredAgentServerBase
+  ? configuredAgentServerBase.replace(/\/+$/, '')
+  : null;
 
 class AgentUnavailableError extends Error {}
 
@@ -45,6 +50,7 @@ function latestUserMessage(messages: StreamAgentOptions['messages']): string {
 export function shouldPreferServerAgent(
   options: Pick<StreamAgentOptions, 'messages' | 'model' | 'toolGroups'>,
 ): boolean {
+  if (!AGENT_SERVER_BASE) return false;
   if (!options.toolGroups.includes('code')) return false;
   if (options.model === 'coding') return true;
   return SERVER_CODE_INTENT.test(latestUserMessage(options.messages));
@@ -203,6 +209,10 @@ async function streamFromAssistant(options: StreamAgentOptions): Promise<void> {
 
 /** Oracle/K3s server agenti: real server vositalari va Kubernetes sandbox. */
 async function streamFromOracleAgent(options: StreamAgentOptions): Promise<void> {
+  if (!AGENT_SERVER_BASE) {
+    throw new AgentUnavailableError('Alsamos server agenti hostingda yoqilmagan');
+  }
+
   const { messages, mode, model, toolGroups, conversationId, context, signal, onEvent } = options;
 
   let res: Response;
@@ -410,22 +420,24 @@ export async function runInSandbox(
   timeoutMs = 5000,
   language: 'javascript' | 'typescript' | 'python' = 'javascript',
 ): Promise<SandboxRun> {
-  try {
-    const response = await fetch(`${AGENT_SERVER_BASE}/v1/sandbox/run`, {
-      method: 'POST',
-      headers: await authHeaders(),
-      body: JSON.stringify({ code, timeoutMs, language }),
-    });
+  if (AGENT_SERVER_BASE) {
+    try {
+      const response = await fetch(`${AGENT_SERVER_BASE}/v1/sandbox/run`, {
+        method: 'POST',
+        headers: await authHeaders(),
+        body: JSON.stringify({ code, timeoutMs, language }),
+      });
 
-    if (response.ok) return (await response.json()) as SandboxRun;
-    if (![404, 501, 502, 503, 504].includes(response.status)) {
-      throw new Error(`Server sandbox xatosi: ${await sandboxError(response)}`);
+      if (response.ok) return (await response.json()) as SandboxRun;
+      if (![404, 501, 502, 503, 504].includes(response.status)) {
+        throw new Error(`Server sandbox xatosi: ${await sandboxError(response)}`);
+      }
+    } catch (error) {
+      if (error instanceof Error && error.message.startsWith('Server sandbox xatosi:')) {
+        throw error;
+      }
+      // Server deployment o'tish davrida bo'lsa JS uchun eski Edge fallback qoladi.
     }
-  } catch (error) {
-    if (error instanceof Error && error.message.startsWith('Server sandbox xatosi:')) {
-      throw error;
-    }
-    // Server deployment o'tish davrida bo'lsa JS uchun eski Edge fallback qoladi.
   }
 
   if (language !== 'javascript') {
