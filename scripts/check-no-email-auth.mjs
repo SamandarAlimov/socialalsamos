@@ -50,6 +50,11 @@ requireText(authPage, 'Username yoki telefon raqam', 'username/phone login label
 requireText(authPage, 'Username', 'username signup field');
 requireText(authPage, 'Telefon raqam', 'phone signup field');
 
+// Defence in depth: even a hand-written call to account-login must not accept
+// an email identifier. Email remains an internal Supabase credential only.
+requireText(loginFn, 'kind === "invalid" || kind === "email"', 'server email-login rejection');
+requireText(loginFn, 'email_login_disabled', 'email-login audit reason');
+
 // Legacy unconfirmed users are repaired only inside the server-side login
 // boundary, after the password has been proven by a service-role-only verifier.
 requireText(loginFn, '/not confirmed/i', 'server-side unconfirmed detection');
