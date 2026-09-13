@@ -2,14 +2,14 @@
  * Alsamos authentication policy - single source of truth for the client.
  *
  * Model ("Owner identity + linked accounts"):
- *   - One identity email <name>@alsamos.com owns up to 10 superapp accounts.
+ *   - One normal email identity owns up to 10 superapp accounts.
  *   - Slot 1 is the primary account and carries the identity password.
  *   - Slots 2..10 use a technical login email <username>@accounts.alsamos.com
  *     and have no usable password: their sessions are minted by the server
  *     only after the identity password has been verified.
  *
  * Logging in accepts THREE kinds of identifier:
- *   - email    : <name>@alsamos.com or a preserved legacy address
+ *   - email    : the identity email or a preserved legacy address
  *   - username : of any account owned by the identity
  *   - phone    : the identity phone number, in any human formatting
  *
@@ -56,9 +56,11 @@ export function normalizeEmail(value: string): string {
   return (value ?? '').trim().toLowerCase();
 }
 
-/** True only for real identity emails (<name>@alsamos.com). */
+/** Valid primary identity email. Technical linked-account addresses are private. */
 export function isAlsamosEmail(value: string): boolean {
-  return /^[a-z0-9._%+-]{1,64}@alsamos\.com$/.test(normalizeEmail(value));
+  const email = normalizeEmail(value);
+  if (!email || email.length > 254 || email.endsWith(`@${ALSAMOS_ACCOUNT_DOMAIN}`)) return false;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
 /** Internal address of a linked account - never shown as a login option. */
@@ -87,7 +89,7 @@ export type IdentifierKind = 'email' | 'phone' | 'username' | 'invalid';
 export function classifyIdentifier(raw: string): IdentifierKind {
   const value = (raw ?? '').trim().toLowerCase();
   if (!value) return 'invalid';
-  if (value.includes('@')) return 'email';
+  if (value.includes('@')) return isAlsamosEmail(value) || isTechnicalAccountEmail(value) ? 'email' : 'invalid';
   if (/^[+0-9][0-9\s().\-_]{6,}$/.test(value)) {
     return normalizePhoneInput(value) ? 'phone' : 'invalid';
   }
@@ -103,7 +105,7 @@ export function canonicalIdentifier(raw: string): string {
   return value;
 }
 
-/** Accepts "name" or "name@alsamos.com" and always returns the full address. */
+/** Normalize a supplied email; bare usernames keep the legacy @alsamos.com fallback. */
 export function toIdentityEmail(input: string): string {
   const value = normalizeEmail(input);
   if (!value) return '';
@@ -205,9 +207,9 @@ export function authErrorMessage(code: AuthErrorCode): string {
     case 'INVALID_CREDENTIALS':
       return 'Kirish maʼlumotlari xato.';
     case 'EMAIL_DOMAIN_NOT_ALLOWED':
-      return `Ro’yxatdan o’tish faqat @${ALSAMOS_MAIL_DOMAIN} manzili bilan.`;
+      return 'Email manzilini to‘g‘ri kiriting.';
     case 'EMAIL_NOT_CONFIRMED':
-      return 'Email hali tasdiqlanmagan. Pochtangizdagi havolani bosing.';
+      return 'Email tasdig‘i talab qilinmoqda. Iltimos, administratorga murojaat qiling.';
     case 'TOO_MANY_ATTEMPTS':
       return 'Juda ko’p urinish. 15 daqiqadan keyin qayta urinib ko’ring.';
     case 'TICKET_INVALID':
