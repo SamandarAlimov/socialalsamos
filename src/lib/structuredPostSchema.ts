@@ -1,4 +1,4 @@
-const STRUCTURED_POST_SCHEMA_KEY = 'alsamos.create.structured-post-schema.v1';
+const STRUCTURED_POST_SCHEMA_KEY = 'alsamos.create.structured-post-schema.v2';
 
 export type StructuredPostSchemaCapability = 'available' | 'missing' | null;
 export type StructuredPostTable =
