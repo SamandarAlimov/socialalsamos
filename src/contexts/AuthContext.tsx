@@ -7,19 +7,18 @@ import {
   AlsamosAuthError,
   authErrorMessage,
   DIRECT_SESSION_TICKET,
-  directPasswordLogin,
   isAlsamosEmail,
   isUsernameValid,
   LoginStepResult,
   normalizePhoneInput,
   requestAccountSession,
+  requestLoginTicket,
   toIdentityEmail,
   TOS_VERSION,
 } from '@/lib/alsamosAuth';
 import { checkPassword } from '@/lib/passwordStrength';
 import {
   registerFirstPartyIdentity,
-  repairFirstPartyIdentity,
 } from '@/lib/firstPartyIdentity';
 import {
   clearSlot,
@@ -196,24 +195,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // ---------------------------------------------------------------------
   // Login
   //
-  // Signing in talks ONLY to Supabase Auth (/auth/v1/token), exactly like the
-  // original implementation. No edge function is involved, so an undeployed or
-  // CORS-blocked `account-login` can never prevent anyone from logging in.
+  // Public authentication is username/phone based and flows through
+  // the identity endpoint so rate limits, TOTP and account selection are enforced.
   // ---------------------------------------------------------------------
   const beginLogin = async (identifier: string, password: string): Promise<LoginStepResult> => {
-  try {
-    return await directPasswordLogin(identifier, password);
-  } catch (e) {
-    if (e instanceof AlsamosAuthError && e.code === 'EMAIL_NOT_CONFIRMED') {
-      // Old production builds could create @alsamos.com identities while
-      // hosted Confirm Email was accidentally enabled. There is no real
-      // mailbox for these identities. Prove the same password server-side,
-      // confirm the user through the trusted admin API, then retry login.
-      await repairFirstPartyIdentity(toIdentityEmail(identifier), password);
-      return directPasswordLogin(identifier, password);
-    }
-    throw e;
-  }
+  return requestLoginTicket(identifier, password);
 };
 
   const completeLogin = async (ticket: string, accountId?: string): Promise<AuthResult> => {

@@ -110,36 +110,63 @@ serve(async (req) => {
   // Verify the password with an anonymous client, then drop the session:
   // the browser must not receive a session before choosing an account.
   const anon = anonClient();
-  const { data: signIn, error: signInError } = await anon.auth.signInWithPassword({
-    email: resolved.loginEmail,
-    password,
+let { data: signIn, error: signInError } = await anon.auth.signInWithPassword({
+  email: resolved.loginEmail,
+  password,
+});
+
+if (signInError && /not confirmed/i.test(signInError.message ?? "")) {
+  const { data: verifiedUserId } = await admin.rpc("verify_alsamos_identity_password", {
+    _email: resolved.loginEmail,
+    _password: password,
   });
-
-  if (signInError || !signIn?.user) {
-    await recordAttempt(admin, identifierHash, ip, "failure");
-    await audit(admin, req, {
-      eventType: "login",
-      outcome: "failure",
-      reason: "invalid_credentials",
-      identityId: resolved.identityId,
-      metadata: { identifier_kind: kind },
+  if (typeof verifiedUserId === "string" && verifiedUserId) {
+    const { error: confirmError } = await admin.auth.admin.updateUserById(verifiedUserId, {
+      email_confirm: true,
     });
-    return authError(req, "INVALID_CREDENTIALS", 401);
+    if (!confirmError) {
+      const retry = await anon.auth.signInWithPassword({
+        email: resolved.loginEmail,
+        password,
+      });
+      signIn = retry.data;
+      signInError = retry.error;
+      await audit(admin, req, {
+        eventType: "identity_confirmation_repair",
+        outcome: retry.error ? "failure" : "success",
+        reason: retry.error?.message ?? null,
+        identityId: resolved.identityId,
+        userId: verifiedUserId,
+      });
+    }
   }
+}
 
-  const userId = signIn.user.id;
-  await anon.auth.signOut({ scope: "global" }).catch(() => {});
+if (signInError || !signIn?.user) {
+  await recordAttempt(admin, identifierHash, ip, "failure");
+  await audit(admin, req, {
+    eventType: "login",
+    outcome: "failure",
+    reason: "invalid_credentials",
+    identityId: resolved.identityId,
+    metadata: { identifier_kind: kind },
+  });
+  return authError(req, "INVALID_CREDENTIALS", 401);
+}
 
-  if (!signIn.user.email_confirmed_at) {
-    await audit(admin, req, {
-      eventType: "login",
-      outcome: "blocked",
-      reason: "email_not_confirmed",
-      identityId: resolved.identityId,
-      userId,
-    });
-    return authError(req, "EMAIL_NOT_CONFIRMED", 403);
-  }
+const userId = signIn.user.id;
+await anon.auth.signOut({ scope: "local" }).catch(() => {});
+
+if (!signIn.user.email_confirmed_at) {
+  await audit(admin, req, {
+    eventType: "login",
+    outcome: "blocked",
+    reason: "identity_confirmation_unavailable",
+    identityId: resolved.identityId,
+    userId,
+  });
+  return authError(req, "IDENTITY_UNAVAILABLE", 403);
+}
 
   const { data: identity } = await admin
     .from("auth_identities")
