@@ -41,7 +41,7 @@ const labelFor = (artifact: AIArtifact) => {
   return 'VIDEO';
 };
 
-const RUNNABLE = ['javascript', 'js', 'typescript', 'ts', 'jsx', 'tsx'];
+const RUNNABLE = ['javascript', 'js', 'typescript', 'ts', 'jsx', 'tsx', 'python', 'py'];
 const PREVIEWABLE = ['html', 'svg'];
 
 function shortDate(value: Date) {
@@ -50,6 +50,22 @@ function shortDate(value: Date) {
   } catch {
     return value.toLocaleDateString();
   }
+}
+
+function artifactFileName(artifact: AIArtifact): string {
+  const stem = artifact.title
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[^a-z0-9_-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 64) || 'alsamos-artifact';
+  return `${stem}.${extensionFor(artifact)}`;
+}
+
+function sandboxLanguage(language: string): 'javascript' | 'typescript' | 'python' {
+  if (language === 'python' || language === 'py') return 'python';
+  if (language === 'typescript' || language === 'ts' || language === 'tsx') return 'typescript';
+  return 'javascript';
 }
 
 export function AIArtifactPanel({ artifacts, activeId, onSelect, onClose, isMobile }: AIArtifactPanelProps) {
@@ -75,15 +91,17 @@ export function AIArtifactPanel({ artifacts, activeId, onSelect, onClose, isMobi
     [activeId, artifacts, sortedArtifacts],
   );
 
+  const language = (active?.language ?? '').toLowerCase();
+  const canRun = active?.kind === 'code' && RUNNABLE.includes(language);
+  const canPreview = Boolean(active && PREVIEWABLE.includes(language) && (active.kind === 'code' || active.kind === 'document'));
+
   useEffect(() => {
     setCopied(false);
     setRun(null);
-    setPreview(false);
-  }, [active?.id]);
-
-  const language = (active?.language ?? '').toLowerCase();
-  const canRun = active?.kind === 'code' && RUNNABLE.includes(language);
-  const canPreview = active?.kind === 'code' && PREVIEWABLE.includes(language);
+    // Claude-like artifacts: web deliverables open as a live preview by default.
+    const nextLanguage = (active?.language ?? '').toLowerCase();
+    setPreview(Boolean(active && PREVIEWABLE.includes(nextLanguage)));
+  }, [active?.id, active?.language]);
 
   const copy = async () => {
     if (!active) return;
@@ -96,7 +114,7 @@ export function AIArtifactPanel({ artifacts, activeId, onSelect, onClose, isMobi
     if (!active) return;
     setRunning(true);
     try {
-      setRun(await runInSandbox(active.content));
+      setRun(await runInSandbox(active.content, 10_000, sandboxLanguage(language)));
     } catch (error) {
       toast({
         title: 'Ishga tushirilmadi',
@@ -110,10 +128,11 @@ export function AIArtifactPanel({ artifacts, activeId, onSelect, onClose, isMobi
 
   const download = () => {
     if (!active) return;
+    const fileName = artifactFileName(active);
     if (active.kind === 'image' || active.kind === 'video') {
       const anchor = document.createElement('a');
       anchor.href = active.content;
-      anchor.download = `alsamos-ai.${extensionFor(active)}`;
+      anchor.download = fileName;
       anchor.target = '_blank';
       anchor.click();
       return;
@@ -122,7 +141,7 @@ export function AIArtifactPanel({ artifacts, activeId, onSelect, onClose, isMobi
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
     anchor.href = url;
-    anchor.download = `alsamos-artifact.${extensionFor(active)}`;
+    anchor.download = fileName;
     anchor.click();
     URL.revokeObjectURL(url);
   };
