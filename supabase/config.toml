@@ -34,6 +34,12 @@ double_confirm_changes = true
 # =====================================================================
 
 # --- Alsamos identity auth ------------------------------------------------
+# Signup has no session yet. account-signup validates all fields, rate-limits
+# by hashed IP and creates a confirmed Auth user with the service role. Phone is
+# stored but deliberately remains unverified until an OTP provider is added.
+[functions.account-signup]
+verify_jwt = false
+
 # These endpoints must be reachable before a session exists, so Supabase JWT
 # verification is disabled and authorisation is performed inside the function
 # (password + rate limit, single-use ticket, or manual JWT verification).
