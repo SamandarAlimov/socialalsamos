@@ -1,0 +1,47 @@
+name: One-shot clean auth email fragment
+
+on:
+  push:
+    branches:
+      - fix/first-party-no-email-auth
+    paths:
+      - .github/workflows/one-shot-clean-auth-email-fragment.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/first-party-no-email-auth
+      - name: Remove orphaned email input tail
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('src/pages/AuthPage.tsx')
+          text = path.read_text(encoding='utf-8')
+          orphan = '''                      autoComplete="email"
+                      autoCapitalize="none"
+                      spellCheck={false}
+                      required
+                    />
+
+          '''
+          if orphan not in text:
+              raise SystemExit('orphaned email field tail not found')
+          text = text.replace(orphan, '', 1)
+          path.write_text(text, encoding='utf-8')
+          PY
+      - name: Commit cleanup and remove workflow
+        shell: bash
+        run: |
+          rm .github/workflows/one-shot-clean-auth-email-fragment.yml
+          git config user.name "Alsamos Auth Migration Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add src/pages/AuthPage.tsx .github/workflows/one-shot-clean-auth-email-fragment.yml
+          git commit -m "fix(auth): remove final email field fragment"
+          git push origin HEAD:fix/first-party-no-email-auth
