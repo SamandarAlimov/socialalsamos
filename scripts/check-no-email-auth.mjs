@@ -39,6 +39,8 @@ requireText(config, '[functions.account-login]\nverify_jwt = false', 'pre-sessio
 forbidText(context, 'supabase.auth.signUp({', 'direct browser signup');
 forbidText(context, 'Emailingizga tasdiqlash havolasi yuborildi', 'confirmation-email signup UX');
 forbidText(context, 'Agar bu manzil bo’sh bo’lsa, tasdiqlash xati yuborildi', 'legacy confirmation UX');
+forbidText(context, 'resetPasswordForEmail', 'synthetic mailbox password reset');
+forbidText(context, 'requestPasswordReset', 'obsolete mailbox recovery API');
 requireText(context, 'registerFirstPartyIdentity({', 'first-party signup client');
 requireText(context, 'requestLoginTicket(identifier, password)', 'first-party login ticket client');
 forbidText(context, 'directPasswordLogin(', 'direct browser password login bypass');
