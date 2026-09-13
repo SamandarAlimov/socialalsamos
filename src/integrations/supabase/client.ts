@@ -112,9 +112,7 @@ function requireValue(name: string, value: unknown): string {
 const supabaseUrl = requireValue('VITE_SUPABASE_URL', SUPABASE_URL);
 const supabaseKey = requireValue('VITE_SUPABASE_PUBLISHABLE_KEY', SUPABASE_PUBLISHABLE_KEY);
 
-// Import the supabase client like this:
-// import { supabase } from "@/integrations/supabase/client";
-export const supabase = createClient<Database>(supabaseUrl, supabaseKey, {
+const supabaseClient = createClient<Database>(supabaseUrl, supabaseKey, {
   auth: {
     storage: sharedSupabaseStorage,
     storageKey: AUTH_STORAGE_KEY,
@@ -125,12 +123,13 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseKey, {
 });
 
 // Browsers on some networks intermittently close direct connections to the
-// Supabase Edge Functions gateway even when the function itself runs. Keep the
-// normal Supabase client for every function except signup, which goes through
-// Alsamos' same-origin Vercel proxy. The proxy forwards the request to the same
-// production Edge Function and preserves its JSON/status contract.
-const directFunctionsInvoke = supabase.functions.invoke.bind(supabase.functions);
-(supabase.functions as any).invoke = async (functionName: string, options?: any) => {
+// Supabase Edge Functions gateway even when the function itself runs. Keep a
+// persistent FunctionsClient and override only account-signup so it goes
+// through Alsamos' same-origin Vercel proxy. SupabaseClient exposes `functions`
+// through a getter, so patching a temporary getter result would not persist.
+const functionsClient = supabaseClient.functions;
+const directFunctionsInvoke = functionsClient.invoke.bind(functionsClient);
+(functionsClient as any).invoke = async (functionName: string, options?: any) => {
   if (functionName !== 'account-signup' || typeof window === 'undefined') {
     return directFunctionsInvoke(functionName as any, options as any);
   }
@@ -161,3 +160,14 @@ const directFunctionsInvoke = supabase.functions.invoke.bind(supabase.functions)
     return { data: null, error };
   }
 };
+
+// Shadow SupabaseClient's `functions` getter with the persistent patched client.
+Object.defineProperty(supabaseClient, 'functions', {
+  value: functionsClient,
+  configurable: true,
+  enumerable: false,
+});
+
+// Import the supabase client like this:
+// import { supabase } from "@/integrations/supabase/client";
+export const supabase = supabaseClient;
