@@ -11,7 +11,6 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const FUNCTION_NAME = "account-signup";
 const SIGNUP_LIMIT_PER_HOUR = 10;
-const ALSAMOS_DOMAIN = "alsamos.com";
 
 function isAllowedOrigin(origin: string): boolean {
   if (!origin) return true;
@@ -66,7 +65,8 @@ function normalizeEmail(value: unknown): string {
 }
 
 function isIdentityEmail(value: string): boolean {
-  return /^[a-z0-9._%+-]{1,64}@alsamos\.com$/.test(value);
+  if (value.length > 254) return false;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) && !value.endsWith("@accounts.alsamos.com");
 }
 
 function normalizePhone(value: unknown): string | null {
@@ -99,8 +99,6 @@ serve(async (req) => {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
-  // Hard persistent rate limit. It does not depend on AUTH_ENFORCE, so this
-  // public service-role endpoint cannot accidentally become unlimited.
   const ipHash = await sha256Hex(`${FUNCTION_NAME}:${clientIp(req)}`);
   const since = new Date(Date.now() - 60 * 60_000).toISOString();
   const { count: recentAttempts } = await admin
@@ -121,11 +119,7 @@ serve(async (req) => {
       mode: "on",
       metadata: { limit: SIGNUP_LIMIT_PER_HOUR, windowMinutes: 60 },
     });
-    return json(
-      req,
-      { error: "TOO_MANY_ATTEMPTS", message: "Juda ko'p ro'yxatdan o'tish urinishlari. Birozdan so'ng qayta urinib ko'ring." },
-      429,
-    );
+    return json(req, { error: "TOO_MANY_ATTEMPTS", message: "Juda ko'p ro'yxatdan o'tish urinishlari. Birozdan so'ng qayta urinib ko'ring." }, 429);
   }
 
   await admin.from("function_usage").insert({
@@ -143,16 +137,16 @@ serve(async (req) => {
     return json(req, { error: "INVALID_REQUEST", message: "Ro'yxatdan o'tish ma'lumotlari topilmadi." }, 400);
   }
 
-  const email = normalizeEmail(body.email);
-  const phone = normalizePhone(body.phone);
-  const username = normalizeUsername(body.username);
-  const displayName = typeof body.displayName === "string" ? body.displayName.trim().slice(0, 100) : "";
-  const password = typeof body.password === "string" ? body.password : "";
-  const acceptedTerms = body.acceptedTerms === true;
-  const tosVersion = typeof body.tosVersion === "string" ? body.tosVersion.trim().slice(0, 40) : null;
+  const email = normalizeEmail((body as any).email);
+  const phone = normalizePhone((body as any).phone);
+  const username = normalizeUsername((body as any).username);
+  const displayName = typeof (body as any).displayName === "string" ? (body as any).displayName.trim().slice(0, 100) : "";
+  const password = typeof (body as any).password === "string" ? (body as any).password : "";
+  const acceptedTerms = (body as any).acceptedTerms === true;
+  const tosVersion = typeof (body as any).tosVersion === "string" ? (body as any).tosVersion.trim().slice(0, 40) : null;
 
   if (!isIdentityEmail(email)) {
-    return json(req, { error: "INVALID_REQUEST", message: `Email @${ALSAMOS_DOMAIN} manzilida bo'lishi kerak.` }, 400);
+    return json(req, { error: "INVALID_REQUEST", message: "Email manzilini to'g'ri kiriting." }, 400);
   }
   if (!phone) {
     return json(req, { error: "INVALID_REQUEST", message: "Telefon raqamni xalqaro formatda kiriting." }, 400);
@@ -172,12 +166,8 @@ serve(async (req) => {
     admin.from("auth_identities").select("id").eq("phone", phone).maybeSingle(),
   ]);
 
-  if (usernameTaken) {
-    return json(req, { error: "USERNAME_TAKEN", message: "Bu username band." }, 409);
-  }
-  if (phoneTaken) {
-    return json(req, { error: "PHONE_TAKEN", message: "Bu telefon raqami allaqachon ishlatilgan." }, 409);
-  }
+  if (usernameTaken) return json(req, { error: "USERNAME_TAKEN", message: "Bu username band." }, 409);
+  if (phoneTaken) return json(req, { error: "PHONE_TAKEN", message: "Bu telefon raqami allaqachon ishlatilgan." }, 409);
 
   const { data: created, error: createError } = await admin.auth.admin.createUser({
     email,
@@ -193,29 +183,16 @@ serve(async (req) => {
 
   if (createError || !created?.user) {
     const duplicate = /already|registered|exists/i.test(createError?.message ?? "");
-    return json(
-      req,
-      {
-        error: duplicate ? "ACCOUNT_EXISTS" : "SIGNUP_FAILED",
-        message: duplicate
-          ? "Bu email bilan akkaunt allaqachon mavjud."
-          : "Akkaunt yaratilmadi. Qaytadan urinib ko'ring.",
-      },
-      duplicate ? 409 : 500,
-    );
+    return json(req, {
+      error: duplicate ? "ACCOUNT_EXISTS" : "SIGNUP_FAILED",
+      message: duplicate ? "Bu email bilan akkaunt allaqachon mavjud." : "Akkaunt yaratilmadi. Qaytadan urinib ko'ring.",
+    }, duplicate ? 409 : 500);
   }
 
-  // auth.users triggers create profiles/auth_identities/identity_accounts and
-  // copy the phone into auth_identities. We intentionally do not set
-  // phone_verified_at until a real OTP/SMS provider exists.
-  return json(
-    req,
-    {
-      ok: true,
-      user_id: created.user.id,
-      email_confirmed: true,
-      phone_verified: false,
-    },
-    201,
-  );
+  return json(req, {
+    ok: true,
+    user_id: created.user.id,
+    email_confirmed: true,
+    phone_verified: false,
+  }, 201);
 });
