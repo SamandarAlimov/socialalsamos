@@ -22,19 +22,21 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
+          import re
+
           path = Path('src/pages/AuthPage.tsx')
           text = path.read_text(encoding='utf-8')
-          orphan = '''                      autoComplete="email"
-                      autoCapitalize="none"
-                      spellCheck={false}
-                      required
-                    />
-
-          '''
-          if orphan not in text:
-              raise SystemExit('orphaned email field tail not found')
-          text = text.replace(orphan, '', 1)
-          path.write_text(text, encoding='utf-8')
+          pattern = re.compile(
+              r'\n[ \t]*autoComplete="email"\n'
+              r'[ \t]*autoCapitalize="none"\n'
+              r'[ \t]*spellCheck=\{false\}\n'
+              r'[ \t]*required\n'
+              r'[ \t]*/>\n'
+          )
+          cleaned, count = pattern.subn('\n', text, count=1)
+          if count != 1:
+              raise SystemExit(f'expected exactly one orphaned email field tail, found {count}')
+          path.write_text(cleaned, encoding='utf-8')
           PY
       - name: Commit cleanup and remove workflow
         shell: bash
