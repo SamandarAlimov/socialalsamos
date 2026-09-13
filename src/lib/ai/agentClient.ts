@@ -5,6 +5,7 @@
 
 import { supabase } from '@/integrations/supabase/client';
 import type { AgentEvent, AIMode, ModelId, ToolGroupId } from './capabilities';
+import { withAlsamosSearchGrounding } from './alsamosSearchGrounding';
 
 export type StreamAgentOptions = {
   messages: Array<{ role: 'user' | 'assistant'; content: string }>;
@@ -366,12 +367,17 @@ async function streamEdgeThenServer(options: StreamAgentOptions): Promise<void> 
 /**
  * Kod vazifasi -> real server sandbox birinchi.
  * Qolgan vazifalar -> rich-tool Edge agent birinchi, server esa resilient fallback.
+ * Live/current web so'rovlari oldidan Alsamos Global Search grounding qo'shiladi.
  */
 export async function streamAgent(options: StreamAgentOptions): Promise<void> {
-  if (shouldPreferServerAgent(options)) {
-    return streamServerThenEdge(options);
+  const prepared = shouldPreferServerAgent(options)
+    ? options
+    : await withAlsamosSearchGrounding(options);
+
+  if (shouldPreferServerAgent(prepared)) {
+    return streamServerThenEdge(prepared);
   }
-  return streamEdgeThenServer(options);
+  return streamEdgeThenServer(prepared);
 }
 
 export type SandboxRun = {
