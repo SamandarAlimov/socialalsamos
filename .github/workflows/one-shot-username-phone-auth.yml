@@ -1,0 +1,296 @@
+name: One-shot username phone auth migration
+
+on:
+  push:
+    branches:
+      - fix/first-party-no-email-auth
+    paths:
+      - .github/workflows/one-shot-username-phone-auth.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/first-party-no-email-auth
+          fetch-depth: 0
+
+      - name: Remove user-facing email auth and enforce server identity login
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          # -----------------------------------------------------------------
+          # AuthPage: username/phone only in the visible product experience.
+          # -----------------------------------------------------------------
+          path = Path('src/pages/AuthPage.tsx')
+          text = path.read_text(encoding='utf-8')
+
+          text = text.replace('  Mail,\n', '')
+          text = text.replace('  ALSAMOS_MAIL_DOMAIN,\n', '')
+          text = text.replace('  isAlsamosEmail,\n', '')
+
+          start = text.find('/** Login accepts an email, a username or a phone number. */')
+          end = text.find('const loginSchema =', start)
+          if start < 0 or end < 0:
+              raise SystemExit('login identifier validator anchors not found')
+          new_validator = """/** Public login accepts only an Alsamos username or a phone number. */
+          const identifierField = z
+            .string()
+            .trim()
+            .min(3, 'Username yoki telefon raqamni kiriting')
+            .max(255)
+            .refine((value) => {
+              const kind = classifyIdentifier(value);
+              return kind === 'username' || kind === 'phone';
+            }, {
+              message: 'Username yoki telefon raqamni to’g’ri kiriting',
+            });
+
+          """
+          text = text[:start] + new_validator + text[end:]
+
+          signup_start = text.find('/** Signup still creates an @alsamos.com identity. */')
+          signup_schema = text.find('const signupSchema =', signup_start)
+          if signup_start < 0 or signup_schema < 0:
+              raise SystemExit('signup email field anchors not found')
+          text = text[:signup_start] + (
+              '/** Signup creates an internal identity from the public username. */\n'
+          ) + text[signup_schema:]
+          text = text.replace('    email: signupEmailField,\n', '')
+
+          text = text.replace("  const [email, setEmail] = useState('');\n", '')
+          text = text.replace(
+              '    () => checkPassword(password, [email, username, fullName]),\n'
+              '    [password, email, username, fullName],',
+              '    () => checkPassword(password, [username, fullName, phone]),\n'
+              '    [password, username, fullName, phone],',
+          )
+          text = text.replace("    setEmail('');\n", '')
+          text = text.replace('      email,\n', '')
+          text = text.replace(
+              '    const { error, needsEmailConfirmation } = await signup({\n'
+              '      email: toIdentityEmail(parsed.data.email),',
+              '    const { error } = await signup({\n'
+              '      // Supabase Auth still needs a unique credential internally, but this\n'
+              '      // synthetic address is never shown as a mailbox to the user.\n'
+              '      email: toIdentityEmail(parsed.data.username),',
+          )
+          text = text.replace(
+              "\n    if (needsEmailConfirmation) {\n"
+              "      setMode('login');\n"
+              "      resetForm();\n"
+              "      return;\n"
+              "    }\n\n"
+              "    navigate(nextPath);",
+              "\n    navigate(nextPath);",
+          )
+
+          text = text.replace(
+              "                  {loginStep.identity.email} · {loginStep.identity.used}/\n"
+              "                  {loginStep.identity.max || MAX_ACCOUNTS_PER_IDENTITY}",
+              "                  {loginStep.identity.used}/\n"
+              "                  {loginStep.identity.max || MAX_ACCOUNTS_PER_IDENTITY} akkaunt",
+          )
+          text = text.replace('                  /* Email, username or phone number */', '                  /* Username or phone number */')
+          text = text.replace('placeholder="Email, username yoki telefon raqam"', 'placeholder="Username yoki telefon raqam"')
+
+          email_input = """                    <Input
+                      type="email"
+                      placeholder={`username@${ALSAMOS_MAIL_DOMAIN}`}
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      icon={<Mail className="h-4 w-4" />}
+                      autoComplete="email"
+                      autoCapitalize="none"
+                      spellCheck={false}
+                      required
+                    />
+
+          """
+          if email_input not in text:
+              raise SystemExit('visible signup email input not found')
+          text = text.replace(email_input, '', 1)
+          path.write_text(text, encoding='utf-8')
+
+          # -----------------------------------------------------------------
+          # AuthContext: all normal login goes through the identity service.
+          # This restores rate limiting, account resolution and 2FA enforcement.
+          # -----------------------------------------------------------------
+          path = Path('src/contexts/AuthContext.tsx')
+          text = path.read_text(encoding='utf-8')
+          text = text.replace('  directPasswordLogin,\n', '')
+          text = text.replace('  requestAccountSession,\n', '  requestAccountSession,\n  requestLoginTicket,\n')
+          text = text.replace('  repairFirstPartyIdentity,\n', '')
+
+          start = text.find('  // Login\n')
+          begin = text.find('  const beginLogin = async', start)
+          end = text.find('\n\n  const completeLogin', begin)
+          if begin < 0 or end < 0:
+              raise SystemExit('AuthContext beginLogin anchors not found')
+          new_login = """  const beginLogin = async (identifier: string, password: string): Promise<LoginStepResult> => {
+            // The identity endpoint is the canonical login boundary. It resolves
+            // username/phone server-side, applies rate limits, enforces TOTP and
+            // only then issues a short-lived account-selection ticket.
+            return requestLoginTicket(identifier, password);
+          };"""
+          text = text[:begin] + new_login + text[end:]
+          text = text.replace(
+              '  // Signing in talks ONLY to Supabase Auth (/auth/v1/token), exactly like the\n'
+              '  // original implementation. No edge function is involved, so an undeployed or\n'
+              '  // CORS-blocked `account-login` can never prevent anyone from logging in.\n',
+              '  // User-facing authentication is username/phone based. Synthetic @alsamos.com\n'
+              '  // credentials remain an internal Supabase implementation detail only.\n',
+          )
+          path.write_text(text, encoding='utf-8')
+
+          # -----------------------------------------------------------------
+          # account-login: repair old unconfirmed synthetic users server-side,
+          # and never globally revoke their other sessions during password proof.
+          # -----------------------------------------------------------------
+          path = Path('supabase/functions/account-login/index.ts')
+          text = path.read_text(encoding='utf-8')
+          old = """  const anon = anonClient();
+          const { data: signIn, error: signInError } = await anon.auth.signInWithPassword({
+            email: resolved.loginEmail,
+            password,
+          });
+
+          if (signInError || !signIn?.user) {
+            await recordAttempt(admin, identifierHash, ip, "failure");
+            await audit(admin, req, {
+              eventType: "login",
+              outcome: "failure",
+              reason: "invalid_credentials",
+              identityId: resolved.identityId,
+              metadata: { identifier_kind: kind },
+            });
+            return authError(req, "INVALID_CREDENTIALS", 401);
+          }
+
+          const userId = signIn.user.id;
+          await anon.auth.signOut({ scope: "global" }).catch(() => {});
+
+          if (!signIn.user.email_confirmed_at) {
+            await audit(admin, req, {
+              eventType: "login",
+              outcome: "blocked",
+              reason: "email_not_confirmed",
+              identityId: resolved.identityId,
+              userId,
+            });
+            return authError(req, "EMAIL_NOT_CONFIRMED", 403);
+          }
+          """
+          new = """  const anon = anonClient();
+          let { data: signIn, error: signInError } = await anon.auth.signInWithPassword({
+            email: resolved.loginEmail,
+            password,
+          });
+
+          // A previous production configuration could create synthetic
+          // @alsamos.com identities as unconfirmed. There is no mailbox to click.
+          // Repair only after the same password is independently proven by the
+          // service_role-only verifier, then retry the normal GoTrue password grant.
+          if (signInError && /not confirmed/i.test(signInError.message ?? "")) {
+            const { data: verifiedUserId } = await admin.rpc("verify_alsamos_identity_password", {
+              _email: resolved.loginEmail,
+              _password: password,
+            });
+
+            if (typeof verifiedUserId === "string" && verifiedUserId) {
+              const { error: confirmError } = await admin.auth.admin.updateUserById(verifiedUserId, {
+                email_confirm: true,
+              });
+
+              if (!confirmError) {
+                const retry = await anon.auth.signInWithPassword({
+                  email: resolved.loginEmail,
+                  password,
+                });
+                signIn = retry.data;
+                signInError = retry.error;
+
+                await audit(admin, req, {
+                  eventType: "identity_confirmation_repair",
+                  outcome: retry.error ? "failure" : "success",
+                  reason: retry.error?.message ?? null,
+                  identityId: resolved.identityId,
+                  userId: verifiedUserId,
+                });
+              }
+            }
+          }
+
+          if (signInError || !signIn?.user) {
+            await recordAttempt(admin, identifierHash, ip, "failure");
+            await audit(admin, req, {
+              eventType: "login",
+              outcome: "failure",
+              reason: "invalid_credentials",
+              identityId: resolved.identityId,
+              metadata: { identifier_kind: kind },
+            });
+            return authError(req, "INVALID_CREDENTIALS", 401);
+          }
+
+          const userId = signIn.user.id;
+          // This is only a temporary server-side password-verification session.
+          // Never use scope=global here: doing so would revoke the user's other
+          // devices every time they log in.
+          await anon.auth.signOut({ scope: "local" }).catch(() => {});
+
+          if (!signIn.user.email_confirmed_at) {
+            await audit(admin, req, {
+              eventType: "login",
+              outcome: "blocked",
+              reason: "identity_confirmation_unavailable",
+              identityId: resolved.identityId,
+              userId,
+            });
+            return authError(req, "IDENTITY_UNAVAILABLE", 403);
+          }
+          """
+          if old not in text:
+              raise SystemExit('account-login password block not found')
+          text = text.replace(old, new, 1)
+          path.write_text(text, encoding='utf-8')
+
+          # Final regression assertions before committing.
+          auth_page = Path('src/pages/AuthPage.tsx').read_text(encoding='utf-8')
+          auth_ctx = Path('src/contexts/AuthContext.tsx').read_text(encoding='utf-8')
+          login_fn = Path('supabase/functions/account-login/index.ts').read_text(encoding='utf-8')
+          for forbidden in [
+              'type="email"',
+              'Email, username yoki telefon',
+              'signupEmailField',
+              'loginStep.identity.email',
+          ]:
+              if forbidden in auth_page:
+                  raise SystemExit(f'user-facing email auth remains: {forbidden}')
+          if 'requestLoginTicket(identifier, password)' not in auth_ctx:
+              raise SystemExit('canonical server login is not active')
+          if 'directPasswordLogin(identifier, password)' in auth_ctx:
+              raise SystemExit('direct password login still bypasses server identity policy')
+          if 'scope: "global"' in login_fn:
+              raise SystemExit('account-login still globally revokes sessions')
+          PY
+
+      - name: Remove one-shot workflow and commit migration
+        shell: bash
+        run: |
+          rm .github/workflows/one-shot-username-phone-auth.yml
+          git config user.name "Alsamos Auth Migration Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add \
+            src/pages/AuthPage.tsx \
+            src/contexts/AuthContext.tsx \
+            supabase/functions/account-login/index.ts \
+            .github/workflows/one-shot-username-phone-auth.yml
+          git commit -m "fix(auth): make username and phone the public login identity"
+          git push origin HEAD:fix/first-party-no-email-auth
