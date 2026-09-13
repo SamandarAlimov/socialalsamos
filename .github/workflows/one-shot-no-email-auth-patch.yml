@@ -1,0 +1,164 @@
+name: One-shot no-email auth patch
+
+on:
+  push:
+    branches:
+      - fix/first-party-no-email-auth
+    paths:
+      - .github/workflows/one-shot-no-email-auth-patch.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/first-party-no-email-auth
+          fetch-depth: 0
+
+      - name: Replace legacy email-confirmation client flow
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/contexts/AuthContext.tsx')
+          text = path.read_text(encoding='utf-8')
+
+          old_import = "import { checkPassword } from '@/lib/passwordStrength';"
+          new_import = """import { checkPassword } from '@/lib/passwordStrength';
+          import {
+            registerFirstPartyIdentity,
+            repairFirstPartyIdentity,
+          } from '@/lib/firstPartyIdentity';"""
+          if old_import not in text:
+              raise SystemExit('AuthContext import anchor not found')
+          text = text.replace(old_import, new_import, 1)
+
+          old_login = """  const beginLogin = async (identifier: string, password: string): Promise<LoginStepResult> => {
+            return directPasswordLogin(identifier, password);
+          };"""
+          new_login = """  const beginLogin = async (identifier: string, password: string): Promise<LoginStepResult> => {
+            try {
+              return await directPasswordLogin(identifier, password);
+            } catch (e) {
+              if (e instanceof AlsamosAuthError && e.code === 'EMAIL_NOT_CONFIRMED') {
+                // Old production builds could create @alsamos.com identities while
+                // hosted Confirm Email was accidentally enabled. There is no real
+                // mailbox for these identities. Prove the same password server-side,
+                // confirm the user through the trusted admin API, then retry login.
+                await repairFirstPartyIdentity(toIdentityEmail(identifier), password);
+                return directPasswordLogin(identifier, password);
+              }
+              throw e;
+            }
+          };"""
+          if old_login not in text:
+              raise SystemExit('beginLogin anchor not found')
+          text = text.replace(old_login, new_login, 1)
+
+          old_signup = """    const { data, error } = await supabase.auth.signUp({
+              email: identityEmail,
+              password,
+              options: {
+                emailRedirectTo: `${window.location.origin}/`,
+                data: {
+                  display_name: displayName || finalUsername,
+                  username: finalUsername,
+                  phone: normalizedPhone,
+                  tos_version: TOS_VERSION,
+                },
+              },
+            });
+
+            setIsLoading(false);
+
+            if (error) {
+              // Never confirm whether an address is already registered.
+              const message = /already|registered|exists/i.test(error.message)
+                ? 'Agar bu manzil bo’sh bo’lsa, tasdiqlash xati yuborildi.'
+                : error.message;
+              toast({
+                title: 'Ro’yxatdan o’tish',
+                description: message,
+                variant: 'destructive',
+              });
+              return { error };
+            }
+
+            const needsEmailConfirmation = !data.session;
+
+            toast({
+              title: 'Akkaunt yaratildi',
+              description: needsEmailConfirmation
+                ? 'Emailingizga tasdiqlash havolasi yuborildi. Havolani bosgach kirishingiz mumkin.'
+                : 'Alsamosga xush kelibsiz!',
+            });
+
+            return { error: null, needsEmailConfirmation };"""
+          new_signup = """    try {
+              const { repaired } = await registerFirstPartyIdentity({
+                email: identityEmail,
+                password,
+                username: finalUsername,
+                displayName: displayName || finalUsername,
+                phone: normalizedPhone,
+                tosVersion: TOS_VERSION,
+              });
+
+              toast({
+                title: repaired ? 'Akkaunt tiklandi' : 'Akkaunt yaratildi',
+                description: repaired
+                  ? 'Oldingi tasdiqlanmagan Alsamos identifikatori xavfsiz tiklandi va tizimga kirdingiz.'
+                  : 'Alsamosga xush kelibsiz!',
+              });
+
+              return { error: null, needsEmailConfirmation: false };
+            } catch (e) {
+              const error = e instanceof Error ? e : new Error('Ro’yxatdan o’tish amalga oshmadi.');
+              toast({
+                title: 'Ro’yxatdan o’tish amalga oshmadi',
+                description: error.message,
+                variant: 'destructive',
+              });
+              return { error };
+            } finally {
+              setIsLoading(false);
+            }"""
+          if old_signup not in text:
+              raise SystemExit('legacy signup block not found')
+          text = text.replace(old_signup, new_signup, 1)
+          path.write_text(text, encoding='utf-8')
+
+          auth = Path('src/lib/alsamosAuth.ts')
+          auth_text = auth.read_text(encoding='utf-8')
+          old = "return 'Email hali tasdiqlanmagan. Pochtangizdagi havolani bosing.';"
+          new = "return 'Alsamos identifikatori eski tasdiqlash holatida qolgan. Parolingiz bilan xavfsiz tiklash urinishi bajariladi.';"
+          if old not in auth_text:
+              raise SystemExit('EMAIL_NOT_CONFIRMED message anchor not found')
+          auth.write_text(auth_text.replace(old, new, 1), encoding='utf-8')
+
+          # Guard against the exact regression visible in production.
+          combined = path.read_text(encoding='utf-8')
+          forbidden = [
+              'supabase.auth.signUp({',
+              'Emailingizga tasdiqlash havolasi yuborildi',
+              'Agar bu manzil bo’sh bo’lsa, tasdiqlash xati yuborildi',
+          ]
+          for value in forbidden:
+              if value in combined:
+                  raise SystemExit(f'Legacy confirmation flow still present: {value}')
+          PY
+
+      - name: Remove one-shot workflow and commit patch
+        shell: bash
+        run: |
+          rm .github/workflows/one-shot-no-email-auth-patch.yml
+          git config user.name "Alsamos Auth Migration Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add src/contexts/AuthContext.tsx src/lib/alsamosAuth.ts .github/workflows/one-shot-no-email-auth-patch.yml
+          git commit -m "fix(auth): remove mailbox confirmation from Alsamos identity flow"
+          git push origin HEAD:fix/first-party-no-email-auth
