@@ -95,7 +95,11 @@
       "destination": "https://tcykulflvagvwuygwgmu.supabase.co/storage/v1/object/public/media/:path*"
     },
     {
-      "source": "/((?!api/.*|mp/.*|__media/.*|__supabase-media/.*).*)",
+      "source": "/__supabase-rest/:path*",
+      "destination": "https://tcykulflvagvwuygwgmu.supabase.co/rest/v1/:path*"
+    },
+    {
+      "source": "/((?!api/.*|mp/.*|__media/.*|__supabase-media/.*|__supabase-rest/.*).*)",
       "destination": "/index.html"
     }
   ],
