@@ -65,10 +65,11 @@ export function useUserSettings() {
       if (data) {
         setSettings(data as UserSettings);
       } else {
-        // Create default settings if none exist
+        // Multiple screens can mount this hook at the same time. Upsert makes
+        // default creation idempotent instead of racing into a 23505/409.
         const { data: newSettings, error: createError } = await supabase
           .from('user_settings')
-          .insert({ user_id: user.id })
+          .upsert({ user_id: user.id }, { onConflict: 'user_id' })
           .select()
           .single();
 
