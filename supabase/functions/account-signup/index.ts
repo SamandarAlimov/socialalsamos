@@ -52,7 +52,6 @@ function json(req: Request, body: unknown, status = 200): Response {
       ...corsHeaders(req),
       "Content-Type": "application/json; charset=utf-8",
       "Cache-Control": "no-store",
-      "Connection": "keep-alive",
     },
   });
 }
