@@ -1,16 +1,53 @@
-function env(name: string) {
-  const value = process.env[name];
-  return typeof value === 'string' ? value.trim() : '';
+const CANONICAL_SUPABASE_URL = 'https://tcykulflvagvwuygwgmu.supabase.co';
+const CANONICAL_SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_ZfK2a0Rut0mlFYVaLpKt9g_YmX-Ppu1';
+
+function normalizeEnvValue(raw: unknown, acceptedKeys: string[]) {
+  let value = String(raw ?? '').trim();
+  if (
+    value.length >= 2 &&
+    ((value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'")))
+  ) {
+    value = value.slice(1, -1).trim();
+  }
+
+  for (const key of acceptedKeys) {
+    const prefix = `${key}=`;
+    if (value.startsWith(prefix)) {
+      value = value.slice(prefix.length).trim();
+      break;
+    }
+  }
+
+  if (
+    value.length >= 2 &&
+    ((value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'")))
+  ) {
+    value = value.slice(1, -1).trim();
+  }
+  return value;
 }
 
 function supabaseConfig() {
-  const url = env('SUPABASE_URL') || env('VITE_SUPABASE_URL') || 'https://tcykulflvagvwuygwgmu.supabase.co';
-  const key =
-    env('SUPABASE_PUBLISHABLE_KEY') ||
-    env('SUPABASE_ANON_KEY') ||
-    env('VITE_SUPABASE_PUBLISHABLE_KEY') ||
-    'sb_publishable_ZfK2a0Rut0mlFYVaLpKt9g_YmX-Ppu1';
-  return { url: url.replace(/\/+$/, ''), key };
+  const configuredUrl = normalizeEnvValue(
+    process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL,
+    ['SUPABASE_URL', 'VITE_SUPABASE_URL'],
+  );
+  const configuredKey = normalizeEnvValue(
+    process.env.SUPABASE_PUBLISHABLE_KEY ||
+      process.env.SUPABASE_ANON_KEY ||
+      process.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+    ['SUPABASE_PUBLISHABLE_KEY', 'SUPABASE_ANON_KEY', 'VITE_SUPABASE_PUBLISHABLE_KEY'],
+  );
+
+  const validUrl = /^https:\/\/[a-z0-9-]+\.supabase\.co\/?$/i.test(configuredUrl);
+  const validKey = configuredKey.startsWith('sb_publishable_') || configuredKey.startsWith('eyJ');
+
+  return {
+    url: (validUrl ? configuredUrl : CANONICAL_SUPABASE_URL).replace(/\/+$/, ''),
+    key: validKey ? configuredKey : CANONICAL_SUPABASE_PUBLISHABLE_KEY,
+  };
 }
 
 function isAllowedOrigin(origin: string) {
@@ -94,7 +131,9 @@ export default async function handler(req: any, res: any) {
 
     res.setHeader('Cache-Control', 'no-store');
     res.status(upstream.status).json(payload ?? {});
-  } catch {
+  } catch (error) {
+    const details = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+    console.error('[account-signup-proxy] upstream fetch failed:', details.slice(0, 300));
     res.status(503).json({
       error: 'SIGNUP_SERVICE_UNAVAILABLE',
       message: "Ro'yxatdan o'tish xizmati bilan aloqa o'rnatilmadi. Qaytadan urinib ko'ring.",
