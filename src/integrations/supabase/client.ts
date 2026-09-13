@@ -111,8 +111,50 @@ function requireValue(name: string, value: unknown): string {
 
 const supabaseUrl = requireValue('VITE_SUPABASE_URL', SUPABASE_URL);
 const supabaseKey = requireValue('VITE_SUPABASE_PUBLISHABLE_KEY', SUPABASE_PUBLISHABLE_KEY);
+const supabaseOrigin = new URL(supabaseUrl).origin;
+
+// Some client networks intermittently time out or close direct PostgREST
+// connections to *.supabase.co. Keep Auth/Realtime untouched, but route
+// browser /rest/v1 traffic through Alsamos' same-origin Vercel proxy. The proxy
+// forwards the user's JWT and the public project key, so normal Supabase RLS
+// remains the authorization boundary.
+const sameOriginSupabaseFetch: typeof fetch = async (input, init) => {
+  if (typeof window === 'undefined') {
+    return fetch(input, init);
+  }
+
+  const rawUrl =
+    typeof input === 'string'
+      ? input
+      : input instanceof URL
+        ? input.toString()
+        : input.url;
+
+  let target: URL;
+  try {
+    target = new URL(rawUrl, window.location.origin);
+  } catch {
+    return fetch(input, init);
+  }
+
+  if (target.origin !== supabaseOrigin || !target.pathname.startsWith('/rest/v1/')) {
+    return fetch(input, init);
+  }
+
+  const proxyUrl = new URL('/api/supabase-rest', window.location.origin);
+  proxyUrl.searchParams.set('path', `${target.pathname}${target.search}`);
+
+  if (typeof Request !== 'undefined' && input instanceof Request) {
+    return fetch(new Request(proxyUrl.toString(), input), init);
+  }
+
+  return fetch(proxyUrl.toString(), init);
+};
 
 const supabaseClient = createClient<Database>(supabaseUrl, supabaseKey, {
+  global: {
+    fetch: sameOriginSupabaseFetch,
+  },
   auth: {
     storage: sharedSupabaseStorage,
     storageKey: AUTH_STORAGE_KEY,
