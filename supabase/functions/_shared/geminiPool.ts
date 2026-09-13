@@ -324,6 +324,121 @@ export async function aiFetch(options: AiFetchOptions): Promise<AiFetchResult> {
   );
 }
 
+/* ---------------------- quota-safe web search fallback --------------------- */
+
+function plainText(value: unknown): string {
+  return String(value ?? '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&quot;/g, '"')
+    .replace(/&#0?39;|&#x27;/gi, "'")
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function googleSearchPrompt(body: unknown): { query: string; locale: 'uz' | 'ru' | 'en'; limit: number } | null {
+  const payload = body as any;
+  const tools = Array.isArray(payload?.tools) ? payload.tools : [];
+  if (!tools.some((tool: any) => tool?.google_search)) return null;
+
+  const contents = Array.isArray(payload?.contents) ? payload.contents : [];
+  const text = contents
+    .flatMap((content: any) => Array.isArray(content?.parts) ? content.parts : [])
+    .map((part: any) => typeof part?.text === 'string' ? part.text : '')
+    .join('\n');
+
+  const query = text.match(/(?:^|\n)Query:\s*(.+?)(?:\n|$)/i)?.[1]?.trim();
+  if (!query) return null;
+
+  const rawLocale = text.match(/User locale:\s*(uz|ru|en)/i)?.[1]?.toLowerCase();
+  const locale: 'uz' | 'ru' | 'en' = rawLocale === 'ru' || rawLocale === 'en' ? rawLocale : 'uz';
+  const rawLimit = Number(text.match(/approximately\s+(\d+)\s+distinct sources/i)?.[1] || 8);
+  const limit = Math.max(1, Math.min(10, Number.isFinite(rawLimit) ? rawLimit : 8));
+
+  return { query: query.slice(0, 300), locale, limit };
+}
+
+async function wikipediaGroundingFallback(body: unknown): Promise<Response | null> {
+  const request = googleSearchPrompt(body);
+  if (!request) return null;
+
+  try {
+    const host = request.locale === 'ru'
+      ? 'ru.wikipedia.org'
+      : request.locale === 'en'
+        ? 'en.wikipedia.org'
+        : 'uz.wikipedia.org';
+    const params = new URLSearchParams({
+      action: 'query',
+      list: 'search',
+      srsearch: request.query,
+      format: 'json',
+      utf8: '1',
+      srlimit: String(request.limit),
+      origin: '*',
+    });
+
+    const response = await fetch(`https://${host}/w/api.php?${params.toString()}`, {
+      headers: { 'User-Agent': 'AlsamosSearch/1.0' },
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (!response.ok) return null;
+
+    const payload = await response.json().catch(() => null);
+    const rows = Array.isArray(payload?.query?.search) ? payload.query.search : [];
+    if (!rows.length) return null;
+
+    const chunks: any[] = [];
+    const supports: any[] = [];
+    const digest: string[] = [];
+
+    for (const row of rows.slice(0, request.limit)) {
+      const title = plainText(row?.title);
+      if (!title) continue;
+      const snippet = plainText(row?.snippet).slice(0, 700);
+      const article = `https://${host}/wiki/${encodeURIComponent(title.replace(/\s+/g, '_'))}`;
+      const index = chunks.length;
+      chunks.push({ web: { uri: article, title } });
+      if (snippet) {
+        supports.push({ segment: { text: snippet }, groundingChunkIndices: [index] });
+        if (digest.length < 4) digest.push(`${title}: ${snippet}`);
+      }
+    }
+
+    if (!chunks.length) return null;
+
+    return new Response(JSON.stringify({
+      candidates: [{
+        content: {
+          parts: [{
+            text: digest.join('\n') || `Wikipedia results for ${request.query}`,
+          }],
+        },
+        groundingMetadata: {
+          groundingChunks: chunks,
+          groundingSupports: supports,
+          webSearchQueries: [request.query],
+        },
+      }],
+      alsamosFallbackProvider: 'wikipedia',
+    }), {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Alsamos-Search-Provider': 'wikipedia',
+      },
+    });
+  } catch (error) {
+    console.warn(
+      'Wikipedia search fallback failed:',
+      error instanceof Error ? error.message : String(error),
+    );
+    return null;
+  }
+}
+
 /* -------------------------- native Google endpoints ------------------------- */
 
 export type GoogleFetchResult = {
@@ -337,6 +452,8 @@ export async function googleFetch(
 ): Promise<GoogleFetchResult> {
   const keys = await available();
   if (!keys.length) {
+    const fallback = await wikipediaGroundingFallback(init.body);
+    if (fallback) return { response: fallback, keyIndex: 0 };
     throw new Error('Gemini API kalitlari topilmadi. Shared key poolni sozlang.');
   }
 
@@ -386,8 +503,16 @@ export async function googleFetch(
       continue;
     }
 
+    const fallback = await wikipediaGroundingFallback(init.body);
+    if (fallback) return { response: fallback, keyIndex: 0 };
     return { response, keyIndex: attempt + 1 };
   }
+
+  // All configured Gemini keys were tried first. Search-mode requests still get
+  // real, attributable web evidence from Wikipedia instead of failing entirely
+  // when every Google Search grounding quota is exhausted.
+  const fallback = await wikipediaGroundingFallback(init.body);
+  if (fallback) return { response: fallback, keyIndex: 0 };
 
   throw new Error(
     `Google API ishlamadi (oxirgi HTTP ${lastStatus || '?'}). ${lastDetail.slice(0, 160)}`.trim(),
