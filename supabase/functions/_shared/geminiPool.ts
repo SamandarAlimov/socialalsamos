@@ -7,6 +7,7 @@
  * is retried with the next key automatically.
  *
  * Secrets are never committed here. Keys may come from:
+ *   - Alsamos (the shared Edge Functions secret used by the current project)
  *   - GEMINI_API_KEYS / ALSAMOS_AI_API_KEYS / ALSAMOS_SEARCH_API_KEYS bundles
  *   - GEMINI_API_KEY_1..20
  *   - GEMINI_API_KEY / ALSAMOS_SEARCH_API_KEY / GOOGLE_API_KEY legacy aliases
@@ -52,10 +53,20 @@ let databaseKeys: string[] = [];
 let databaseLoadedAt = 0;
 let databaseLoad: Promise<void> | null = null;
 
+/**
+ * Accept either a normal comma/newline-separated bundle or the labelled text
+ * copied from Google AI Studio/Cloud. When labelled text is supplied, only
+ * actual AQ.* API-key-looking tokens are admitted to the pool, so project IDs
+ * and display names can never become fake keys.
+ */
 function parseKeyList(raw: string | undefined | null): string[] {
   if (!raw) return [];
+
+  const googleKeys = raw.match(/AQ\.[A-Za-z0-9_-]+/g);
+  if (googleKeys?.length) return googleKeys;
+
   return raw
-    .split(/[,;\n\r]+/g)
+    .split(/[,;\s]+/g)
     .map((value) => value.trim())
     .filter(Boolean);
 }
@@ -63,7 +74,10 @@ function parseKeyList(raw: string | undefined | null): string[] {
 function environmentKeys(): string[] {
   const keys: string[] = [];
 
+  // `Alsamos` is deliberately a bundle, not a product-specific key. AI Page,
+  // AI Search and Global Search all consume the same values and rotate together.
   for (const name of [
+    'Alsamos',
     'GEMINI_API_KEYS',
     'ALSAMOS_AI_API_KEYS',
     'ALSAMOS_SEARCH_API_KEYS',
