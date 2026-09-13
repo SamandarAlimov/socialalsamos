@@ -24,6 +24,12 @@ export interface StoryStickerDraft {
   config: StoryStickerConfig;
 }
 
+export interface StoryStickerReplaceResult {
+  savedCount: number;
+  skippedCount: number;
+  skippedProblems: string[];
+}
+
 /**
  * Bosqich D: postning interaktiv stikerlarini o‘qish, saqlash va ularga
  * javob berish.
@@ -54,7 +60,7 @@ export function useStoryStickers(postId?: string) {
       if (error) throw error;
       setStickers(parseStoryStickers(data));
     } catch (error) {
-      console.warn('Story stikerlarini yuklab bo\u2018lmadi:', error);
+      console.warn('Story stikerlarini yuklab bo‘lmadi:', error);
       setStickers([]);
     } finally {
       setIsLoading(false);
@@ -67,18 +73,30 @@ export function useStoryStickers(postId?: string) {
 
   /**
    * Post egasi uchun: stikerlar to‘plamini butunlay almashtiradi.
-   * Qismli yangilash o‘rniga almashtirish tanlandi, chunki tahrirlash
-   * seansida joylashuv, tartib va vaqt oynasi birgalikda o‘zgaradi.
+   *
+   * Composer ayrim murakkab stikerlarni (joylashuv, musiqa, mention va h.k.)
+   * foydalanuvchi faqat tugmani bosgan zahoti previewga qo‘shadi. Oldingi
+   * implementatsiya bunday hali sozlanmagan placeholderlardan BITTASI bo‘lsa
+   * butun Story publish oqimini to‘xtatardi. Storyning o‘zi tayyor bo‘lsa,
+   * tugallanmagan sticker draft Story joylanishiga to‘sqinlik qilmasligi kerak.
+   * Shu sabab faqat valid stikerlar saqlanadi, incomplete placeholderlar esa
+   * tashlab yuboriladi. Haqiqiy DB/RLS xatolari esa baribir throw qilinadi.
    */
   const replaceAll = useCallback(
-    async (drafts: StoryStickerDraft[]) => {
+    async (drafts: StoryStickerDraft[]): Promise<StoryStickerReplaceResult> => {
       if (!postId || !user) throw new Error('Avtorizatsiya talab qilinadi');
 
       const limited = drafts.slice(0, MAX_STORY_STICKERS);
+      const validDrafts: StoryStickerDraft[] = [];
+      const skippedProblems: string[] = [];
 
       for (const draft of limited) {
         const problem = validateSticker(draft);
-        if (problem) throw new Error(problem);
+        if (problem) {
+          skippedProblems.push(problem);
+          continue;
+        }
+        validDrafts.push(draft);
       }
 
       const { error: deleteError } = await db
@@ -88,12 +106,16 @@ export function useStoryStickers(postId?: string) {
 
       if (deleteError) throw deleteError;
 
-      if (limited.length === 0) {
+      if (validDrafts.length === 0) {
         setStickers([]);
-        return;
+        return {
+          savedCount: 0,
+          skippedCount: skippedProblems.length,
+          skippedProblems,
+        };
       }
 
-      const rows = limited.map((draft, index) => ({
+      const rows = validDrafts.map((draft, index) => ({
         post_id: postId,
         media_id: draft.mediaId ?? null,
         type: draft.type,
@@ -112,6 +134,11 @@ export function useStoryStickers(postId?: string) {
       if (error) throw error;
 
       setStickers(parseStoryStickers(data));
+      return {
+        savedCount: rows.length,
+        skippedCount: skippedProblems.length,
+        skippedProblems,
+      };
     },
     [postId, user],
   );
