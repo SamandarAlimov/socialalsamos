@@ -183,19 +183,18 @@ Deno.serve(async (req: Request) => {
       admin.from("auth_identities").select("id").eq("phone", phone).maybeSingle(),
     ]);
 
+    // These are optimization/user-feedback prechecks, not the integrity boundary.
+    // Database UNIQUE constraints and Auth remain authoritative, so a temporary
+    // PostgREST permission/cache issue must not take registration offline.
     if (usernameLookup.error) {
-      console.error(`[${FUNCTION_NAME}] username lookup failed`, usernameLookup.error.message);
-      return json(req, { error: "SERVER_ERROR", message: "Ro'yxatdan o'tish xizmatida vaqtinchalik xato." }, 500);
-    }
-    if (phoneLookup.error) {
-      console.error(`[${FUNCTION_NAME}] phone lookup failed`, phoneLookup.error.message);
-      return json(req, { error: "SERVER_ERROR", message: "Ro'yxatdan o'tish xizmatida vaqtinchalik xato." }, 500);
-    }
-
-    if (usernameLookup.data) {
+      console.warn(`[${FUNCTION_NAME}] username precheck unavailable`, usernameLookup.error.message);
+    } else if (usernameLookup.data) {
       return json(req, { error: "USERNAME_TAKEN", message: "Bu username band." }, 409);
     }
-    if (phoneLookup.data) {
+
+    if (phoneLookup.error) {
+      console.warn(`[${FUNCTION_NAME}] phone precheck unavailable`, phoneLookup.error.message);
+    } else if (phoneLookup.data) {
       return json(req, { error: "PHONE_TAKEN", message: "Bu telefon raqami allaqachon ishlatilgan." }, 409);
     }
 
