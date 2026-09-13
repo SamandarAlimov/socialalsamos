@@ -78,29 +78,29 @@ verify_jwt = false
 verify_jwt = false
 
 # --- AI endpoints ---------------------------------------------------------
-# TODO(audit): these spend paid provider quota. They must verify the caller's
-# JWT manually and apply a per-user rate limit; see docs/security-audit.md.
+# Paid AI/code endpoints require a valid Supabase JWT at the platform boundary.
+# They also keep their in-function guard/rate-limit checks as defense in depth.
 [functions.ai-assistant]
-verify_jwt = false
+verify_jwt = true
 
 [functions.ai-agent]
-verify_jwt = false
+verify_jwt = true
 
 [functions.code-sandbox]
-verify_jwt = false
+verify_jwt = true
 
 [functions.ai-generate-image]
-verify_jwt = false
+verify_jwt = true
 
 [functions.smart-reply]
-verify_jwt = false
+verify_jwt = true
 
 [functions.summarize-email]
-verify_jwt = false
+verify_jwt = true
 
 # --- Proxies / third party ------------------------------------------------
-# TODO(audit): mini-app-proxy must keep a strict host allowlist (SSRF) and
-# giphy-search must not expose the upstream API key.
+# mini-app-proxy must keep a strict host allowlist (SSRF) and giphy-search must
+# never expose the upstream API key.
 [functions.mini-app-proxy]
 verify_jwt = false
 
