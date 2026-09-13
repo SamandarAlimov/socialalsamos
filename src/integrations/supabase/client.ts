@@ -123,3 +123,41 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseKey, {
     detectSessionInUrl: true,
   },
 });
+
+// Browsers on some networks intermittently close direct connections to the
+// Supabase Edge Functions gateway even when the function itself runs. Keep the
+// normal Supabase client for every function except signup, which goes through
+// Alsamos' same-origin Vercel proxy. The proxy forwards the request to the same
+// production Edge Function and preserves its JSON/status contract.
+const directFunctionsInvoke = supabase.functions.invoke.bind(supabase.functions);
+(supabase.functions as any).invoke = async (functionName: string, options?: any) => {
+  if (functionName !== 'account-signup' || typeof window === 'undefined') {
+    return directFunctionsInvoke(functionName as any, options as any);
+  }
+
+  try {
+    const response = await fetch('/api/account-signup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(options?.body ?? {}),
+      credentials: 'same-origin',
+    });
+
+    const payload = await response.json().catch(() => null);
+    if (response.ok) return { data: payload, error: null };
+
+    const message =
+      typeof payload?.message === 'string' && payload.message
+        ? payload.message
+        : typeof payload?.error === 'string' && payload.error
+          ? payload.error
+          : `Signup request failed (${response.status})`;
+
+    const error = new Error(message) as Error & { context?: Response };
+    error.context = response;
+    return { data: payload, error };
+  } catch (cause) {
+    const error = cause instanceof Error ? cause : new Error('Signup request failed');
+    return { data: null, error };
+  }
+};
