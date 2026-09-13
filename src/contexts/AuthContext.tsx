@@ -267,8 +267,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   // ---------------------------------------------------------------------
-  // Signup (identity creation) - the identity email must be @alsamos.com,
-  // while login later accepts email, username or phone.
+  // Signup (identity creation) - both @alsamos.com email and phone are
+  // required, but neither flow depends on email/SMS delivery. account-signup
+  // creates an already email-confirmed Auth user; the phone remains unverified
+  // until a real OTP provider is connected later.
   // ---------------------------------------------------------------------
   const signup: AuthContextType['signup'] = async ({
     email,
@@ -300,16 +302,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { error };
     }
 
-    // Phone is optional, but when present it must be a valid E.164 number:
-    // it becomes a login identifier, so a broken value would lock the user out.
-    let normalizedPhone: string | null = null;
-    if (phone && phone.trim()) {
-      normalizedPhone = normalizePhoneInput(phone);
-      if (!normalizedPhone) {
-        const error = new AlsamosAuthError('PHONE_INVALID');
-        toast({ title: 'Telefon raqam xato', description: error.message, variant: 'destructive' });
-        return { error };
-      }
+    const normalizedPhone = normalizePhoneInput(phone ?? '');
+    if (!normalizedPhone) {
+      const error = new AlsamosAuthError('PHONE_INVALID');
+      toast({ title: 'Telefon raqam xato', description: error.message, variant: 'destructive' });
+      return { error };
     }
 
     const strength = checkPassword(password, [identityEmail, finalUsername]);
@@ -326,46 +323,66 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     setIsLoading(true);
-
-    const { data, error } = await supabase.auth.signUp({
-      email: identityEmail,
-      password,
-      options: {
-        emailRedirectTo: `${window.location.origin}/`,
-        data: {
-          display_name: displayName || finalUsername,
-          username: finalUsername,
+    try {
+      const { data: created, error: signupError } = await supabase.functions.invoke('account-signup', {
+        body: {
+          email: identityEmail,
+          password,
           phone: normalizedPhone,
-          tos_version: TOS_VERSION,
+          displayName: displayName || finalUsername,
+          username: finalUsername,
+          acceptedTerms,
+          tosVersion: TOS_VERSION,
         },
-      },
-    });
-
-    setIsLoading(false);
-
-    if (error) {
-      // Never confirm whether an address is already registered.
-      const message = /already|registered|exists/i.test(error.message)
-        ? 'Agar bu manzil bo’sh bo’lsa, tasdiqlash xati yuborildi.'
-        : error.message;
-      toast({
-        title: 'Ro’yxatdan o’tish',
-        description: message,
-        variant: 'destructive',
       });
-      return { error };
+
+      if (signupError || created?.error) {
+        let message = created?.message || signupError?.message || 'Akkaunt yaratilmadi.';
+        const context = (signupError as { context?: Response } | null)?.context;
+        if (context && typeof context.json === 'function') {
+          try {
+            const payload = await context.json();
+            if (typeof payload?.message === 'string' && payload.message) message = payload.message;
+            else if (typeof payload?.error === 'string' && payload.error) message = payload.error;
+          } catch {
+            // Keep the safe fallback message above.
+          }
+        }
+
+        const error = new Error(message);
+        toast({
+          title: 'Ro’yxatdan o’tish amalga oshmadi',
+          description: message,
+          variant: 'destructive',
+        });
+        return { error };
+      }
+
+      // account-signup confirms only the Auth email flag server-side. No email
+      // or SMS is sent; we can open the normal password session immediately.
+      const { data: signedIn, error: signInError } = await supabase.auth.signInWithPassword({
+        email: identityEmail,
+        password,
+      });
+
+      if (signInError || !signedIn.session) {
+        const error = signInError ?? new Error('Akkaunt yaratildi, ammo sessiya ochilmadi. Qaytadan kiring.');
+        toast({
+          title: 'Akkaunt yaratildi',
+          description: 'Akkaunt tayyor. Kirish oynasidan email va parol bilan kiring.',
+        });
+        return { error };
+      }
+
+      toast({
+        title: 'Akkaunt yaratildi',
+        description: 'Alsamosga xush kelibsiz!',
+      });
+
+      return { error: null, needsEmailConfirmation: false };
+    } finally {
+      setIsLoading(false);
     }
-
-    const needsEmailConfirmation = !data.session;
-
-    toast({
-      title: 'Akkaunt yaratildi',
-      description: needsEmailConfirmation
-        ? 'Emailingizga tasdiqlash havolasi yuborildi. Havolani bosgach kirishingiz mumkin.'
-        : 'Alsamosga xush kelibsiz!',
-    });
-
-    return { error: null, needsEmailConfirmation };
   };
 
   // ---------------------------------------------------------------------
