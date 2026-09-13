@@ -1,32 +1,19 @@
-// POST /account-signup
-// Creates the primary Alsamos identity. This endpoint is public before a session
-// exists, so it validates input, rate-limits by hashed IP, and uses service-role
-// Auth only after database-backed conflict checks.
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const FUNCTION_NAME = "account-signup";
-const SIGNUP_LIMIT_PER_HOUR = 10;
+const FN = "account-signup";
+const LIMIT = 10;
 
-function isAllowedOrigin(origin: string): boolean {
-  if (!origin) return true;
-  try {
-    const url = new URL(origin);
-    const host = url.hostname.toLowerCase();
-    if (url.protocol === "https:" && (host === "alsamos.com" || host.endsWith(".alsamos.com"))) return true;
-    if (url.protocol === "https:" && (host.endsWith(".vercel.app") || host.endsWith(".lovable.app") || host.endsWith(".lovableproject.com"))) return true;
-    return (host === "localhost" || host === "127.0.0.1") && url.protocol === "http:";
-  } catch {
-    return false;
-  }
-}
-
-function corsHeaders(req: Request): Record<string, string> {
+function cors(req: Request) {
   const origin = req.headers.get("origin") ?? "";
-  const allowOrigin = isAllowedOrigin(origin) ? (origin || "*") : "https://alsamos.com";
+  let allowed = !origin;
+  try {
+    const u = new URL(origin);
+    const h = u.hostname.toLowerCase();
+    allowed = (u.protocol === "https:" && (h === "alsamos.com" || h.endsWith(".alsamos.com") || h.endsWith(".vercel.app") || h.endsWith(".lovable.app") || h.endsWith(".lovableproject.com"))) || (u.protocol === "http:" && (h === "localhost" || h === "127.0.0.1"));
+  } catch {}
   return {
-    "Access-Control-Allow-Origin": allowOrigin,
+    "Access-Control-Allow-Origin": allowed ? (origin || "*") : "https://alsamos.com",
     "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Access-Control-Max-Age": "86400",
@@ -34,174 +21,69 @@ function corsHeaders(req: Request): Record<string, string> {
   };
 }
 
-function json(req: Request, body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: {
-      ...corsHeaders(req),
-      "Content-Type": "application/json",
-      "Cache-Control": "no-store",
-    },
-  });
+function out(req: Request, body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), { status, headers: { ...cors(req), "Content-Type": "application/json", "Cache-Control": "no-store" } });
 }
 
-function clientIp(req: Request): string {
-  const forwarded = req.headers.get("x-forwarded-for") ?? "";
-  return forwarded.split(",")[0].trim() || req.headers.get("cf-connecting-ip") || "unknown";
-}
-
-async function sha256Hex(input: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
-  return Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
-}
-
-function normalizeEmail(value: unknown): string {
-  return typeof value === "string" ? value.trim().toLowerCase() : "";
-}
-
-function isIdentityEmail(value: string): boolean {
-  if (value.length > 254) return false;
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) && !value.endsWith("@accounts.alsamos.com");
-}
-
-function normalizePhone(value: unknown): string | null {
-  if (typeof value !== "string") return null;
-  const digits = value.replace(/[^0-9]/g, "");
-  if (!digits) return null;
-  const phone = `+${digits}`;
-  return /^\+[1-9][0-9]{7,14}$/.test(phone) ? phone : null;
-}
-
-function normalizeUsername(value: unknown): string {
-  return typeof value === "string" ? value.trim().toLowerCase() : "";
-}
-
-function authErrorDetails(error: any) {
-  if (!error) return { message: "Auth did not return a user", code: null, status: null, name: null };
-  return {
-    message: typeof error.message === "string" ? error.message.slice(0, 500) : String(error).slice(0, 500),
-    code: typeof error.code === "string" ? error.code.slice(0, 120) : null,
-    status: typeof error.status === "number" ? error.status : null,
-    name: typeof error.name === "string" ? error.name.slice(0, 120) : null,
-  };
-}
-
-function classifyAuthFailure(details: ReturnType<typeof authErrorDetails>) {
-  const text = `${details.code ?? ""} ${details.message ?? ""}`.toLowerCase();
-  if (/already|registered|exists|user_already_exists/.test(text)) {
-    return { status: 409, error: "ACCOUNT_EXISTS", message: "Bu email bilan akkaunt allaqachon mavjud." };
-  }
-  if (/weak.?password|password.*weak|password.*least|password.*character|password.*pwn|password.*comprom/.test(text)) {
-    return { status: 400, error: "WEAK_PASSWORD", message: "Bu parol xavfsizlik talablariga javob bermaydi. Kuchliroq parol kiriting." };
-  }
-  if (/invalid.*email|email.*invalid/.test(text)) {
-    return { status: 400, error: "INVALID_EMAIL", message: "Email manzilini to'g'ri kiriting." };
-  }
-  if (details.status === 429 || /rate.?limit|too many/.test(text)) {
-    return { status: 429, error: "TOO_MANY_ATTEMPTS", message: "Juda ko'p urinish bo'ldi. Birozdan so'ng qayta urinib ko'ring." };
-  }
-  if (details.status && details.status >= 400 && details.status < 500) {
-    return { status: 400, error: "SIGNUP_REJECTED", message: "Ro'yxatdan o'tish ma'lumotlari qabul qilinmadi. Kiritilgan ma'lumotlarni tekshiring." };
-  }
-  return { status: 500, error: "SIGNUP_FAILED", message: "Akkaunt yaratilmadi. Qaytadan urinib ko'ring." };
+async function hash(s: string) {
+  const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
+  return Array.from(new Uint8Array(d)).map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders(req) });
-  if (req.method !== "POST") return json(req, { error: "METHOD_NOT_ALLOWED", message: "Faqat POST so'rovi qabul qilinadi." }, 405);
+  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors(req) });
+  if (req.method !== "POST") return out(req, { error: "METHOD_NOT_ALLOWED" }, 405);
 
-  const supabaseUrl = Deno.env.get("SUPABASE_URL");
-  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  if (!supabaseUrl || !serviceRoleKey) return json(req, { error: "SERVER_ERROR", message: "Auth xizmati sozlanmagan." }, 500);
+  const url = Deno.env.get("SUPABASE_URL");
+  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!url || !key) return out(req, { error: "SERVER_ERROR", message: "Auth xizmati sozlanmagan." }, 500);
+  const admin = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
 
-  const admin = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false, autoRefreshToken: false } });
-  const ipHash = await sha256Hex(`${FUNCTION_NAME}:${clientIp(req)}`);
-  const since = new Date(Date.now() - 60 * 60_000).toISOString();
+  const ip = (req.headers.get("x-forwarded-for") ?? "").split(",")[0].trim() || req.headers.get("cf-connecting-ip") || "unknown";
+  const ipHash = await hash(`${FN}:${ip}`);
+  const since = new Date(Date.now() - 3600000).toISOString();
+  const { count, error: usageError } = await admin.from("function_usage").select("id", { count: "exact", head: true }).eq("function_name", FN).eq("ip_hash", ipHash).in("outcome", ["allowed", "blocked"]).gte("created_at", since);
+  if (usageError) return out(req, { error: "SERVER_ERROR", message: "Ro'yxatdan o'tish xizmati vaqtincha mavjud emas." }, 500);
+  if ((count ?? 0) >= LIMIT) return out(req, { error: "TOO_MANY_ATTEMPTS", message: "Juda ko'p urinish. Birozdan so'ng qayta urinib ko'ring." }, 429);
+  await admin.from("function_usage").insert({ function_name: FN, user_id: null, ip_hash: ipHash, outcome: "allowed", reason: null, mode: "on", metadata: { stage: "signup_attempt" } });
 
-  const { count: recentAttempts, error: usageReadError } = await admin
-    .from("function_usage")
-    .select("id", { count: "exact", head: true })
-    .eq("function_name", FUNCTION_NAME)
-    .eq("ip_hash", ipHash)
-    .in("outcome", ["allowed", "blocked"])
-    .gte("created_at", since);
+  const b = await req.json().catch(() => null);
+  if (!b || typeof b !== "object") return out(req, { error: "INVALID_REQUEST" }, 400);
+  const email = typeof b.email === "string" ? b.email.trim().toLowerCase() : "";
+  const username = typeof b.username === "string" ? b.username.trim().toLowerCase() : "";
+  const digits = typeof b.phone === "string" ? b.phone.replace(/[^0-9]/g, "") : "";
+  const phone = digits ? `+${digits}` : "";
+  const displayName = typeof b.displayName === "string" ? b.displayName.trim().slice(0, 100) : username;
+  const password = typeof b.password === "string" ? b.password : "";
+  const tosVersion = typeof b.tosVersion === "string" ? b.tosVersion.trim().slice(0, 40) : null;
 
-  if (usageReadError) return json(req, { error: "SERVER_ERROR", message: "Ro'yxatdan o'tish xizmati vaqtincha mavjud emas." }, 500);
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254 || email.endsWith("@accounts.alsamos.com")) return out(req, { error: "INVALID_REQUEST", message: "Email manzilini to'g'ri kiriting." }, 400);
+  if (!/^\+[1-9][0-9]{7,14}$/.test(phone)) return out(req, { error: "INVALID_REQUEST", message: "Telefon raqamni xalqaro formatda kiriting." }, 400);
+  if (!/^[a-z0-9_]{3,30}$/.test(username)) return out(req, { error: "INVALID_REQUEST", message: "Username 3-30 belgi, faqat a-z, 0-9 va _ bo'lishi kerak." }, 400);
+  if (password.length < 10 || password.length > 128) return out(req, { error: "INVALID_REQUEST", message: "Parol kamida 10 ta belgidan iborat bo'lishi kerak." }, 400);
+  if (b.acceptedTerms !== true) return out(req, { error: "INVALID_REQUEST", message: "Foydalanish shartlarini qabul qilish talab etiladi." }, 400);
 
-  if ((recentAttempts ?? 0) >= SIGNUP_LIMIT_PER_HOUR) {
-    await admin.from("function_usage").insert({ function_name: FUNCTION_NAME, user_id: null, ip_hash: ipHash, outcome: "blocked", reason: "TOO_MANY_ATTEMPTS", mode: "on", metadata: { limit: SIGNUP_LIMIT_PER_HOUR, windowMinutes: 60 } });
-    return json(req, { error: "TOO_MANY_ATTEMPTS", message: "Juda ko'p ro'yxatdan o'tish urinishlari. Birozdan so'ng qayta urinib ko'ring." }, 429);
+  const { data: conflict, error: conflictError } = await admin.rpc("signup_conflict_code", { p_email: email, p_username: username, p_phone: phone });
+  if (conflictError) return out(req, { error: "SERVER_ERROR", message: "Ro'yxatdan o'tish tekshiruvi bajarilmadi." }, 500);
+  if (conflict === "EMAIL_TAKEN") return out(req, { error: "ACCOUNT_EXISTS", message: "Bu email bilan akkaunt allaqachon mavjud." }, 409);
+  if (conflict === "USERNAME_TAKEN") return out(req, { error: "USERNAME_TAKEN", message: "Bu username band." }, 409);
+  if (conflict === "PHONE_TAKEN") return out(req, { error: "PHONE_TAKEN", message: "Bu telefon raqami allaqachon ishlatilgan." }, 409);
+
+  const { data: created, error: authError } = await admin.auth.admin.createUser({ email, password, email_confirm: true, user_metadata: { username, display_name: displayName || username, phone, tos_version: tosVersion } });
+  if (authError || !created?.user) {
+    const msg = (authError?.message ?? "").toLowerCase();
+    if (/already|registered|exists/.test(msg)) return out(req, { error: "ACCOUNT_EXISTS", message: "Bu email bilan akkaunt allaqachon mavjud." }, 409);
+    if (/weak|password|comprom/.test(msg) && (authError?.status ?? 500) < 500) return out(req, { error: "WEAK_PASSWORD", message: "Kuchliroq parol kiriting." }, 400);
+    return out(req, { error: "SIGNUP_FAILED", message: "Akkaunt yaratilmadi. Qaytadan urinib ko'ring." }, 500);
   }
 
-  await admin.from("function_usage").insert({ function_name: FUNCTION_NAME, user_id: null, ip_hash: ipHash, outcome: "allowed", reason: null, mode: "on", metadata: { stage: "signup_attempt" } });
-
-  const body = await req.json().catch(() => null);
-  if (!body || typeof body !== "object") return json(req, { error: "INVALID_REQUEST", message: "Ro'yxatdan o'tish ma'lumotlari topilmadi." }, 400);
-
-  const email = normalizeEmail((body as any).email);
-  const phone = normalizePhone((body as any).phone);
-  const username = normalizeUsername((body as any).username);
-  const displayName = typeof (body as any).displayName === "string" ? (body as any).displayName.trim().slice(0, 100) : "";
-  const password = typeof (body as any).password === "string" ? (body as any).password : "";
-  const acceptedTerms = (body as any).acceptedTerms === true;
-  const tosVersion = typeof (body as any).tosVersion === "string" ? (body as any).tosVersion.trim().slice(0, 40) : null;
-
-  if (!isIdentityEmail(email)) return json(req, { error: "INVALID_REQUEST", message: "Email manzilini to'g'ri kiriting." }, 400);
-  if (!phone) return json(req, { error: "INVALID_REQUEST", message: "Telefon raqamni xalqaro formatda kiriting." }, 400);
-  if (!/^[a-z0-9_]{3,30}$/.test(username)) return json(req, { error: "INVALID_REQUEST", message: "Username 3-30 belgi, faqat a-z, 0-9 va _ bo'lishi kerak." }, 400);
-  if (password.length < 10 || password.length > 128) return json(req, { error: "INVALID_REQUEST", message: "Parol kamida 10 ta belgidan iborat bo'lishi kerak." }, 400);
-  if (!acceptedTerms) return json(req, { error: "INVALID_REQUEST", message: "Foydalanish shartlarini qabul qilish talab etiladi." }, 400);
-
-  const { data: conflictCode, error: conflictError } = await admin.rpc("signup_conflict_code", {
-    p_email: email,
-    p_username: username,
-    p_phone: phone,
-  });
-
-  if (conflictError) {
-    await admin.from("function_usage").insert({ function_name: FUNCTION_NAME, user_id: null, ip_hash: ipHash, outcome: "would_block", reason: "SIGNUP_PRECHECK_FAILED", mode: "log", metadata: { stage: "precheck", code: conflictError.code, message: conflictError.message?.slice(0, 300) ?? null } });
-    return json(req, { error: "SERVER_ERROR", message: "Ro'yxatdan o'tish tekshiruvi bajarilmadi." }, 500);
-  }
-
-  if (conflictCode === "EMAIL_TAKEN") return json(req, { error: "ACCOUNT_EXISTS", message: "Bu email bilan akkaunt allaqachon mavjud." }, 409);
-  if (conflictCode === "USERNAME_TAKEN") return json(req, { error: "USERNAME_TAKEN", message: "Bu username band." }, 409);
-  if (conflictCode === "PHONE_TAKEN") return json(req, { error: "PHONE_TAKEN", message: "Bu telefon raqami allaqachon ishlatilgan." }, 409);
-
-  const { data: created, error: createError } = await admin.auth.admin.createUser({
-    email,
-    password,
-    email_confirm: true,
-    user_metadata: { username, display_name: displayName || username, phone, tos_version: tosVersion },
-  });
-
-  if (createError || !created?.user) {
-    const details = authErrorDetails(createError);
-    const classified = classifyAuthFailure(details);
-    await admin.from("function_usage").insert({ function_name: FUNCTION_NAME, user_id: null, ip_hash: ipHash, outcome: "would_block", reason: "AUTH_CREATE_FAILED", mode: "log", metadata: { stage: "auth_create", auth_error: details, classified_error: classified.error } });
-    return json(req, { error: classified.error, message: classified.message }, classified.status);
-  }
-
-  const { data: bootstrapRows, error: bootstrapError } = await admin.rpc("signup_bootstrap_state", { p_user_id: created.user.id });
-  const bootstrap = Array.isArray(bootstrapRows) ? bootstrapRows[0] : bootstrapRows;
-  const bootstrapOk = !bootstrapError && !!bootstrap?.profile_ok && !!bootstrap?.identity_ok && !!bootstrap?.account_ok && !!bootstrap?.wallet_ok;
-
-  if (!bootstrapOk) {
+  const { data: rows, error: stateError } = await admin.rpc("signup_bootstrap_state", { p_user_id: created.user.id });
+  const s = Array.isArray(rows) ? rows[0] : rows;
+  const ok = !stateError && !!s?.profile_ok && !!s?.identity_ok && !!s?.account_ok && !!s?.wallet_ok;
+  if (!ok) {
     await admin.auth.admin.deleteUser(created.user.id);
-    await admin.from("function_usage").insert({
-      function_name: FUNCTION_NAME,
-      user_id: null,
-      ip_hash: ipHash,
-      outcome: "would_block",
-      reason: "SIGNUP_BOOTSTRAP_FAILED",
-      mode: "log",
-      metadata: {
-        stage: "bootstrap_verify",
-        rpc_error: bootstrapError ? { code: bootstrapError.code, message: bootstrapError.message?.slice(0, 300) ?? null } : null,
-        state: bootstrap ? { profile_ok: !!bootstrap.profile_ok, identity_ok: !!bootstrap.identity_ok, account_ok: !!bootstrap.account_ok, wallet_ok: !!bootstrap.wallet_ok } : null,
-      },
-    });
-    return json(req, { error: "SIGNUP_FAILED", message: "Akkaunt to'liq yaratilmaganligi uchun bekor qilindi. Qaytadan urinib ko'ring." }, 500);
+    return out(req, { error: "SIGNUP_FAILED", message: "Akkaunt to'liq yaratilmaganligi uchun bekor qilindi. Qaytadan urinib ko'ring." }, 500);
   }
 
-  return json(req, { ok: true, user_id: created.user.id, email_confirmed: true, phone_verified: false }, 201);
+  return out(req, { ok: true, user_id: created.user.id, email_confirmed: true, phone_verified: false }, 201);
 });
