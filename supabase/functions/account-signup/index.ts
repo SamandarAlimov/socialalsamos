@@ -1,17 +1,24 @@
 // POST /account-signup
 //
-// Creates the primary Alsamos identity without depending on an email or SMS
-// delivery service. Email and phone are both required, but only the email is
-// written to Supabase Auth until a real phone OTP provider is enabled. The
-// normalized phone remains in user metadata and public.auth_identities so it
-// can be used for uniqueness/contact discovery without making Auth treat an
-// unverified phone as a login identity.
+// Creates the primary Alsamos identity without depending on email or SMS
+// delivery. The phone is stored as application metadata until phone OTP is
+// enabled; it is intentionally not attached to Supabase Auth as a verified
+// login identity.
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "npm:@supabase/supabase-js@2.57.4";
 
 const FUNCTION_NAME = "account-signup";
 const SIGNUP_LIMIT_PER_HOUR = 10;
+
+type SignupBody = {
+  email?: unknown;
+  password?: unknown;
+  phone?: unknown;
+  displayName?: unknown;
+  username?: unknown;
+  acceptedTerms?: unknown;
+  tosVersion?: unknown;
+};
 
 function isAllowedOrigin(origin: string): boolean {
   if (!origin) return true;
@@ -43,8 +50,9 @@ function json(req: Request, body: unknown, status = 200): Response {
     status,
     headers: {
       ...corsHeaders(req),
-      "Content-Type": "application/json",
+      "Content-Type": "application/json; charset=utf-8",
       "Cache-Control": "no-store",
+      "Connection": "keep-alive",
     },
   });
 }
@@ -66,8 +74,8 @@ function normalizeEmail(value: unknown): string {
 }
 
 function isIdentityEmail(value: string): boolean {
-  if (value.length > 254) return false;
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) && !value.endsWith("@accounts.alsamos.com");
+  if (!value || value.length > 254 || value.endsWith("@accounts.alsamos.com")) return false;
+  return /^[^\s@]+@alsamos\.com$/.test(value);
 }
 
 function normalizePhone(value: unknown): string | null {
@@ -82,128 +90,158 @@ function normalizeUsername(value: unknown): string {
   return typeof value === "string" ? value.trim().toLowerCase() : "";
 }
 
-serve(async (req) => {
+Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: corsHeaders(req) });
   }
+
   if (req.method !== "POST") {
     return json(req, { error: "METHOD_NOT_ALLOWED", message: "Faqat POST so'rovi qabul qilinadi." }, 405);
   }
 
-  const supabaseUrl = Deno.env.get("SUPABASE_URL");
-  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  if (!supabaseUrl || !serviceRoleKey) {
-    return json(req, { error: "SERVER_ERROR", message: "Auth xizmati sozlanmagan." }, 500);
-  }
+  try {
+    const body = (await req.json().catch(() => null)) as SignupBody | null;
+    if (!body || typeof body !== "object") {
+      return json(req, { error: "INVALID_REQUEST", message: "Ro'yxatdan o'tish ma'lumotlari topilmadi." }, 400);
+    }
 
-  const admin = createClient(supabaseUrl, serviceRoleKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
+    const email = normalizeEmail(body.email);
+    const phone = normalizePhone(body.phone);
+    const username = normalizeUsername(body.username);
+    const displayName = typeof body.displayName === "string" ? body.displayName.trim().slice(0, 100) : "";
+    const password = typeof body.password === "string" ? body.password : "";
+    const acceptedTerms = body.acceptedTerms === true;
+    const tosVersion = typeof body.tosVersion === "string" ? body.tosVersion.trim().slice(0, 40) : null;
 
-  const ipHash = await sha256Hex(`${FUNCTION_NAME}:${clientIp(req)}`);
-  const since = new Date(Date.now() - 60 * 60_000).toISOString();
-  const { count: recentAttempts } = await admin
-    .from("function_usage")
-    .select("id", { count: "exact", head: true })
-    .eq("function_name", FUNCTION_NAME)
-    .eq("ip_hash", ipHash)
-    .in("outcome", ["allowed", "blocked"])
-    .gte("created_at", since);
+    if (!isIdentityEmail(email)) {
+      return json(req, { error: "INVALID_REQUEST", message: "Faqat @alsamos.com email manzilidan foydalaning." }, 400);
+    }
+    if (!phone) {
+      return json(req, { error: "INVALID_REQUEST", message: "Telefon raqamni xalqaro formatda kiriting." }, 400);
+    }
+    if (!/^[a-z0-9_]{3,30}$/.test(username)) {
+      return json(req, { error: "INVALID_REQUEST", message: "Username 3-30 belgi, faqat a-z, 0-9 va _ bo'lishi kerak." }, 400);
+    }
+    if (password.length < 10 || password.length > 128) {
+      return json(req, { error: "INVALID_REQUEST", message: "Parol kamida 10 ta belgidan iborat bo'lishi kerak." }, 400);
+    }
+    if (!acceptedTerms) {
+      return json(req, { error: "INVALID_REQUEST", message: "Foydalanish shartlarini qabul qilish talab etiladi." }, 400);
+    }
 
-  if ((recentAttempts ?? 0) >= SIGNUP_LIMIT_PER_HOUR) {
-    await admin.from("function_usage").insert({
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!supabaseUrl || !serviceRoleKey) {
+      console.error(`[${FUNCTION_NAME}] required Supabase environment variables are missing`);
+      return json(req, { error: "SERVER_ERROR", message: "Auth xizmati sozlanmagan." }, 500);
+    }
+
+    const admin = createClient(supabaseUrl, serviceRoleKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+
+    const ipHash = await sha256Hex(`${FUNCTION_NAME}:${clientIp(req)}`);
+    const since = new Date(Date.now() - 60 * 60_000).toISOString();
+    const { count: recentAttempts, error: rateReadError } = await admin
+      .from("function_usage")
+      .select("id", { count: "exact", head: true })
+      .eq("function_name", FUNCTION_NAME)
+      .eq("ip_hash", ipHash)
+      .in("outcome", ["allowed", "blocked"])
+      .gte("created_at", since);
+
+    // Telemetry must never make authentication unavailable. If the usage table
+    // is temporarily unavailable, continue signup and log the diagnostics.
+    if (rateReadError) {
+      console.warn(`[${FUNCTION_NAME}] rate-limit telemetry unavailable`, rateReadError.message);
+    } else if ((recentAttempts ?? 0) >= SIGNUP_LIMIT_PER_HOUR) {
+      const { error: logError } = await admin.from("function_usage").insert({
+        function_name: FUNCTION_NAME,
+        user_id: null,
+        ip_hash: ipHash,
+        outcome: "blocked",
+        reason: "TOO_MANY_ATTEMPTS",
+        mode: "on",
+        metadata: { limit: SIGNUP_LIMIT_PER_HOUR, windowMinutes: 60 },
+      });
+      if (logError) console.warn(`[${FUNCTION_NAME}] blocked-attempt log failed`, logError.message);
+      return json(req, { error: "TOO_MANY_ATTEMPTS", message: "Juda ko'p ro'yxatdan o'tish urinishlari. Birozdan so'ng qayta urinib ko'ring." }, 429);
+    }
+
+    const { error: usageWriteError } = await admin.from("function_usage").insert({
       function_name: FUNCTION_NAME,
       user_id: null,
       ip_hash: ipHash,
-      outcome: "blocked",
-      reason: "TOO_MANY_ATTEMPTS",
+      outcome: "allowed",
+      reason: null,
       mode: "on",
-      metadata: { limit: SIGNUP_LIMIT_PER_HOUR, windowMinutes: 60 },
+      metadata: { stage: "signup_attempt" },
     });
-    return json(req, { error: "TOO_MANY_ATTEMPTS", message: "Juda ko'p ro'yxatdan o'tish urinishlari. Birozdan so'ng qayta urinib ko'ring." }, 429);
-  }
+    if (usageWriteError) console.warn(`[${FUNCTION_NAME}] attempt telemetry failed`, usageWriteError.message);
 
-  await admin.from("function_usage").insert({
-    function_name: FUNCTION_NAME,
-    user_id: null,
-    ip_hash: ipHash,
-    outcome: "allowed",
-    reason: null,
-    mode: "on",
-    metadata: { stage: "signup_attempt" },
-  });
+    const [usernameLookup, phoneLookup] = await Promise.all([
+      admin.from("profiles").select("id").eq("username", username).maybeSingle(),
+      admin.from("auth_identities").select("id").eq("phone", phone).maybeSingle(),
+    ]);
 
-  const body = await req.json().catch(() => null);
-  if (!body || typeof body !== "object") {
-    return json(req, { error: "INVALID_REQUEST", message: "Ro'yxatdan o'tish ma'lumotlari topilmadi." }, 400);
-  }
+    if (usernameLookup.error) {
+      console.error(`[${FUNCTION_NAME}] username lookup failed`, usernameLookup.error.message);
+      return json(req, { error: "SERVER_ERROR", message: "Ro'yxatdan o'tish xizmatida vaqtinchalik xato." }, 500);
+    }
+    if (phoneLookup.error) {
+      console.error(`[${FUNCTION_NAME}] phone lookup failed`, phoneLookup.error.message);
+      return json(req, { error: "SERVER_ERROR", message: "Ro'yxatdan o'tish xizmatida vaqtinchalik xato." }, 500);
+    }
 
-  const email = normalizeEmail((body as any).email);
-  const phone = normalizePhone((body as any).phone);
-  const username = normalizeUsername((body as any).username);
-  const displayName = typeof (body as any).displayName === "string" ? (body as any).displayName.trim().slice(0, 100) : "";
-  const password = typeof (body as any).password === "string" ? (body as any).password : "";
-  const acceptedTerms = (body as any).acceptedTerms === true;
-  const tosVersion = typeof (body as any).tosVersion === "string" ? (body as any).tosVersion.trim().slice(0, 40) : null;
+    if (usernameLookup.data) {
+      return json(req, { error: "USERNAME_TAKEN", message: "Bu username band." }, 409);
+    }
+    if (phoneLookup.data) {
+      return json(req, { error: "PHONE_TAKEN", message: "Bu telefon raqami allaqachon ishlatilgan." }, 409);
+    }
 
-  if (!isIdentityEmail(email)) {
-    return json(req, { error: "INVALID_REQUEST", message: "Email manzilini to'g'ri kiriting." }, 400);
-  }
-  if (!phone) {
-    return json(req, { error: "INVALID_REQUEST", message: "Telefon raqamni xalqaro formatda kiriting." }, 400);
-  }
-  if (!/^[a-z0-9_]{3,30}$/.test(username)) {
-    return json(req, { error: "INVALID_REQUEST", message: "Username 3-30 belgi, faqat a-z, 0-9 va _ bo'lishi kerak." }, 400);
-  }
-  if (password.length < 10 || password.length > 128) {
-    return json(req, { error: "INVALID_REQUEST", message: "Parol kamida 10 ta belgidan iborat bo'lishi kerak." }, 400);
-  }
-  if (!acceptedTerms) {
-    return json(req, { error: "INVALID_REQUEST", message: "Foydalanish shartlarini qabul qilish talab etiladi." }, 400);
-  }
-
-  const [{ data: usernameTaken }, { data: phoneTaken }] = await Promise.all([
-    admin.from("profiles").select("id").eq("username", username).maybeSingle(),
-    admin.from("auth_identities").select("id").eq("phone", phone).maybeSingle(),
-  ]);
-
-  if (usernameTaken) return json(req, { error: "USERNAME_TAKEN", message: "Bu username band." }, 409);
-  if (phoneTaken) return json(req, { error: "PHONE_TAKEN", message: "Bu telefon raqami allaqachon ishlatilgan." }, 409);
-
-  // Important: do not pass `phone`/`phone_confirm` here. On projects where the
-  // phone Auth provider is disabled, making an unverified phone part of the
-  // Auth identity can turn user creation into a server-side 500. We keep the
-  // normalized phone in metadata; the DB identity trigger persists it in the
-  // application's canonical auth_identities row.
-  const { data: created, error: createError } = await admin.auth.admin.createUser({
-    email,
-    password,
-    email_confirm: true,
-    user_metadata: {
-      username,
-      display_name: displayName || username,
-      phone,
-      tos_version: tosVersion,
-    },
-  });
-
-  if (createError || !created?.user) {
-    console.error(`[${FUNCTION_NAME}] createUser failed`, {
-      code: (createError as { code?: string } | null)?.code ?? null,
-      message: createError?.message ?? "missing_user",
+    // Do not pass phone/phone_confirm here. The project's phone Auth provider is
+    // not the canonical phone-verification flow yet. The DB identity trigger
+    // persists this normalized value from user_metadata into auth_identities.
+    const { data: created, error: createError } = await admin.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+      user_metadata: {
+        username,
+        display_name: displayName || username,
+        phone,
+        tos_version: tosVersion,
+      },
     });
 
-    const duplicate = /already|registered|exists/i.test(createError?.message ?? "");
+    if (createError || !created?.user) {
+      const rawMessage = createError?.message ?? "missing_user";
+      console.error(`[${FUNCTION_NAME}] createUser failed`, {
+        code: (createError as { code?: string } | null)?.code ?? null,
+        message: rawMessage,
+      });
+
+      const duplicate = /already|registered|exists|duplicate/i.test(rawMessage);
+      return json(req, {
+        error: duplicate ? "ACCOUNT_EXISTS" : "SIGNUP_FAILED",
+        message: duplicate
+          ? "Bu email bilan akkaunt allaqachon mavjud."
+          : "Akkaunt yaratilmadi. Qaytadan urinib ko'ring.",
+      }, duplicate ? 409 : 500);
+    }
+
     return json(req, {
-      error: duplicate ? "ACCOUNT_EXISTS" : "SIGNUP_FAILED",
-      message: duplicate ? "Bu email bilan akkaunt allaqachon mavjud." : "Akkaunt yaratilmadi. Qaytadan urinib ko'ring.",
-    }, duplicate ? 409 : 500);
+      ok: true,
+      user_id: created.user.id,
+      email_confirmed: true,
+      phone_verified: false,
+    }, 201);
+  } catch (error) {
+    console.error(`[${FUNCTION_NAME}] unhandled failure`, error instanceof Error ? error.message : String(error));
+    return json(req, {
+      error: "SERVER_ERROR",
+      message: "Ro'yxatdan o'tish xizmatida vaqtinchalik xato. Qaytadan urinib ko'ring.",
+    }, 500);
   }
-
-  return json(req, {
-    ok: true,
-    user_id: created.user.id,
-    email_confirmed: true,
-    phone_verified: false,
-  }, 201);
 });
