@@ -1,55 +1,41 @@
 /**
- * GEMINI KALITLAR HOVUZI — bir nechta API kalitni navbat bilan ishlatish.
+ * Shared Gemini API key pool for every Alsamos AI surface.
  *
- * Muammo: bitta kalitning kunlik/daqiqalik limiti tez tugaydi va butun AI
- * to'xtab qoladi ("AI kreditlari tugagan").
+ * AI Page, AI Search, live search grounding, image/video helpers and any other
+ * Gemini caller must use this module instead of choosing a key by variable name.
+ * A key that hits quota/auth/server errors is cooled down and the same request
+ * is retried with the next key automatically.
  *
- * Yechim: 5–10 ta kalit hovuzga qo'yiladi. Har so'rov navbatdagi kalitga
- * yuboriladi (round-robin). Kalit limitga urilsa (429) yoki bloklansa (401/403),
- * u vaqtincha "sovutishga" qo'yiladi va so'rov keyingi kalit bilan qayta
- * uriniladi. Hamma kalit band bo'lsa — eski Lovable gateway'iga qaytiladi.
- *
- * MUHIM: kalitlar KODDA saqlanmaydi. Faqat Supabase secrets orqali o'qiladi:
- *   supabase secrets set GEMINI_API_KEYS="kalit1,kalit2,kalit3"
- * yoki alohida-alohida: GEMINI_API_KEY_1 ... GEMINI_API_KEY_10
- *
- * Google'ning OpenAI-mos endpointi ishlatiladi, shuning uchun so'rov tanasi
- * Lovable gateway'inikiga aynan bir xil — chaqiruv joyini almashtirish kifoya.
- *
- * Chat bo'lmagan endpointlar (rasm, video, operation polling) uchun
- * `googleFetch` ishlatiladi — u ham xuddi shu kalitlar navbatidan foydalanadi.
+ * Secrets are never committed here. Keys may come from:
+ *   - GEMINI_API_KEYS / ALSAMOS_AI_API_KEYS / ALSAMOS_SEARCH_API_KEYS bundles
+ *   - GEMINI_API_KEY_1..20
+ *   - GEMINI_API_KEY / ALSAMOS_SEARCH_API_KEY / GOOGLE_API_KEY legacy aliases
+ *   - public.ai_api_key_pool (service-role only, RLS protected)
  */
 
 const GOOGLE_HOST = 'https://' + 'generativelanguage.googleapis.com';
 const GOOGLE_OPENAI_PATH = '/v1beta/openai/chat/completions';
 const LOVABLE_GATEWAY = 'https://' + 'ai.gateway.lovable.dev' + '/v1/chat/completions';
 
-/** Limitga urilgan kalit shuncha vaqt chetda turadi. */
 const COOLDOWN_MS = 60_000;
-/** Kalit butunlay yaroqsiz bo'lsa (401/403) — uzoqroq sovutamiz. */
 const DEAD_COOLDOWN_MS = 15 * 60_000;
+const DB_REFRESH_MS = 5 * 60_000;
 
-/**
- * Lovable model nomlarini Google'ning haqiqiy model IDlariga moslash.
- * Nomlar mos kelmasa, Google 404 qaytaradi — shuning uchun aniq xarita kerak.
- */
 const MODEL_MAP: Record<string, string> = {
-  // Flash oilasi — 2.5 endi yangi kalitlar uchun yopiq, 3.6 ga yo'naltiramiz.
-  'google/gemini-3-flash-preview': 'gemini-3.6-flash',
+  'google/gemini-3-flash-preview': 'gemini-3.8-flash',
   'google/gemini-3.1-flash-lite': 'gemini-flash-lite-latest',
   'google/gemini-2.5-flash-lite': 'gemini-flash-lite-latest',
-  'google/gemini-3.5-flash': 'gemini-3.6-flash',
-  'google/gemini-3.6-flash': 'gemini-3.6-flash',
-  'google/gemini-3.7-flash': 'gemini-flash-latest',
-  'google/gemini-2.5-flash': 'gemini-3.6-flash',
-  'google/gemini-2.0-flash': 'gemini-3.6-flash',
-  // Pro oilasi
+  'google/gemini-3.5-flash': 'gemini-3.8-flash',
+  'google/gemini-3.6-flash': 'gemini-3.8-flash',
+  'google/gemini-3.7-flash': 'gemini-3.8-flash',
+  'google/gemini-3.8-flash': 'gemini-3.8-flash',
+  'google/gemini-2.5-flash': 'gemini-3.8-flash',
+  'google/gemini-2.0-flash': 'gemini-3.8-flash',
   'google/gemini-3.1-pro-preview': 'gemini-pro-latest',
   'google/gemini-2.5-pro': 'gemini-pro-latest',
 };
 
-/** Google'da mavjud bo'lmagan nomlar uchun xavfsiz zaxira. */
-const FALLBACK_GOOGLE_MODEL = 'gemini-3.6-flash';
+const FALLBACK_GOOGLE_MODEL = 'gemini-3.8-flash';
 
 export function toGoogleModel(model: string): string {
   if (MODEL_MAP[model]) return MODEL_MAP[model];
@@ -59,78 +45,175 @@ export function toGoogleModel(model: string): string {
   return bare;
 }
 
-
-/* ------------------------------ kalitlar ro'yxati -------------------------- */
+/* ------------------------------ key sources -------------------------------- */
 
 let cachedKeys: string[] | null = null;
+let databaseKeys: string[] = [];
+let databaseLoadedAt = 0;
+let databaseLoad: Promise<void> | null = null;
 
-export function geminiKeys(): string[] {
-  if (cachedKeys) return cachedKeys;
+function parseKeyList(raw: string | undefined | null): string[] {
+  if (!raw) return [];
+  return raw
+    .split(/[,;\n\r]+/g)
+    .map((value) => value.trim())
+    .filter(Boolean);
+}
 
+function environmentKeys(): string[] {
   const keys: string[] = [];
 
-  const bundle = Deno.env.get('GEMINI_API_KEYS');
-  if (bundle) {
-    for (const part of bundle.split(',')) {
-      const key = part.trim();
-      if (key) keys.push(key);
-    }
+  for (const name of [
+    'GEMINI_API_KEYS',
+    'ALSAMOS_AI_API_KEYS',
+    'ALSAMOS_SEARCH_API_KEYS',
+  ]) {
+    keys.push(...parseKeyList(Deno.env.get(name)));
   }
 
-  for (let i = 1; i <= 10; i += 1) {
-    const key = Deno.env.get(`GEMINI_API_KEY_${i}`)?.trim();
+  for (let index = 1; index <= 20; index += 1) {
+    const key = Deno.env.get(`GEMINI_API_KEY_${index}`)?.trim();
     if (key) keys.push(key);
   }
 
-  const single = Deno.env.get('GEMINI_API_KEY')?.trim();
-  if (single) keys.push(single);
+  // These old names are aliases only. They no longer decide which product is
+  // allowed to use the key: every value joins the same shared pool.
+  for (const name of [
+    'GEMINI_API_KEY',
+    'ALSAMOS_SEARCH_API_KEY',
+    'GOOGLE_API_KEY',
+  ]) {
+    const key = Deno.env.get(name)?.trim();
+    if (key) keys.push(key);
+  }
 
-  // Takrorlanganlarini olib tashlaymiz.
-  cachedKeys = [...new Set(keys)];
+  return keys;
+}
+
+async function refreshDatabaseKeys(force = false): Promise<void> {
+  const now = Date.now();
+  if (!force && databaseLoadedAt && now - databaseLoadedAt < DB_REFRESH_MS) return;
+  if (databaseLoad) return databaseLoad;
+
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')?.replace(/\/+$/, '');
+  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')?.trim();
+
+  if (!supabaseUrl || !serviceRoleKey) {
+    databaseLoadedAt = now;
+    return;
+  }
+
+  databaseLoad = (async () => {
+    try {
+      const response = await fetch(
+        `${supabaseUrl}/rest/v1/ai_api_key_pool?select=api_key&is_active=eq.true&order=priority.asc,id.asc`,
+        {
+          headers: {
+            apikey: serviceRoleKey,
+            Authorization: `Bearer ${serviceRoleKey}`,
+            Accept: 'application/json',
+          },
+          signal: AbortSignal.timeout(3500),
+        },
+      );
+
+      if (!response.ok) {
+        // Older deployments may not have the optional table yet. Env-backed
+        // keys keep working, so this is deliberately non-fatal.
+        console.warn(`Gemini key pool database refresh failed: HTTP ${response.status}`);
+        return;
+      }
+
+      const rows = await response.json().catch(() => []);
+      if (!Array.isArray(rows)) return;
+
+      databaseKeys = rows
+        .map((row: { api_key?: unknown }) =>
+          typeof row?.api_key === 'string' ? row.api_key.trim() : '',
+        )
+        .filter(Boolean);
+      cachedKeys = null;
+    } catch (error) {
+      console.warn(
+        'Gemini key pool database refresh failed:',
+        error instanceof Error ? error.message : String(error),
+      );
+    } finally {
+      databaseLoadedAt = Date.now();
+      databaseLoad = null;
+    }
+  })();
+
+  return databaseLoad;
+}
+
+export function geminiKeys(): string[] {
+  if (cachedKeys) return cachedKeys;
+  cachedKeys = [...new Set([...environmentKeys(), ...databaseKeys])];
   return cachedKeys;
 }
 
-export function hasGeminiKeys(): boolean {
-  return geminiKeys().length > 0;
+/** Preload/refresh the optional server-side database key pool. */
+export async function ensureGeminiKeys(): Promise<string[]> {
+  await refreshDatabaseKeys();
+  return geminiKeys();
 }
 
-/* ------------------------------ navbat va sovutish ------------------------- */
+export function hasGeminiKeys(): boolean {
+  if (geminiKeys().length > 0) return true;
+
+  // Edge Functions always have service-role credentials. Returning true here
+  // lets aiFetch perform the async database refresh before deciding that no
+  // Gemini key exists, instead of ai-assistant rejecting the request too early.
+  return Boolean(
+    Deno.env.get('SUPABASE_URL') && Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'),
+  );
+}
+
+/* ------------------------------ rotation state ------------------------------ */
 
 let cursor = 0;
 const cooldownUntil = new Map<string, number>();
 
-function available(): string[] {
+async function available(): Promise<string[]> {
+  await refreshDatabaseKeys();
   const now = Date.now();
   const keys = geminiKeys();
-  const free = keys.filter((key) => (cooldownUntil.get(key) ?? 0) <= now);
-  // Hammasi sovutishda bo'lsa — baribir urinib ko'ramiz (limit tiklangan bo'lishi mumkin).
-  return free.length ? free : keys;
+  const ready = keys.filter((key) => (cooldownUntil.get(key) ?? 0) <= now);
+  return ready.length ? ready : keys;
 }
 
 function markCooldown(key: string, status: number): void {
-  const duration = status === 401 || status === 403 ? DEAD_COOLDOWN_MS : COOLDOWN_MS;
+  const duration = status === 401 || status === 403
+    ? DEAD_COOLDOWN_MS
+    : COOLDOWN_MS;
   cooldownUntil.set(key, Date.now() + duration);
 }
 
-/* -------------------------------- so'rov ---------------------------------- */
+function shouldRotate(status: number): boolean {
+  return status === 401 ||
+    status === 403 ||
+    status === 404 ||
+    status === 408 ||
+    status === 409 ||
+    status === 429 ||
+    status >= 500;
+}
+
+/* -------------------------------- chat AI ---------------------------------- */
 
 export type AiFetchOptions = {
-  /** Chat completions tanasi (OpenAI formati): model, messages, stream, tools… */
   body: Record<string, unknown>;
-  /** Zaxira yo'l uchun Lovable kaliti. Bo'lmasa fallback ishlatilmaydi. */
   lovableKey?: string;
   signal?: AbortSignal;
 };
 
 export type AiFetchResult = {
   response: Response;
-  /** Qaysi manba javob berdi — loglar va X-AI-Provider sarlavhasi uchun. */
   provider: 'gemini' | 'lovable';
-  /** Nechanchi kalit ishlatildi (1 dan boshlab). Lovable uchun 0. */
   keyIndex: number;
 };
 
-/** Zaxira yo'l: so'rovni o'zgartirmasdan Lovable gateway'ga yuborish. */
 async function lovableFetch(
   body: Record<string, unknown>,
   lovableKey: string,
@@ -148,14 +231,15 @@ async function lovableFetch(
   return { response, provider: 'lovable', keyIndex: 0 };
 }
 
-/**
- * AI so'rovini yuboradi: avval Gemini kalitlari navbati bilan, keyin Lovable.
- * Muvaffaqiyatli javob (yoki tuzatib bo'lmaydigan xato) qaytguncha uriniladi.
- */
 export async function aiFetch(options: AiFetchOptions): Promise<AiFetchResult> {
   const { body, lovableKey, signal } = options;
-  const keys = available();
+  const keys = await available();
   const model = String(body.model ?? '');
+
+  if (!keys.length) {
+    if (lovableKey) return lovableFetch(body, lovableKey, signal);
+    throw new Error('Gemini API kalitlari topilmadi. Shared key poolni sozlang.');
+  }
 
   let lastStatus = 0;
   let lastDetail = '';
@@ -175,13 +259,12 @@ export async function aiFetch(options: AiFetchOptions): Promise<AiFetchResult> {
         signal,
       });
     } catch (error) {
-      lastDetail = error instanceof Error ? error.message : 'tarmoq xatosi';
+      lastDetail = error instanceof Error ? error.message : 'network error';
       markCooldown(key, 503);
       continue;
     }
 
     if (response.ok) {
-      // Navbatni surib qo'yamiz — yuk kalitlar orasida teng taqsimlanadi.
       cursor = (cursor + attempt + 1) % keys.length;
       return { response, provider: 'gemini', keyIndex: attempt + 1 };
     }
@@ -189,77 +272,40 @@ export async function aiFetch(options: AiFetchOptions): Promise<AiFetchResult> {
     lastStatus = response.status;
     lastDetail = await response.text().catch(() => '');
 
-    // 429 (limit), 401/403 (yaroqsiz kalit), 5xx (server) — keyingi kalitga o'tamiz.
-    if (
-      response.status === 429 ||
-      response.status === 401 ||
-      response.status === 403 ||
-      response.status >= 500
-    ) {
+    if (shouldRotate(response.status)) {
       markCooldown(key, response.status);
       console.warn(
-        `gemini key #${attempt + 1} failed: HTTP ${response.status} ${lastDetail.slice(0, 200)}`,
+        `Gemini pool key #${attempt + 1} failed: HTTP ${response.status}; rotating`,
       );
       continue;
     }
 
-    // 400/404 kabi xatolar so'rovning O'ZIDA — boshqa kalit yordam bermaydi.
-    // Lekin sabab ko'pincha Google'ning OpenAI-mos endpointi ba'zi maydonlarni
-    // (tools, tool_choice, response_format) qo'llab-quvvatlamasligi bo'ladi.
-    // Shunday holatda zaxira gateway'ga o'tamiz, aks holda agentik so'rovlar
-    // butunlay ishlamay qoladi.
-    if (lovableKey) {
-      console.warn(
-        `gemini rejected the request (HTTP ${response.status}) — falling back to Lovable gateway: ${lastDetail.slice(0, 200)}`,
-      );
-      return lovableFetch(body, lovableKey, signal);
-    }
-
+    // A non-retryable request-shape error will be identical on the next key.
+    if (lovableKey) return lovableFetch(body, lovableKey, signal);
     return { response, provider: 'gemini', keyIndex: attempt + 1 };
   }
 
-  // Barcha kalitlar ishlamadi — eski yo'lga qaytamiz.
-  if (lovableKey) {
-    console.warn(
-      `all gemini keys exhausted (last HTTP ${lastStatus}) — falling back to Lovable gateway`,
-    );
-    return lovableFetch(body, lovableKey, signal);
-  }
+  if (lovableKey) return lovableFetch(body, lovableKey, signal);
 
   throw new Error(
-    `Barcha Gemini kalitlari ishlamadi (oxirgi holat: HTTP ${lastStatus || '?'}). ` +
-      'Kalitlarni yoki limitlarni tekshiring.',
+    `Barcha Gemini kalitlari ishlamadi (oxirgi HTTP ${lastStatus || '?'}). ${lastDetail.slice(0, 160)}`.trim(),
   );
 }
 
-/* ------------------------- umumiy Google endpointlari ---------------------- */
+/* -------------------------- native Google endpoints ------------------------- */
 
 export type GoogleFetchResult = {
   response: Response;
-  /** Nechanchi kalit ishlatildi (1 dan boshlab). */
   keyIndex: number;
 };
 
-/**
- * Chat bo'lmagan Google endpointlariga (rasm, video, operations) kalitlar
- * navbati bilan so'rov yuborish. Rasm/video generatsiyasi ham shu yerdan
- * o'tadi — to'g'ridan-to'g'ri gateway chaqiruvi taqiqlangan.
- *
- * - `pathOrUrl` "/v1beta/..." ko'rinishida bo'lsa host oldiga qo'shiladi,
- *   to'liq URL bo'lsa (operation natijasidagi video havolasi) o'zi ishlatiladi.
- * - 429/401/403/5xx va tarmoq xatosida keyingi kalitga o'tadi.
- * - 400/404 (so'rov yoki model nomi noto'g'ri) javobning o'zi qaytariladi —
- *   chaqiruvchi keyingi model nomzodini sinab ko'rishi mumkin.
- */
 export async function googleFetch(
   pathOrUrl: string,
   init: { method?: string; body?: unknown; signal?: AbortSignal } = {},
 ): Promise<GoogleFetchResult> {
-  const keys = available();
+  const keys = await available();
   if (!keys.length) {
-    throw new Error(
-      'Gemini kalitlari topilmadi. GEMINI_API_KEYS (yoki GEMINI_API_KEY_1..10) ni sozlang.',
-    );
+    throw new Error('Gemini API kalitlari topilmadi. Shared key poolni sozlang.');
   }
 
   const url = pathOrUrl.startsWith('http') ? pathOrUrl : GOOGLE_HOST + pathOrUrl;
@@ -284,7 +330,7 @@ export async function googleFetch(
         signal: init.signal,
       });
     } catch (error) {
-      lastDetail = error instanceof Error ? error.message : 'tarmoq xatosi';
+      lastDetail = error instanceof Error ? error.message : 'network error';
       markCooldown(key, 503);
       continue;
     }
@@ -295,31 +341,24 @@ export async function googleFetch(
     }
 
     lastStatus = response.status;
+    lastDetail = await response.text().catch(() => '');
 
-    if (
-      response.status === 429 ||
-      response.status === 401 ||
-      response.status === 403 ||
-      response.status >= 500
-    ) {
-      lastDetail = await response.text().catch(() => '');
+    if (shouldRotate(response.status)) {
       markCooldown(key, response.status);
       console.warn(
-        `googleFetch key #${attempt + 1} failed: HTTP ${response.status} ${lastDetail.slice(0, 200)}`,
+        `Google API pool key #${attempt + 1} failed: HTTP ${response.status}; rotating`,
       );
       continue;
     }
 
-    // So'rovning o'zida muammo — chaqiruvchi hal qiladi (boshqa model nomi va h.k.).
     return { response, keyIndex: attempt + 1 };
   }
 
   throw new Error(
-    `Google API ishlamadi (oxirgi holat: HTTP ${lastStatus || '?'}). ${lastDetail.slice(0, 200)}`.trim(),
+    `Google API ishlamadi (oxirgi HTTP ${lastStatus || '?'}). ${lastDetail.slice(0, 160)}`.trim(),
   );
 }
 
-/** Diagnostika uchun: nechta kalit bor va nechtasi hozir bo'sh. */
 export function poolStatus(): { total: number; ready: number } {
   const now = Date.now();
   const keys = geminiKeys();
