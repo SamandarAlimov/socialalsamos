@@ -14,7 +14,7 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: 'Database mode. auto is safest for the first rebuild; normal pushes are incremental.'
+        description: 'Database mode. auto safely chooses fresh for an empty project and incremental otherwise.'
         required: true
         default: auto
         type: choice
@@ -96,7 +96,10 @@ jobs:
         id: mode
         shell: bash
         env:
-          REQUESTED_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'incremental' }}
+          # Pushes use auto as well. The detector allows fresh only when the
+          # public schema is genuinely empty, and refuses partially populated
+          # (mixed) databases, so a normal non-empty production stays incremental.
+          REQUESTED_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'auto' }}
         run: |
           set -euo pipefail
           detected="$(python3 scripts/supabase/remote-health.py mode)"
@@ -119,7 +122,7 @@ jobs:
           fi
 
           if [ "$selected" = "incremental" ] && [ "$detected" = "fresh" ]; then
-            echo "::error::The project is empty. Run this workflow manually once with mode=auto (or fresh) so the full historical Alsamos bootstrap is applied."
+            echo "::error::The project is empty. Use mode=auto (or fresh) so the full historical Alsamos bootstrap is applied."
             exit 1
           fi
 
