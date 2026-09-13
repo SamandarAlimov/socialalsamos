@@ -56,7 +56,7 @@ interface AuthContextType {
   isLoading: boolean;
   /**
    * Step 1: verify the password and get the account list + ticket.
-   * `identifier` may be an email, a username or a phone number.
+   * `identifier` is an Alsamos username or a phone number.
    */
   beginLogin: (identifier: string, password: string) => Promise<LoginStepResult>;
   /** Step 2: open a session for one of the identity's accounts. */
@@ -71,7 +71,6 @@ interface AuthContextType {
     username?: string;
     acceptedTerms: boolean;
   }) => Promise<AuthResult & { needsEmailConfirmation?: boolean }>;
-  requestPasswordReset: (email: string) => Promise<AuthResult>;
   updatePassword: (newPassword: string) => Promise<AuthResult>;
   logout: () => Promise<void>;
   updateProfile: (updates: Partial<Profile>) => Promise<void>;
@@ -269,8 +268,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   // ---------------------------------------------------------------------
-  // Signup (identity creation) - the identity email must be @alsamos.com,
-  // while login later accepts email, username or phone.
+  // Signup (identity creation) - @alsamos.com is an internal credential only.
+  // Public login accepts username or phone; no mailbox is required.
   // ---------------------------------------------------------------------
   const signup: AuthContextType['signup'] = async ({
     email,
@@ -363,25 +362,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // ---------------------------------------------------------------------
   // Password recovery / change
   // ---------------------------------------------------------------------
-  const requestPasswordReset = async (email: string): Promise<AuthResult> => {
-    const identityEmail = toIdentityEmail(email);
-
-    if (!isAlsamosEmail(identityEmail)) {
-      const error = new AlsamosAuthError('EMAIL_DOMAIN_NOT_ALLOWED');
-      toast({ title: 'Email xato', description: error.message, variant: 'destructive' });
-      return { error };
-    }
-
-    const { error } = await supabase.auth.resetPasswordForEmail(identityEmail, {
-      redirectTo: `${window.location.origin}/reset-password`,
-    });
-
-    // The UI shows the same message either way, so a missing account cannot
-    // be detected from the outside.
-    if (error) console.error('resetPasswordForEmail failed', error);
-
-    return { error: null };
-  };
 
   const updatePassword = async (newPassword: string): Promise<AuthResult> => {
     const strength = checkPassword(newPassword, [user?.email ?? '', profile?.username ?? '']);
@@ -475,7 +455,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         completeLogin,
         login,
         signup,
-        requestPasswordReset,
         updatePassword,
         logout,
         updateProfile,
