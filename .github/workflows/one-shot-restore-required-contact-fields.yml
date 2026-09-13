@@ -1,0 +1,165 @@
+name: One-shot restore required contact fields
+
+on:
+  push:
+    branches:
+      - fix/first-party-no-email-auth
+    paths:
+      - .github/workflows/one-shot-restore-required-contact-fields.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/first-party-no-email-auth
+      - name: Restore required contact email and phone without email confirmation
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text(encoding='utf-8')
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{path}: expected exactly one match, found {count}: {old[:100]!r}')
+              p.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          # ------------------------------------------------------------------
+          # Visible auth form: login stays username/phone; signup requires
+          # full name + username + REAL contact email + phone + password.
+          # ------------------------------------------------------------------
+          path = 'src/pages/AuthPage.tsx'
+          replace_once(path,
+              "  Lock,\n  Phone,",
+              "  Lock,\n  Mail,\n  Phone,")
+          replace_once(path,
+              "const signupSchema = z\n  .object({\n    fullName:",
+              "const contactEmailField = z\n  .string()\n  .trim()\n  .min(3, 'Emailni kiriting')\n  .max(254)\n  .email('Email manzilni to’g’ri kiriting');\n\nconst signupSchema = z\n  .object({\n    fullName:")
+          replace_once(path,
+              "      .regex(/^[a-z0-9_]+$/, 'Username: faqat kichik harflar, raqamlar va _'),\n    phone:",
+              "      .regex(/^[a-z0-9_]+$/, 'Username: faqat kichik harflar, raqamlar va _'),\n    email: contactEmailField,\n    phone:")
+          replace_once(path,
+              "  // Signup\n  const [phone, setPhone] = useState('');",
+              "  // Signup\n  const [email, setEmail] = useState('');\n  const [phone, setPhone] = useState('');")
+          replace_once(path,
+              "() => checkPassword(password, [username, fullName, phone]),\n    [password, username, fullName, phone],",
+              "() => checkPassword(password, [email, username, fullName, phone]),\n    [password, email, username, fullName, phone],")
+          replace_once(path,
+              "    setIdentifier('');\n    setPhone('');",
+              "    setIdentifier('');\n    setEmail('');\n    setPhone('');")
+          replace_once(path,
+              "      fullName,\n      username,\n      phone,",
+              "      fullName,\n      username,\n      email,\n      phone,")
+          replace_once(path,
+              "    const { error } = await signup({\n      email: toIdentityEmail(parsed.data.username),",
+              "    const { error } = await signup({\n      email: parsed.data.email,")
+          replace_once(path,
+              "                    <Input\n                      type=\"tel\"\n                      placeholder=\"+998 90 123 45 67\"",
+              "                    <Input\n                      type=\"email\"\n                      placeholder=\"Email\"\n                      value={email}\n                      onChange={(e) => setEmail(e.target.value)}\n                      icon={<Mail className=\"h-4 w-4\" />}\n                      autoComplete=\"email\"\n                      autoCapitalize=\"none\"\n                      spellCheck={false}\n                      required\n                    />\n\n                    <Input\n                      type=\"tel\"\n                      placeholder=\"+998 90 123 45 67\"")
+
+          # toIdentityEmail is no longer used directly by the page.
+          p = Path(path)
+          text = p.read_text(encoding='utf-8')
+          text = text.replace("  toIdentityEmail,\n", "")
+          p.write_text(text, encoding='utf-8')
+
+          # ------------------------------------------------------------------
+          # Auth context: contact email is required data; username@alsamos.com
+          # remains the hidden Supabase credential. Phone is required too.
+          # ------------------------------------------------------------------
+          path = 'src/contexts/AuthContext.tsx'
+          replace_once(path, "    phone?: string;", "    phone: string;")
+          replace_once(path,
+              "    const identityEmail = toIdentityEmail(email);\n\n    if (!isAlsamosEmail(identityEmail)) {\n      const error = new AlsamosAuthError('EMAIL_DOMAIN_NOT_ALLOWED');\n      toast({\n        title: 'Ro’yxatdan o’tish amalga oshmadi',\n        description: error.message,\n        variant: 'destructive',\n      });\n      return { error };\n    }\n\n    const finalUsername = (username || identityEmail.split('@')[0])",
+              "    const contactEmail = email.trim().toLowerCase();\n    if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(contactEmail) || contactEmail.length > 254) {\n      const error = new Error('Email manzilni to’g’ri kiriting.');\n      toast({ title: 'Email xato', description: error.message, variant: 'destructive' });\n      return { error };\n    }\n\n    const finalUsername = (username || contactEmail.split('@')[0])")
+          replace_once(path,
+              "      .replace(/[^a-z0-9_]/g, '');\n\n    if (!isUsernameValid(finalUsername)) {",
+              "      .replace(/[^a-z0-9_]/g, '');\n    const identityEmail = toIdentityEmail(finalUsername);\n\n    if (!isUsernameValid(finalUsername)) {")
+          replace_once(path,
+              "    // Phone is optional, but when present it must be a valid E.164 number:\n    // it becomes a login identifier, so a broken value would lock the user out.\n    let normalizedPhone: string | null = null;\n    if (phone && phone.trim()) {\n      normalizedPhone = normalizePhoneInput(phone);\n      if (!normalizedPhone) {\n        const error = new AlsamosAuthError('PHONE_INVALID');\n        toast({ title: 'Telefon raqam xato', description: error.message, variant: 'destructive' });\n        return { error };\n      }\n    }",
+              "    // Phone is mandatory: besides login, it powers privacy-preserving\n    // contact discovery/user suggestions. Persist only the normalized E.164 form.\n    const normalizedPhone = normalizePhoneInput(phone);\n    if (!normalizedPhone) {\n      const error = new AlsamosAuthError('PHONE_INVALID');\n      toast({ title: 'Telefon raqam xato', description: error.message, variant: 'destructive' });\n      return { error };\n    }")
+          replace_once(path,
+              "    const strength = checkPassword(password, [identityEmail, finalUsername]);",
+              "    const strength = checkPassword(password, [contactEmail, identityEmail, finalUsername, normalizedPhone]);")
+          replace_once(path,
+              "      email: identityEmail,",
+              "      email: contactEmail,")
+          p = Path(path)
+          text = p.read_text(encoding='utf-8').replace("  isAlsamosEmail,\n", "")
+          p.write_text(text, encoding='utf-8')
+
+          # ------------------------------------------------------------------
+          # Client invocation: registration sends contact_email. Repair keeps
+          # using the hidden @alsamos.com credential and does not depend on mail.
+          # ------------------------------------------------------------------
+          path = 'src/lib/firstPartyIdentity.ts'
+          replace_once(path, "  phone?: string | null;", "  phone: string;")
+          replace_once(path,
+              "  const email = toIdentityEmail(params.email);\n  if (!isAlsamosEmail(email)) {\n    throw new AlsamosAuthError(\n      'EMAIL_DOMAIN_NOT_ALLOWED',\n      `Ro’yxatdan o’tish faqat @${ALSAMOS_MAIL_DOMAIN} identifikatori bilan.`,\n    );\n  }\n\n  const result = await invokeIdentity({\n    action: 'signup',\n    email,",
+              "  const contactEmail = params.email.trim().toLowerCase();\n  if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(contactEmail) || contactEmail.length > 254) {\n    throw new Error('Email manzilni to’g’ri kiriting.');\n  }\n\n  const result = await invokeIdentity({\n    action: 'signup',\n    contact_email: contactEmail,")
+          replace_once(path, "    phone: params.phone ?? null,", "    phone: params.phone,")
+
+          # ------------------------------------------------------------------
+          # Edge Function: real email is required contact data, but Auth uses
+          # username@alsamos.com and is auto-confirmed server-side. No mailbox
+          # verification link is sent. Repair remains compatible with old users.
+          # ------------------------------------------------------------------
+          path = 'supabase/functions/account-signup/index.ts'
+          replace_once(path,
+              "  const action: SignupAction = body.action === \"repair\" ? \"repair\" : \"signup\";\n  const email = normalizeEmail(body.email);\n  const password = typeof body.password === \"string\" ? body.password : \"\";\n  const username = typeof body.username === \"string\"\n    ? body.username.trim().toLowerCase()\n    : email.split(\"@\")[0] ?? \"\";",
+              "  const action: SignupAction = body.action === \"repair\" ? \"repair\" : \"signup\";\n  const contactEmail = action === \"signup\"\n    ? normalizeEmail(body.contact_email ?? body.email)\n    : \"\";\n  const repairEmail = action === \"repair\" ? normalizeEmail(body.email) : \"\";\n  const password = typeof body.password === \"string\" ? body.password : \"\";\n  const username = typeof body.username === \"string\"\n    ? body.username.trim().toLowerCase()\n    : repairEmail.split(\"@\")[0] ?? \"\";\n  const email = action === \"repair\" ? repairEmail : `${username}@alsamos.com`;")
+          replace_once(path,
+              "  if (!isIdentityEmail(email) || email.endsWith(\"@accounts.alsamos.com\") || password.length < 10) {\n    return authError(req, \"INVALID_REQUEST\", 400);\n  }\n  if (action === \"signup\" && !isUsernameValid(username)) {\n    return authError(req, \"USERNAME_INVALID\", 400);\n  }\n  if (body.phone && !phone) {\n    return authError(req, \"PHONE_INVALID\", 400);\n  }",
+              "  if (!isIdentityEmail(email) || email.endsWith(\"@accounts.alsamos.com\") || password.length < 10) {\n    return authError(req, \"INVALID_REQUEST\", 400);\n  }\n  if (action === \"signup\" && !isUsernameValid(username)) {\n    return authError(req, \"USERNAME_INVALID\", 400);\n  }\n  if (action === \"signup\" && (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(contactEmail) || contactEmail.length > 254)) {\n    return authError(req, \"INVALID_REQUEST\", 400);\n  }\n  if (action === \"signup\" && !phone) {\n    return authError(req, \"PHONE_INVALID\", 400);\n  }")
+          replace_once(path,
+              "      phone,\n      tos_version: tosVersion,\n      alsamos_identity: true,",
+              "      phone,\n      contact_email: contactEmail,\n      tos_version: tosVersion,\n      alsamos_identity: true,")
+          replace_once(path,
+              "  let tokenHash: string | null;\n  if (repaired) {",
+              "  // Contact fields are first-class identity data. The address is\n  // deliberately NOT marked verified here: signup does not send/require email\n  // confirmation. Phone is normalized for contact discovery matching.\n  const { error: contactPersistError } = await admin\n    .from(\"auth_identities\")\n    .update({ contact_email: contactEmail, phone })\n    .eq(\"user_id\", userId);\n\n  if (contactPersistError) {\n    console.error(\"Failed to persist identity contact fields\", contactPersistError.message);\n    return authError(req, \"ACCOUNT_CREATE_FAILED\", 500);\n  }\n\n  let tokenHash: string | null;\n  if (repaired) {")
+          replace_once(path,
+              "    metadata: { username },",
+              "    metadata: { username, contact_email_supplied: true, phone_supplied: true },")
+
+          # ------------------------------------------------------------------
+          # DB migration: keep private contact email on auth identity and index
+          # normalized phone for server-side contact matching. Legacy rows stay
+          # nullable; all NEW registrations enforce both fields in the function.
+          # ------------------------------------------------------------------
+          migration = Path('supabase/migrations/20260913101500_required_identity_contact_fields.sql')
+          migration.write_text('''-- Required contact data for Alsamos registration.\n-- Real email is stored as contact data only; Supabase Auth continues to use\n-- the hidden username@alsamos.com credential and sends no confirmation email.\n\nALTER TABLE public.auth_identities\n  ADD COLUMN IF NOT EXISTS contact_email text;\n\nCREATE INDEX IF NOT EXISTS auth_identities_contact_email_lower_idx\n  ON public.auth_identities (lower(contact_email))\n  WHERE contact_email IS NOT NULL;\n\nCREATE INDEX IF NOT EXISTS auth_identities_phone_contact_idx\n  ON public.auth_identities (phone)\n  WHERE phone IS NOT NULL;\n\nCOMMENT ON COLUMN public.auth_identities.contact_email IS\n  'Required contact email for new registrations. Not a public login identifier and not auto-verified.';\n\nNOTIFY pgrst, 'reload schema';\n''', encoding='utf-8')
+
+          # ------------------------------------------------------------------
+          # CI contract: email must exist as REQUIRED contact data, while no
+          # confirmation-mail or email-login flow may return.
+          # ------------------------------------------------------------------
+          path = 'scripts/check-no-email-auth.mjs'
+          replace_once(path,
+              "// The visible form must expose username/phone rather than an email mailbox.\nforbidText(authPage, 'type=\"email\"', 'email login/signup input');\nforbidText(authPage, 'autoComplete=\"email\"', 'email autocomplete input');\nrequireText(authPage, 'Username yoki telefon raqam', 'username/phone login label');\nrequireText(authPage, 'Username', 'username signup field');\nrequireText(authPage, 'Telefon raqam', 'phone signup field');",
+              "// Public login is username/phone only, but registration MUST collect a\n// real contact email and phone. Contact email is data, not a confirmation gate.\nrequireText(authPage, 'Username yoki telefon raqam', 'username/phone login label');\nrequireText(authPage, 'type=\"email\"', 'required contact email signup input');\nrequireText(authPage, 'autoComplete=\"email\"', 'contact email autocomplete');\nrequireText(authPage, 'Username', 'username signup field');\nrequireText(authPage, 'type=\"tel\"', 'required phone signup field');\nrequireText(authPage, 'required', 'required signup fields');")
+          replace_once(path,
+              "requireText(signupFn, 'email_confirm: true', 'server-side auto-confirm');",
+              "requireText(signupFn, 'email_confirm: true', 'server-side auto-confirm');\nrequireText(signupFn, 'body.contact_email ?? body.email', 'required real contact email input');\nrequireText(signupFn, '`${username}@alsamos.com`', 'hidden internal auth credential');\nrequireText(signupFn, '!phone', 'mandatory normalized phone');\nrequireText(signupFn, 'contact_email: contactEmail', 'contact email persistence');")
+
+          print('Required contact email + phone restoration patched successfully')
+          PY
+
+      - name: Commit restoration and remove one-shot workflow
+        shell: bash
+        run: |
+          rm .github/workflows/one-shot-restore-required-contact-fields.yml
+          git config user.name "Alsamos Auth Migration Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add src/pages/AuthPage.tsx src/contexts/AuthContext.tsx src/lib/firstPartyIdentity.ts \
+            supabase/functions/account-signup/index.ts scripts/check-no-email-auth.mjs \
+            supabase/migrations/20260913101500_required_identity_contact_fields.sql \
+            .github/workflows/one-shot-restore-required-contact-fields.yml
+          git commit -m "fix(auth): restore required contact email and phone"
+          git push origin HEAD:fix/first-party-no-email-auth
