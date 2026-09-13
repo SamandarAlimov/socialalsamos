@@ -155,6 +155,12 @@ export function AISidebar({
     setProjectDialogOpen(true);
   };
 
+  const openEditProject = (project: AIProject) => {
+    if (!onUpdateProject) return;
+    setEditingProject(project);
+    setProjectDialogOpen(true);
+  };
+
   const renderConversation = (conversation: AIConversation) => (
     <div
       key={conversation.id}
@@ -291,9 +297,9 @@ export function AISidebar({
         <div className="flex items-center justify-between">
           <div className="flex min-w-0 items-center gap-2.5">
             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-border/70 bg-muted/50">
-              <MessageSquare className="h-4 w-4" />
+              {activeProject ? <FolderKanban className="h-4 w-4" /> : <MessageSquare className="h-4 w-4" />}
             </span>
-            <span className="truncate text-sm font-semibold">Alsamos AI</span>
+            <span className="truncate text-sm font-semibold">{activeProject ? activeProject.name : 'Alsamos AI'}</span>
           </div>
           <Button size="icon" variant="ghost" className="h-8 w-8 rounded-lg" onClick={onClose} aria-label="Yon panelni yopish">
             {isMobile ? <ChevronLeft className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
@@ -304,140 +310,186 @@ export function AISidebar({
           className="h-9 w-full gap-2 rounded-xl bg-foreground text-background hover:bg-foreground/90"
           onClick={onNew}
         >
-          <Plus className="h-4 w-4" /> Yangi suhbat
+          <Plus className="h-4 w-4" /> {activeProject ? 'Loyihada yangi suhbat' : 'Yangi suhbat'}
         </Button>
 
-        <nav className="space-y-0.5">
-          <div className="rounded-xl">
-            <div className="flex items-center gap-1">
+        {activeProject ? (
+          <nav className="space-y-1">
+            <button
+              type="button"
+              onClick={() => onSelectProject?.(null)}
+              className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-[12px] font-medium text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+            >
+              <ChevronLeft className="h-4 w-4" />
+              <span>Barcha suhbatlar va loyihalar</span>
+            </button>
+
+            <div className="rounded-xl border border-border/60 bg-muted/20 p-2.5">
+              <div className="flex min-w-0 items-start gap-2">
+                <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border bg-background">
+                  <FolderKanban className="h-4 w-4" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[13px] font-semibold">{activeProject.name}</p>
+                  <p className="mt-0.5 line-clamp-3 text-[10px] leading-relaxed text-muted-foreground">
+                    {activeProject.instructions || 'Bu loyihadagi suhbatlar bir xil loyiha konteksti bilan ishlaydi.'}
+                  </p>
+                </div>
+                {(onUpdateProject || onDeleteProject) && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0 rounded-lg" aria-label="Loyiha amallari">
+                        <MoreHorizontal className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="min-w-44">
+                      {onUpdateProject && (
+                        <DropdownMenuItem className="text-xs" onClick={() => openEditProject(activeProject)}>
+                          <Pencil className="mr-2 h-3.5 w-3.5" /> Loyiha sozlamalari
+                        </DropdownMenuItem>
+                      )}
+                      {onDeleteProject && (
+                        <DropdownMenuItem className="text-xs text-destructive" onClick={() => void onDeleteProject(activeProject.id)}>
+                          <Trash2 className="mr-2 h-3.5 w-3.5" /> Loyihani o‘chirish
+                        </DropdownMenuItem>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-1">
               <button
                 type="button"
-                onClick={() => setProjectsOpen((value) => !value)}
-                className={cn(
-                  'flex min-w-0 flex-1 items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[13px] font-medium transition-colors hover:bg-muted/60',
-                  activeProjectId && 'bg-muted/45',
-                )}
+                onClick={() => onOpenArtifacts?.()}
+                className="flex min-w-0 items-center gap-2 rounded-xl px-2.5 py-2 text-left text-[11px] font-medium text-foreground/80 hover:bg-muted/60"
               >
-                <FolderKanban className="h-4 w-4 shrink-0 text-muted-foreground" />
-                <span className="min-w-0 flex-1 truncate">Loyihalar</span>
-                {projects.length > 0 && <span className="text-[10px] text-muted-foreground">{projects.length}</span>}
-                <ChevronDown className={cn('h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform', !projectsOpen && '-rotate-90')} />
+                <FileCode2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                <span className="truncate">Artefaktlar{artifactCount > 0 ? ` (${artifactCount})` : ''}</span>
               </button>
-              {onCreateProject && (
-                <Button
+              <button
+                type="button"
+                onClick={() => onOpenConnectors?.()}
+                className="flex min-w-0 items-center gap-2 rounded-xl px-2.5 py-2 text-left text-[11px] font-medium text-foreground/80 hover:bg-muted/60"
+              >
+                <Plug className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                <span className="truncate">Konnektorlar</span>
+              </button>
+            </div>
+          </nav>
+        ) : (
+          <nav className="space-y-0.5">
+            <div className="rounded-xl">
+              <div className="flex items-center gap-1">
+                <button
                   type="button"
-                  size="icon"
-                  variant="ghost"
-                  className="h-8 w-8 shrink-0 rounded-lg"
-                  onClick={openCreateProject}
-                  aria-label="Yangi loyiha"
+                  onClick={() => setProjectsOpen((value) => !value)}
+                  className="flex min-w-0 flex-1 items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[13px] font-medium transition-colors hover:bg-muted/60"
                 >
-                  <Plus className="h-3.5 w-3.5" />
-                </Button>
+                  <FolderKanban className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  <span className="min-w-0 flex-1 truncate">Loyihalar</span>
+                  {projects.length > 0 && <span className="text-[10px] text-muted-foreground">{projects.length}</span>}
+                  <ChevronDown className={cn('h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform', !projectsOpen && '-rotate-90')} />
+                </button>
+                {onCreateProject && (
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    className="h-8 w-8 shrink-0 rounded-lg"
+                    onClick={openCreateProject}
+                    aria-label="Yangi loyiha"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                  </Button>
+                )}
+              </div>
+
+              {projectsOpen && (
+                <div className="ml-3 mt-1 space-y-0.5 border-l border-border/55 pl-2">
+                  <button
+                    type="button"
+                    onClick={() => onSelectProject?.(null)}
+                    className="flex w-full min-w-0 items-center gap-2 rounded-lg bg-muted/45 px-2 py-1.5 text-left text-xs text-foreground transition-colors hover:bg-muted/55"
+                  >
+                    <MessageSquare className="h-3.5 w-3.5 shrink-0" />
+                    <span className="truncate">Barcha suhbatlar</span>
+                  </button>
+
+                  {projects.map((project) => (
+                    <div key={project.id} className="group/project flex min-w-0 items-center rounded-lg transition-colors hover:bg-muted/55">
+                      <button
+                        type="button"
+                        onClick={() => onSelectProject?.(project.id)}
+                        className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 text-left text-xs"
+                      >
+                        <FolderKanban className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                        <span className="min-w-0 flex-1 truncate font-medium">{project.name}</span>
+                      </button>
+
+                      {(onUpdateProject || onDeleteProject) && (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="mr-0.5 h-6 w-6 shrink-0 rounded-md text-muted-foreground opacity-50 hover:opacity-100 group-hover/project:opacity-100"
+                              aria-label="Loyiha amallari"
+                            >
+                              <MoreHorizontal className="h-3.5 w-3.5" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="min-w-44">
+                            {onUpdateProject && (
+                              <DropdownMenuItem className="text-xs" onClick={() => openEditProject(project)}>
+                                <Pencil className="mr-2 h-3.5 w-3.5" /> Tahrirlash
+                              </DropdownMenuItem>
+                            )}
+                            {onDeleteProject && (
+                              <DropdownMenuItem className="text-xs text-destructive" onClick={() => void onDeleteProject(project.id)}>
+                                <Trash2 className="mr-2 h-3.5 w-3.5" /> O‘chirish
+                              </DropdownMenuItem>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      )}
+                    </div>
+                  ))}
+
+                  {projects.length === 0 && (
+                    <button
+                      type="button"
+                      onClick={openCreateProject}
+                      disabled={!onCreateProject}
+                      className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-[11px] text-muted-foreground hover:bg-muted/45 disabled:cursor-default disabled:hover:bg-transparent"
+                    >
+                      <Plus className="h-3.5 w-3.5" /> Birinchi loyihani yarating
+                    </button>
+                  )}
+                </div>
               )}
             </div>
 
-            {projectsOpen && (
-              <div className="ml-3 mt-1 space-y-0.5 border-l border-border/55 pl-2">
-                <button
-                  type="button"
-                  onClick={() => onSelectProject?.(null)}
-                  className={cn(
-                    'flex w-full min-w-0 items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:bg-muted/55 hover:text-foreground',
-                    !activeProjectId && 'bg-muted/45 text-foreground',
-                  )}
-                >
-                  <MessageSquare className="h-3.5 w-3.5 shrink-0" />
-                  <span className="truncate">Barcha suhbatlar</span>
-                </button>
-
-                {projects.map((project) => (
-                  <div
-                    key={project.id}
-                    className={cn(
-                      'group/project flex min-w-0 items-center rounded-lg transition-colors hover:bg-muted/55',
-                      activeProjectId === project.id && 'bg-muted/55',
-                    )}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => onSelectProject?.(project.id)}
-                      className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 text-left text-xs"
-                    >
-                      <FolderKanban className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                      <span className="min-w-0 flex-1 truncate font-medium">{project.name}</span>
-                    </button>
-
-                    {(onUpdateProject || onDeleteProject) && (
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            className="mr-0.5 h-6 w-6 shrink-0 rounded-md text-muted-foreground opacity-50 hover:opacity-100 group-hover/project:opacity-100"
-                            aria-label="Loyiha amallari"
-                          >
-                            <MoreHorizontal className="h-3.5 w-3.5" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="min-w-44">
-                          {onUpdateProject && (
-                            <DropdownMenuItem
-                              className="text-xs"
-                              onClick={() => {
-                                setEditingProject(project);
-                                setProjectDialogOpen(true);
-                              }}
-                            >
-                              <Pencil className="mr-2 h-3.5 w-3.5" /> Tahrirlash
-                            </DropdownMenuItem>
-                          )}
-                          {onDeleteProject && (
-                            <DropdownMenuItem
-                              className="text-xs text-destructive"
-                              onClick={() => void onDeleteProject(project.id)}
-                            >
-                              <Trash2 className="mr-2 h-3.5 w-3.5" /> O‘chirish
-                            </DropdownMenuItem>
-                          )}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    )}
-                  </div>
-                ))}
-
-                {projects.length === 0 && (
-                  <button
-                    type="button"
-                    onClick={openCreateProject}
-                    disabled={!onCreateProject}
-                    className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-[11px] text-muted-foreground hover:bg-muted/45 disabled:cursor-default disabled:hover:bg-transparent"
-                  >
-                    <Plus className="h-3.5 w-3.5" /> Birinchi loyihani yarating
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-
-          <button
-            type="button"
-            onClick={() => onOpenArtifacts?.()}
-            className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[13px] font-medium text-foreground/80 hover:bg-muted/60"
-          >
-            <FileCode2 className="h-4 w-4 text-muted-foreground" />
-            <span className="flex-1">Artefaktlar</span>
-            {artifactCount > 0 && <span className="rounded-full bg-muted px-1.5 text-[10px] text-muted-foreground">{artifactCount}</span>}
-          </button>
-          <button
-            type="button"
-            onClick={() => onOpenConnectors?.()}
-            className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[13px] font-medium text-foreground/80 hover:bg-muted/60"
-          >
-            <Plug className="h-4 w-4 text-muted-foreground" />
-            <span className="flex-1">Konnektorlar</span>
-          </button>
-        </nav>
+            <button
+              type="button"
+              onClick={() => onOpenArtifacts?.()}
+              className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[13px] font-medium text-foreground/80 hover:bg-muted/60"
+            >
+              <FileCode2 className="h-4 w-4 text-muted-foreground" />
+              <span className="flex-1">Artefaktlar</span>
+              {artifactCount > 0 && <span className="rounded-full bg-muted px-1.5 text-[10px] text-muted-foreground">{artifactCount}</span>}
+            </button>
+            <button
+              type="button"
+              onClick={() => onOpenConnectors?.()}
+              className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[13px] font-medium text-foreground/80 hover:bg-muted/60"
+            >
+              <Plug className="h-4 w-4 text-muted-foreground" />
+              <span className="flex-1">Konnektorlar</span>
+            </button>
+          </nav>
+        )}
 
         <div className="relative border-t border-border/50 pt-3">
           <Search className="absolute left-3 top-[26px] h-3.5 w-3.5 text-muted-foreground" />
@@ -492,7 +544,7 @@ export function AISidebar({
                 onClick={() => setRecentsOpen((value) => !value)}
                 className="mb-1 flex w-full items-center gap-1.5 px-2 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground"
               >
-                <History className="h-3 w-3" /> {activeProject ? activeProject.name : 'Suhbatlar'}
+                <History className="h-3 w-3" /> {activeProject ? 'Loyiha suhbatlari' : 'Suhbatlar'}
                 <ChevronDown className={cn('ml-auto h-3 w-3 transition-transform', !recentsOpen && '-rotate-90')} />
               </button>
               {recentsOpen && (
