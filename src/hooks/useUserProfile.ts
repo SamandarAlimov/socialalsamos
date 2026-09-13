@@ -132,19 +132,18 @@ export function useUserProfile(userId?: string) {
     if (!targetUserId) return;
 
     try {
-      // Get real followers count
+      // Counts are derived live for display. The persisted profile counters are
+      // server-managed and intentionally cannot be written by browser clients.
       const { count: followers } = await supabase
         .from('follows')
         .select('*', { count: 'exact', head: true })
         .eq('following_id', targetUserId);
 
-      // Get real following count
       const { count: following } = await supabase
         .from('follows')
         .select('*', { count: 'exact', head: true })
         .eq('follower_id', targetUserId);
 
-      // Get real posts count
       const { count: postsCount } = await supabase
         .from('posts')
         .select('*', { count: 'exact', head: true })
@@ -153,16 +152,6 @@ export function useUserProfile(userId?: string) {
       setFollowersCount(followers || 0);
       setFollowingCount(following || 0);
       setPostsCount(postsCount || 0);
-
-      // Update profile counts in database
-      await supabase
-        .from('profiles')
-        .update({
-          followers_count: followers || 0,
-          following_count: following || 0,
-          posts_count: postsCount || 0,
-        })
-        .eq('id', targetUserId);
     } catch (error) {
       console.error('Error fetching counts:', error);
     }
@@ -310,10 +299,10 @@ export function useUserProfile(userId?: string) {
           // Handle post count updates in real-time
           if (payload.eventType === 'UPDATE') {
             const newData = payload.new as any;
-            setPosts(prev => prev.map(p => 
-              p.id === newData.id 
-                ? { 
-                    ...p, 
+            setPosts(prev => prev.map(p =>
+              p.id === newData.id
+                ? {
+                    ...p,
                     likes_count: newData.likes_count ?? p.likes_count,
                     comments_count: newData.comments_count ?? p.comments_count,
                     shares_count: newData.shares_count ?? p.shares_count,
@@ -341,9 +330,9 @@ export function useUserProfile(userId?: string) {
             if (p.id !== postId) return p;
             const delta = payload.eventType === 'INSERT' ? 1 : payload.eventType === 'DELETE' ? -1 : 0;
             const isLiked = payload.eventType === 'INSERT' && (payload.new as any)?.user_id === user?.id
-              ? true 
+              ? true
               : payload.eventType === 'DELETE' && (payload.old as any)?.user_id === user?.id
-              ? false 
+              ? false
               : p.is_liked;
             return { ...p, likes_count: Math.max(0, p.likes_count + delta), is_liked: isLiked };
           }));
