@@ -29,18 +29,26 @@ jobs:
           text = path.read_text(encoding='utf-8')
 
           old_import = "import { checkPassword } from '@/lib/passwordStrength';"
-          new_import = """import { checkPassword } from '@/lib/passwordStrength';
-          import {
-            registerFirstPartyIdentity,
-            repairFirstPartyIdentity,
-          } from '@/lib/firstPartyIdentity';"""
+          new_import = (
+              "import { checkPassword } from '@/lib/passwordStrength';\n"
+              "import {\n"
+              "  registerFirstPartyIdentity,\n"
+              "  repairFirstPartyIdentity,\n"
+              "} from '@/lib/firstPartyIdentity';"
+          )
           if old_import not in text:
               raise SystemExit('AuthContext import anchor not found')
           text = text.replace(old_import, new_import, 1)
 
-          old_login = """  const beginLogin = async (identifier: string, password: string): Promise<LoginStepResult> => {
-            return directPasswordLogin(identifier, password);
-          };"""
+          login_start = "  const beginLogin = async (identifier: string, password: string): Promise<LoginStepResult> => {"
+          login_old_end = "    return directPasswordLogin(identifier, password);\n  };"
+          start = text.find(login_start)
+          if start < 0:
+              raise SystemExit('beginLogin start not found')
+          end = text.find(login_old_end, start)
+          if end < 0:
+              raise SystemExit('beginLogin end not found')
+          end += len(login_old_end)
           new_login = """  const beginLogin = async (identifier: string, password: string): Promise<LoginStepResult> => {
             try {
               return await directPasswordLogin(identifier, password);
@@ -56,49 +64,17 @@ jobs:
               throw e;
             }
           };"""
-          if old_login not in text:
-              raise SystemExit('beginLogin anchor not found')
-          text = text.replace(old_login, new_login, 1)
+          text = text[:start] + new_login + text[end:]
 
-          old_signup = """    const { data, error } = await supabase.auth.signUp({
-              email: identityEmail,
-              password,
-              options: {
-                emailRedirectTo: `${window.location.origin}/`,
-                data: {
-                  display_name: displayName || finalUsername,
-                  username: finalUsername,
-                  phone: normalizedPhone,
-                  tos_version: TOS_VERSION,
-                },
-              },
-            });
-
-            setIsLoading(false);
-
-            if (error) {
-              // Never confirm whether an address is already registered.
-              const message = /already|registered|exists/i.test(error.message)
-                ? 'Agar bu manzil bo’sh bo’lsa, tasdiqlash xati yuborildi.'
-                : error.message;
-              toast({
-                title: 'Ro’yxatdan o’tish',
-                description: message,
-                variant: 'destructive',
-              });
-              return { error };
-            }
-
-            const needsEmailConfirmation = !data.session;
-
-            toast({
-              title: 'Akkaunt yaratildi',
-              description: needsEmailConfirmation
-                ? 'Emailingizga tasdiqlash havolasi yuborildi. Havolani bosgach kirishingiz mumkin.'
-                : 'Alsamosga xush kelibsiz!',
-            });
-
-            return { error: null, needsEmailConfirmation };"""
+          signup_start = "    const { data, error } = await supabase.auth.signUp({"
+          signup_end_marker = "    return { error: null, needsEmailConfirmation };"
+          start = text.find(signup_start)
+          if start < 0:
+              raise SystemExit('legacy signup start not found')
+          end = text.find(signup_end_marker, start)
+          if end < 0:
+              raise SystemExit('legacy signup end not found')
+          end += len(signup_end_marker)
           new_signup = """    try {
               const { repaired } = await registerFirstPartyIdentity({
                 email: identityEmail,
@@ -128,9 +104,7 @@ jobs:
             } finally {
               setIsLoading(false);
             }"""
-          if old_signup not in text:
-              raise SystemExit('legacy signup block not found')
-          text = text.replace(old_signup, new_signup, 1)
+          text = text[:start] + new_signup + text[end:]
           path.write_text(text, encoding='utf-8')
 
           auth = Path('src/lib/alsamosAuth.ts')
@@ -141,7 +115,6 @@ jobs:
               raise SystemExit('EMAIL_NOT_CONFIRMED message anchor not found')
           auth.write_text(auth_text.replace(old, new, 1), encoding='utf-8')
 
-          # Guard against the exact regression visible in production.
           combined = path.read_text(encoding='utf-8')
           forbidden = [
               'supabase.auth.signUp({',
