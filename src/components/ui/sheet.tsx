@@ -56,21 +56,48 @@ interface SheetContentProps
   hideDefaultClose?: boolean;
 }
 
+function hasSheetDescription(children: React.ReactNode): boolean {
+  let found = false;
+  React.Children.forEach(children, (child) => {
+    if (found || !React.isValidElement(child)) return;
+    const type = child.type as any;
+    if (
+      type === SheetPrimitive.Description ||
+      type?.displayName === SheetPrimitive.Description.displayName
+    ) {
+      found = true;
+      return;
+    }
+    const nested = (child.props as any)?.children;
+    if (nested) found = hasSheetDescription(nested);
+  });
+  return found;
+}
+
 const SheetContent = React.forwardRef<React.ElementRef<typeof SheetPrimitive.Content>, SheetContentProps>(
-  ({ side = "right", className, children, overlayClassName, hideDefaultClose = false, ...props }, ref) => (
-    <SheetPortal>
-      <SheetOverlay className={overlayClassName} />
-      <SheetPrimitive.Content ref={ref} className={cn(sheetVariants({ side }), className)} {...props}>
-        {children}
-        {!hideDefaultClose && (
-          <SheetPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity data-[state=open]:bg-secondary hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none">
-            <X className="h-4 w-4" />
-            <span className="sr-only">Close</span>
-          </SheetPrimitive.Close>
-        )}
-      </SheetPrimitive.Content>
-    </SheetPortal>
-  ),
+  ({ side = "right", className, children, overlayClassName, hideDefaultClose = false, ...props }, ref) => {
+    const hasDescription = hasSheetDescription(children);
+
+    return (
+      <SheetPortal>
+        <SheetOverlay className={overlayClassName} />
+        <SheetPrimitive.Content ref={ref} className={cn(sheetVariants({ side }), className)} {...props}>
+          {!hasDescription && (
+            <SheetPrimitive.Description className="sr-only">
+              Ushbu panelda qo‘shimcha amal va sozlamalar mavjud.
+            </SheetPrimitive.Description>
+          )}
+          {children}
+          {!hideDefaultClose && (
+            <SheetPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity data-[state=open]:bg-secondary hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none">
+              <X className="h-4 w-4" />
+              <span className="sr-only">Close</span>
+            </SheetPrimitive.Close>
+          )}
+        </SheetPrimitive.Content>
+      </SheetPortal>
+    );
+  },
 );
 SheetContent.displayName = SheetPrimitive.Content.displayName;
 
