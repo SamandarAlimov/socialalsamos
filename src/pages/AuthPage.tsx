@@ -521,11 +521,6 @@ export default function AuthPage() {
                       required
                     />
 
-                      autoComplete="email"
-                      autoCapitalize="none"
-                      spellCheck={false}
-                      required
-                    />
 
                     <Input
                       type="tel"
