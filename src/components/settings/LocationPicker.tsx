@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { Loader2, LocateFixed, MapPin, Search, X } from 'lucide-react';
 
 import { AlsamosMapSurface } from '@/components/map/AlsamosMapSurface';
+import { ProfilePhoneEditor } from '@/components/settings/ProfilePhoneEditor';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { usePlaceSearch } from '@/hooks/useMapPlaces';
@@ -216,6 +217,8 @@ export function LocationPicker({ value, onChange, className }: LocationPickerPro
           Alsamos Xarita ma’lumotlari
         </span>
       </div>
+
+      <ProfilePhoneEditor className="mt-4" />
 
       {coords && (
         <div className="relative h-48 overflow-hidden rounded-2xl border border-border/60 bg-muted shadow-sm">
