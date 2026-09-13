@@ -35,6 +35,9 @@ jobs:
           print('Supabase deployment tooling syntax/config validation passed')
           PY
 
+      - name: Enforce first-party no-email auth contract
+        run: node scripts/check-no-email-auth.mjs
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
