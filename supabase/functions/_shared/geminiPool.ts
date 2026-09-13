@@ -22,28 +22,52 @@ const COOLDOWN_MS = 60_000;
 const DEAD_COOLDOWN_MS = 15 * 60_000;
 const DB_REFRESH_MS = 5 * 60_000;
 
+// These project keys were verified to work with Flash-Lite while higher-tier
+// model IDs may be unavailable for a particular Google project/quota. Until the
+// production billing/model matrix is finalized, every text route uses the same
+// reliable shared fallback. This keeps AI Page, AI Search and grounded search
+// working instead of failing the whole request on a model-access mismatch.
+const SAFE_OPENAI_MODEL = 'gemini-flash-lite-latest';
+const SAFE_NATIVE_MODEL = 'gemini-3.1-flash-lite';
+
 const MODEL_MAP: Record<string, string> = {
-  'google/gemini-3-flash-preview': 'gemini-3.8-flash',
-  'google/gemini-3.1-flash-lite': 'gemini-flash-lite-latest',
-  'google/gemini-2.5-flash-lite': 'gemini-flash-lite-latest',
-  'google/gemini-3.5-flash': 'gemini-3.8-flash',
-  'google/gemini-3.6-flash': 'gemini-3.8-flash',
-  'google/gemini-3.7-flash': 'gemini-3.8-flash',
-  'google/gemini-3.8-flash': 'gemini-3.8-flash',
-  'google/gemini-2.5-flash': 'gemini-3.8-flash',
-  'google/gemini-2.0-flash': 'gemini-3.8-flash',
-  'google/gemini-3.1-pro-preview': 'gemini-pro-latest',
-  'google/gemini-2.5-pro': 'gemini-pro-latest',
+  'google/gemini-3-flash-preview': SAFE_OPENAI_MODEL,
+  'google/gemini-3.1-flash-lite': SAFE_OPENAI_MODEL,
+  'google/gemini-2.5-flash-lite': SAFE_OPENAI_MODEL,
+  'google/gemini-3.5-flash': SAFE_OPENAI_MODEL,
+  'google/gemini-3.6-flash': SAFE_OPENAI_MODEL,
+  'google/gemini-3.7-flash': SAFE_OPENAI_MODEL,
+  'google/gemini-3.8-flash': SAFE_OPENAI_MODEL,
+  'google/gemini-2.5-flash': SAFE_OPENAI_MODEL,
+  'google/gemini-2.0-flash': SAFE_OPENAI_MODEL,
+  'google/gemini-3.1-pro-preview': SAFE_OPENAI_MODEL,
+  'google/gemini-2.5-pro': SAFE_OPENAI_MODEL,
 };
 
-const FALLBACK_GOOGLE_MODEL = 'gemini-3.8-flash';
+const FALLBACK_GOOGLE_MODEL = SAFE_OPENAI_MODEL;
 
 export function toGoogleModel(model: string): string {
-  if (MODEL_MAP[model]) return MODEL_MAP[model];
+  const prefixed = model.startsWith('google/') ? model : `google/${model}`;
+  if (MODEL_MAP[prefixed]) return MODEL_MAP[prefixed];
   if (!model.startsWith('google/')) return model;
   const bare = model.slice('google/'.length);
   if (/^gemini-[0-2]\./.test(bare)) return FALLBACK_GOOGLE_MODEL;
   return bare;
+}
+
+function toNativeGoogleModel(model: string): string {
+  const mapped = toGoogleModel(model);
+  return mapped === SAFE_OPENAI_MODEL ? SAFE_NATIVE_MODEL : mapped;
+}
+
+function normalizeNativeGoogleUrl(pathOrUrl: string): string {
+  return pathOrUrl.replace(
+    /\/models\/([^/:?]+)(?=:)/,
+    (_match, rawModel: string) => {
+      const decoded = decodeURIComponent(rawModel);
+      return `/models/${encodeURIComponent(toNativeGoogleModel(decoded))}`;
+    },
+  );
 }
 
 /* ------------------------------ key sources -------------------------------- */
@@ -316,7 +340,10 @@ export async function googleFetch(
     throw new Error('Gemini API kalitlari topilmadi. Shared key poolni sozlang.');
   }
 
-  const url = pathOrUrl.startsWith('http') ? pathOrUrl : GOOGLE_HOST + pathOrUrl;
+  const normalizedPathOrUrl = normalizeNativeGoogleUrl(pathOrUrl);
+  const url = normalizedPathOrUrl.startsWith('http')
+    ? normalizedPathOrUrl
+    : GOOGLE_HOST + normalizedPathOrUrl;
   const method = init.method ?? 'POST';
   const hasBody = init.body !== undefined && init.body !== null;
 
