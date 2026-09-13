@@ -10,6 +10,7 @@ import "./styles/marketplace-create-product.css";
 import "./i18n";
 import { installMediaUploadFetchFallback } from "./lib/mediaUploadFetchFallback";
 import { installNativeInteractionPolicy } from "./lib/nativeInteractionPolicy";
+import { installMobileChatKeyboardLayout } from "./lib/mobileChatKeyboardLayout";
 
 // Install before React mounts so every presigned media PUT (including chat video
 // notes recorded immediately after page load) gets the production CORS fallback.
@@ -18,6 +19,10 @@ installMediaUploadFetchFallback();
 // Touch-first browsers otherwise surface native long-press selection/callouts
 // over Alsamos controls. Editable fields remain explicitly exempt.
 installNativeInteractionPolicy();
+
+// iOS/Android klaviaturasi ochilganda faqat chatning ko'rinadigan maydonini
+// visual viewportga moslaydi: header joyida qoladi, composer klaviatura ustiga chiqadi.
+installMobileChatKeyboardLayout();
 
 createRoot(document.getElementById("root")!).render(
   <HelmetProvider>
