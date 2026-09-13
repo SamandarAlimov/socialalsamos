@@ -153,6 +153,7 @@ export type AgentRequest = {
 
 /** Vosita nomi -> foydalanuvchiga ko'rinadigan yorliq (UI timeline uchun). */
 export const TOOL_LABELS: Record<string, string> = {
+  alsamos_web_search: "Internetdan dolzarb ma'lumot qidirmoqda",
   web_search: "Internetda qidirmoqda",
   web_fetch: "Sahifani o'qimoqda",
   generate_image: "Rasm yaratmoqda",
