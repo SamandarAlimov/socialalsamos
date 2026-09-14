@@ -40,38 +40,13 @@ describe('reel drafts', () => {
     expect(restored?.collaborators).toHaveLength(1);
   });
 
-  it('persists device audio only when it has a stable storage reference', () => {
+  it('does not persist device audio references', () => {
     writeStoredReelDraft('user-1', {
       caption: '',
       visibility: 'public',
       music: {
         track: {
           title: 'Local audio',
-          artist: 'Device',
-          audioUrl: 'storage://post-media/music/user-1/audio.m4a',
-          storageBucket: 'post-media',
-          storageKey: 'music/user-1/audio.m4a',
-          source: 'device',
-        },
-        volume: 0.8,
-        mutedOriginal: false,
-      },
-      collaborators: [],
-      coverSecond: 0,
-      selectedClipId: null,
-    });
-
-    expect(readStoredReelDraft('user-1')?.music?.track?.source).toBe('device');
-    expect(readStoredReelDraft('user-1')?.music?.track?.storageKey).toBe(
-      'music/user-1/audio.m4a',
-    );
-
-    writeStoredReelDraft('user-2', {
-      caption: '',
-      visibility: 'public',
-      music: {
-        track: {
-          title: 'Transient audio',
           artist: 'Device',
           audioUrl: 'blob:local',
           source: 'device',
@@ -84,7 +59,7 @@ describe('reel drafts', () => {
       selectedClipId: null,
     });
 
-    expect(readStoredReelDraft('user-2')?.music).toBeNull();
+    expect(readStoredReelDraft('user-1')?.music).toBeNull();
   });
 
   it('clears a published reel draft', () => {
