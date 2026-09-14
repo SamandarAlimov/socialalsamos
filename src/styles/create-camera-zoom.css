@@ -1,0 +1,23 @@
+/* Shared Create camera zoom presentation.
+ *
+ * Story/Reel save the same zoom in useCameraCapture's canvas renderer. Live
+ * tries the device's native MediaStreamTrack zoom first; this CSS is the
+ * cross-browser preview fallback when the browser does not expose it. */
+[data-camera-recorder-root='true'][data-camera-state='live'] video {
+  scale: var(--alsamos-camera-zoom, 1);
+  transform-origin: center center;
+  will-change: scale;
+}
+
+.create-mode-stage[data-create-mode='live'] video {
+  scale: var(--alsamos-live-camera-zoom, 1);
+  transform-origin: center center;
+  will-change: scale;
+}
+
+/* A two-finger gesture belongs to the camera, not browser/page zoom. Single
+ * finger pan/swipe remains available for the surrounding Create navigation. */
+[data-camera-recorder-root='true'],
+.create-mode-stage[data-create-mode='live'] video {
+  touch-action: pan-x pan-y;
+}
