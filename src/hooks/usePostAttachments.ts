@@ -12,6 +12,12 @@ import { captureVideoPoster, readMediaMetadata } from '@/lib/mediaMetadata';
 import { uploadFileWithProgress } from '@/lib/uploadWithProgress';
 import type { MediaVisibility } from '@/lib/mediaUpload';
 import type { PostMediaInput } from '@/lib/postMeta';
+import {
+  clearCreateMediaDraft,
+  createMediaDraftKey,
+  loadCreateMediaDraft,
+  saveCreateMediaDraft,
+} from '@/lib/createMediaDraftStore';
 
 export type AttachmentStatus = 'pending' | 'uploading' | 'done' | 'error';
 
@@ -49,7 +55,6 @@ function createId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
-
 async function cleanupUploadedObjects(attachment?: Attachment | null): Promise<void> {
   if (!attachment) return;
 
@@ -80,33 +85,162 @@ async function cleanupUploadedObjects(attachment?: Attachment | null): Promise<v
  *  - bitta umumiy progress bar bor edi → endi har faylda alohida foiz
  *  - xato bo'lsa fayl jimgina tushib qolardi → endi xato ko'rinadi va qayta urinish bor
  *  - blob URL lar revoke qilinmasdi (memory leak) → endi to'g'ri tozalanadi
+ *  - Post/Reel media refreshda yo‘qolardi → endi IndexedDB qoralamada tiklanadi
  */
 export function usePostAttachments(options?: {
   maxFiles?: number;
   uploadKind?: string;
   visibility?: MediaVisibility;
+  /** Default: Post va Reel uchun true, Story uchun false. */
+  persistDraft?: boolean;
 }) {
   const maxFiles = options?.maxFiles ?? MAX_FILES_PER_POST;
   const uploadKind = options?.uploadKind ?? 'post';
   const visibility = options?.visibility ?? 'public';
+  const persistDraft =
+    options?.persistDraft ?? (uploadKind === 'post' || uploadKind === 'reel');
   const { toast } = useToast();
 
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [isUploading, setIsUploading] = useState(false);
+  const [isDraftHydrated, setIsDraftHydrated] = useState(!persistDraft);
+  const [draftKey, setDraftKey] = useState<string | null>(null);
 
   // Cleanup uchun eng oxirgi holatga ishonchli havola (stale closure muammosi yo'q)
   const attachmentsRef = useRef<Attachment[]>([]);
   const publishedAttachmentIds = useRef(new Set<string>());
   const abortControllers = useRef(new Map<string, AbortController>());
+  const draftKeyRef = useRef<string | null>(null);
+  const draftHydratedRef = useRef(!persistDraft);
+  const persistDraftRef = useRef(persistDraft);
+  const draftCommittedRef = useRef(false);
 
   useEffect(() => {
     attachmentsRef.current = attachments;
   }, [attachments]);
 
-  // Unmount: barcha blob URL lar bo'shatiladi, yuklashlar bekor qilinadi
+  useEffect(() => {
+    draftKeyRef.current = draftKey;
+  }, [draftKey]);
+
+  useEffect(() => {
+    draftHydratedRef.current = isDraftHydrated;
+  }, [isDraftHydrated]);
+
+  useEffect(() => {
+    persistDraftRef.current = persistDraft;
+  }, [persistDraft]);
+
+  /**
+   * Draft key auth user bilan scope qilinadi. getSession local auth cache'dan
+   * ishlaydi va Create mount paytida ortiqcha network round-trip talab qilmaydi.
+   */
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!persistDraft) {
+      setDraftKey(null);
+      setIsDraftHydrated(true);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setIsDraftHydrated(false);
+    void supabase.auth.getSession().then(({ data }) => {
+      if (cancelled) return;
+      const userId = data.session?.user?.id;
+      if (!userId) {
+        setDraftKey(null);
+        setIsDraftHydrated(true);
+        return;
+      }
+      setDraftKey(createMediaDraftKey(userId, uploadKind));
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [persistDraft, uploadKind]);
+
+  /** Post/Reel local media draftini qayta tiklaymiz. */
+  useEffect(() => {
+    if (!persistDraft || !draftKey) return;
+
+    let cancelled = false;
+    void loadCreateMediaDraft(draftKey).then((stored) => {
+      if (cancelled) return;
+
+      // User hydration tugashidan oldin yangi media tanlagan bo‘lsa uni bosib ketmaymiz.
+      if (attachmentsRef.current.length === 0 && stored.length > 0) {
+        const restored: Attachment[] = stored.slice(0, maxFiles).map((item) => ({
+          id: item.id,
+          file: item.file,
+          kind: item.kind,
+          previewUrl: isPreviewable(item.kind)
+            ? URL.createObjectURL(item.file)
+            : undefined,
+          status: 'pending',
+          progress: 0,
+          width: item.width,
+          height: item.height,
+          durationSeconds: item.durationSeconds,
+          aspectRatio: item.aspectRatio,
+          altText: item.altText,
+          editState: item.editState,
+        }));
+
+        attachmentsRef.current = restored;
+        draftCommittedRef.current = false;
+        setAttachments(restored);
+      }
+
+      setIsDraftHydrated(true);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [draftKey, maxFiles, persistDraft]);
+
+  /** Media/edit state o‘zgarganda qoralamani IndexedDBga debounced saqlaymiz. */
+  useEffect(() => {
+    if (!persistDraft || !draftKey || !isDraftHydrated || draftCommittedRef.current) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      const current = attachmentsRef.current;
+      if (current.length === 0) {
+        void clearCreateMediaDraft(draftKey);
+      } else {
+        void saveCreateMediaDraft(draftKey, current);
+      }
+    }, 180);
+
+    return () => window.clearTimeout(timer);
+  }, [attachments, draftKey, isDraftHydrated, persistDraft]);
+
+  // Unmount: barcha blob URL lar bo'shatiladi, yuklashlar bekor qilinadi.
+  // IndexedDB qoralama esa eng oxirgi snapshot bilan flush qilinadi.
   useEffect(() => {
     return () => {
       const current = attachmentsRef.current;
+      const currentDraftKey = draftKeyRef.current;
+
+      if (
+        persistDraftRef.current &&
+        draftHydratedRef.current &&
+        currentDraftKey &&
+        !draftCommittedRef.current
+      ) {
+        if (current.length > 0) {
+          void saveCreateMediaDraft(currentDraftKey, current);
+        } else {
+          void clearCreateMediaDraft(currentDraftKey);
+        }
+      }
+
       revokePreviewUrls(current.map((item) => item.previewUrl));
       abortControllers.current.forEach((controller) => controller.abort());
       abortControllers.current.clear();
@@ -152,6 +286,7 @@ export function usePostAttachments(options?: {
         progress: 0,
       }));
 
+      draftCommittedRef.current = false;
       const nextAttachments = [...attachmentsRef.current, ...created];
       attachmentsRef.current = nextAttachments;
       setAttachments(nextAttachments);
@@ -181,6 +316,7 @@ export function usePostAttachments(options?: {
     // Keyingi addFiles shu event ichida chaqirilsa ham eski countni ko'rmasin.
     attachmentsRef.current = attachmentsRef.current.filter((item) => item.id !== id);
     publishedAttachmentIds.current.delete(id);
+    draftCommittedRef.current = false;
     setAttachments((current) => current.filter((item) => item.id !== id));
   }, []);
 
@@ -202,6 +338,7 @@ export function usePostAttachments(options?: {
 
       revokePreviewUrls([target.previewUrl]);
       void cleanupUploadedObjects(target);
+      draftCommittedRef.current = false;
 
       patch(id, {
         file,
@@ -269,6 +406,7 @@ export function usePostAttachments(options?: {
         ...meta,
       };
 
+      draftCommittedRef.current = false;
       attachmentsRef.current = [next];
       publishedAttachmentIds.current.clear();
       setAttachments([next]);
@@ -281,6 +419,10 @@ export function usePostAttachments(options?: {
     for (const item of attachmentsRef.current) {
       publishedAttachmentIds.current.add(item.id);
     }
+    draftCommittedRef.current = true;
+    if (draftKeyRef.current) {
+      void clearCreateMediaDraft(draftKeyRef.current);
+    }
   }, []);
 
   const clearAttachments = useCallback(() => {
@@ -289,7 +431,11 @@ export function usePostAttachments(options?: {
     revokePreviewUrls(attachmentsRef.current.map((item) => item.previewUrl));
     attachmentsRef.current = [];
     publishedAttachmentIds.current.clear();
+    draftCommittedRef.current = false;
     setAttachments([]);
+    if (draftKeyRef.current) {
+      void clearCreateMediaDraft(draftKeyRef.current);
+    }
   }, []);
 
   const reorderAttachments = useCallback((fromIndex: number, toIndex: number) => {
@@ -305,12 +451,14 @@ export function usePostAttachments(options?: {
     const next = [...current];
     const [moved] = next.splice(fromIndex, 1);
     next.splice(toIndex, 0, moved);
+    draftCommittedRef.current = false;
     attachmentsRef.current = next;
     setAttachments(next);
   }, []);
 
   const setEditState = useCallback(
     (id: string, editState: Record<string, unknown> | undefined) => {
+      draftCommittedRef.current = false;
       patch(id, { editState });
     },
     [patch],
@@ -318,6 +466,7 @@ export function usePostAttachments(options?: {
 
   const setAltText = useCallback(
     (id: string, altText: string) => {
+      draftCommittedRef.current = false;
       patch(id, { altText });
     },
     [patch],
@@ -520,6 +669,7 @@ export function usePostAttachments(options?: {
   return {
     attachments,
     isUploading,
+    isDraftHydrated,
     totalProgress,
     canAddMore: attachments.length < maxFiles,
     remainingSlots: Math.max(0, maxFiles - attachments.length),
