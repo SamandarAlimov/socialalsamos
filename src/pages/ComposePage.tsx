@@ -108,6 +108,90 @@ export default function ComposePage() {
     };
   }, [currentModeLocked, mode]);
 
+  // Native touch scrolling already works on the filter rail. Desktop users also
+  // expect Instagram-like click/drag behavior, so convert mouse/pen dragging to
+  // horizontal scrolling without stealing normal filter clicks.
+  useEffect(() => {
+    const root = composerMainRef.current;
+    if (!root) return;
+
+    let activeRail: HTMLElement | null = null;
+    let activePointerId: number | null = null;
+    let startX = 0;
+    let startScrollLeft = 0;
+    let dragged = false;
+    let suppressClickUntil = 0;
+
+    const findRail = (target: EventTarget | null) =>
+      target instanceof Element
+        ? target.closest<HTMLElement>('.alsamos-camera-filter-scroll')
+        : null;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (event.pointerType === 'touch' || event.button !== 0) return;
+      const rail = findRail(event.target);
+      if (!rail) return;
+
+      activeRail = rail;
+      activePointerId = event.pointerId;
+      startX = event.clientX;
+      startScrollLeft = rail.scrollLeft;
+      dragged = false;
+      rail.classList.add('is-dragging');
+      try {
+        rail.setPointerCapture(event.pointerId);
+      } catch {
+        // Some browsers can reject capture during synthetic/embedded pointer flows.
+      }
+    };
+
+    const handlePointerMove = (event: PointerEvent) => {
+      if (!activeRail || activePointerId !== event.pointerId) return;
+      const delta = event.clientX - startX;
+      if (Math.abs(delta) <= 3 && !dragged) return;
+
+      dragged = true;
+      event.preventDefault();
+      activeRail.scrollLeft = startScrollLeft - delta;
+    };
+
+    const finishDrag = (event: PointerEvent) => {
+      if (!activeRail || activePointerId !== event.pointerId) return;
+      if (dragged) suppressClickUntil = performance.now() + 220;
+
+      try {
+        activeRail.releasePointerCapture(event.pointerId);
+      } catch {
+        // Pointer capture may already be released by the browser.
+      }
+      activeRail.classList.remove('is-dragging');
+      activeRail = null;
+      activePointerId = null;
+      dragged = false;
+    };
+
+    const handleClickCapture = (event: MouseEvent) => {
+      if (performance.now() >= suppressClickUntil || !findRail(event.target)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      suppressClickUntil = 0;
+    };
+
+    root.addEventListener('pointerdown', handlePointerDown);
+    root.addEventListener('pointermove', handlePointerMove);
+    root.addEventListener('pointerup', finishDrag);
+    root.addEventListener('pointercancel', finishDrag);
+    root.addEventListener('click', handleClickCapture, true);
+
+    return () => {
+      root.removeEventListener('pointerdown', handlePointerDown);
+      root.removeEventListener('pointermove', handlePointerMove);
+      root.removeEventListener('pointerup', finishDrag);
+      root.removeEventListener('pointercancel', finishDrag);
+      root.removeEventListener('click', handleClickCapture, true);
+    };
+  }, []);
+
   const selectMode = (next: CreateMode) => {
     if (currentModeLocked && next !== mode) return;
 
