@@ -36,6 +36,7 @@ export default function ComposePage() {
     modeFromParams(searchParams.get('mode')),
   );
   const [storyDraftActive, setStoryDraftActive] = useState(false);
+  const [storyLocalDraftActive, setStoryLocalDraftActive] = useState(false);
   const [reelDraftActive, setReelDraftActive] = useState(false);
   const [postCameraOpen, setPostCameraOpen] = useState(false);
   const composerMainRef = useRef<HTMLElement>(null);
@@ -43,6 +44,8 @@ export default function ComposePage() {
 
   useCameraFilterRail(composerMainRef);
 
+  // Story hidden DB draft va Reelning hozirgi device-audio lifecycle holati
+  // navigation vaqtida yo‘qolishi mumkin, shuning uchun ular yakunlanguncha lock.
   const currentModeLocked =
     (mode === 'story' && storyDraftActive) ||
     (mode === 'reel' && reelDraftActive);
@@ -74,15 +77,25 @@ export default function ComposePage() {
   }, [currentModeLocked, mode, searchParams, setSearchParams]);
 
   // Story/Reel camera is part of the Create stage, not a viewport portal.
-  // We still trigger the canonical composer camera action so Story/Reel keep a
-  // single upload/draft pipeline while the recorder itself stays inside this
-  // page and therefore cannot hide the mode navbar or desktop application shell.
+  // Recoverable draft bo‘lsa kamera qayta avtomatik ochilmaydi: foydalanuvchi
+  // oldingi media/editor holatiga to‘g‘ridan-to‘g‘ri qaytadi.
   useEffect(() => {
     if (mode !== 'story' && mode !== 'reel') {
       autoCameraModeRef.current = null;
       return;
     }
-    if (currentModeLocked || autoCameraModeRef.current === mode) return;
+
+    const hasRecoverableDraft =
+      (mode === 'story' && storyLocalDraftActive) ||
+      (mode === 'reel' && reelDraftActive);
+
+    if (
+      currentModeLocked ||
+      hasRecoverableDraft ||
+      autoCameraModeRef.current === mode
+    ) {
+      return;
+    }
 
     let cancelled = false;
     let frame = 0;
@@ -112,7 +125,12 @@ export default function ComposePage() {
       cancelled = true;
       window.cancelAnimationFrame(frame);
     };
-  }, [currentModeLocked, mode]);
+  }, [
+    currentModeLocked,
+    mode,
+    reelDraftActive,
+    storyLocalDraftActive,
+  ]);
 
   // Native touch scrolling already works on the filter rail. Desktop users also
   // expect Instagram-like click/drag behavior, so convert mouse/pen dragging to
@@ -314,7 +332,10 @@ export default function ComposePage() {
               )}
             </>
           ) : mode === 'story' ? (
-            <StoryComposer onDraftStateChange={setStoryDraftActive} />
+            <StoryComposer
+              onDraftStateChange={setStoryDraftActive}
+              onLocalDraftStateChange={setStoryLocalDraftActive}
+            />
           ) : mode === 'reel' ? (
             <ReelComposer onDraftStateChange={setReelDraftActive} />
           ) : (
