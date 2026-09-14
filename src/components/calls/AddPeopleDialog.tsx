@@ -1,5 +1,10 @@
 import { useMemo, useState } from 'react';
-import { Dialog, DialogContent } from '@/components/ui/dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -48,6 +53,11 @@ export function AddPeopleDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-[calc(100vw-1.5rem)] max-w-md overflow-hidden rounded-2xl border-white/10 bg-neutral-900/95 p-0 text-white backdrop-blur-xl">
+        <DialogTitle className="sr-only">Odam qo'shish</DialogTitle>
+        <DialogDescription className="sr-only">
+          Qo'ng'iroqqa kontakt qo'shing yoki taklif havolasini ulashing.
+        </DialogDescription>
+
         <div className="border-b border-white/10 p-4">
           <h3 className="mb-3 text-base font-semibold">Odam qo'shish</h3>
           <div className="relative">
