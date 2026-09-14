@@ -2,6 +2,14 @@ import { drawCameraLensOverlays, type CameraLens } from './filters/CameraLensDat
 
 export interface CaptureSize { width: number; height: number }
 
+export const CAMERA_ZOOM_MIN = 1;
+export const CAMERA_ZOOM_MAX = 5;
+
+export function clampCameraZoom(value: number): number {
+  if (!Number.isFinite(value)) return CAMERA_ZOOM_MIN;
+  return Math.min(CAMERA_ZOOM_MAX, Math.max(CAMERA_ZOOM_MIN, value));
+}
+
 export function supportedRecorderMime(): string | null {
   if (typeof MediaRecorder === 'undefined') return null;
   const candidates = [
@@ -47,12 +55,14 @@ export function drawCameraFrame(
   video: HTMLVideoElement,
   mirror: boolean,
   lens: CameraLens,
+  zoom = CAMERA_ZOOM_MIN,
 ) {
   const sourceWidth = video.videoWidth;
   const sourceHeight = video.videoHeight;
   if (!sourceWidth || !sourceHeight) return;
 
-  const scale = Math.max(canvas.width / sourceWidth, canvas.height / sourceHeight);
+  const safeZoom = clampCameraZoom(zoom);
+  const scale = Math.max(canvas.width / sourceWidth, canvas.height / sourceHeight) * safeZoom;
   const drawWidth = sourceWidth * scale;
   const drawHeight = sourceHeight * scale;
   const x = (canvas.width - drawWidth) / 2;
