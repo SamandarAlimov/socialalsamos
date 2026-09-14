@@ -2,6 +2,7 @@ import {
   ClipboardList,
   Grid3X3,
   Heart,
+  Plus,
   ShoppingBag,
   Store,
 } from 'lucide-react';
@@ -75,11 +76,35 @@ export function MarketplaceBottomNav({
 
   return (
     <>
-      <div aria-hidden="true" className="h-24 shrink-0" />
+      <style>{`
+        @media (max-width: 767px) {
+          .marketplace-neutral > header > div > .flex > button:last-child {
+            display: none !important;
+          }
+        }
+      `}</style>
+
+      <div aria-hidden="true" className="h-24 shrink-0 md:hidden" />
+
+      <button
+        type="button"
+        aria-label="Sotuvchi markazi"
+        aria-current={activeTab === 'selling' ? 'page' : undefined}
+        onClick={() => navigate('/marketplace?tab=selling')}
+        className={cn(
+          'fixed bottom-[calc(env(safe-area-inset-bottom)+88px)] right-4 z-[70] flex h-12 items-center gap-2 rounded-full border px-4 text-xs font-extrabold backdrop-blur-3xl transition duration-200 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/30 md:hidden',
+          activeTab === 'selling'
+            ? 'border-foreground bg-foreground text-background shadow-[0_14px_34px_rgba(0,0,0,0.22)]'
+            : 'border-foreground/[0.12] bg-background/[0.98] text-foreground shadow-[0_14px_34px_rgba(0,0,0,0.16)] ring-1 ring-foreground/[0.04]',
+        )}
+      >
+        <Plus className="h-4 w-4" strokeWidth={2.3} />
+        Sotish
+      </button>
 
       <nav
         aria-label="Marketplace navigatsiyasi"
-        className="fixed bottom-[calc(env(safe-area-inset-bottom)+12px)] left-1/2 z-[70] flex w-[calc(100%-24px)] max-w-[900px] -translate-x-1/2 items-stretch justify-around rounded-[28px] border border-foreground/[0.12] bg-background/[0.97] px-1.5 py-2 text-foreground shadow-[0_18px_50px_rgba(0,0,0,0.20)] ring-1 ring-foreground/[0.04] backdrop-blur-3xl sm:px-2.5"
+        className="fixed bottom-[calc(env(safe-area-inset-bottom)+12px)] left-1/2 z-[70] flex w-[calc(100%-24px)] max-w-[900px] -translate-x-1/2 items-stretch justify-around rounded-[28px] border border-foreground/[0.12] bg-background/[0.97] px-1.5 py-2 text-foreground shadow-[0_18px_50px_rgba(0,0,0,0.20)] ring-1 ring-foreground/[0.04] backdrop-blur-3xl sm:px-2.5 md:hidden"
       >
         {items.map(item => {
           const Icon = item.icon;
@@ -92,7 +117,7 @@ export function MarketplaceBottomNav({
               aria-label={item.badge > 0 ? `${item.label}, ${item.badge}` : item.label}
               onClick={item.onClick}
               className={cn(
-                'relative flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-[20px] px-0.5 py-2 text-[9px] font-bold transition duration-200 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/25 sm:px-1 sm:text-[10px] md:flex-row md:gap-2 md:py-2.5 md:text-xs',
+                'relative flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-[20px] px-0.5 py-2 text-[9px] font-bold transition duration-200 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/25 sm:px-1 sm:text-[10px]',
                 active
                   ? 'bg-foreground text-background shadow-[0_8px_22px_rgba(0,0,0,0.16)]'
                   : 'text-foreground/[0.70] hover:bg-foreground/[0.06] hover:text-foreground',
@@ -100,7 +125,7 @@ export function MarketplaceBottomNav({
             >
               <span className="relative shrink-0">
                 <Icon
-                  className="h-5 w-5 md:h-[21px] md:w-[21px]"
+                  className="h-5 w-5"
                   strokeWidth={active ? 2.5 : 2.15}
                 />
                 {item.badge > 0 && (
