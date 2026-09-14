@@ -49,6 +49,84 @@ export function useVideoCall() {
   const isCreatingCallRef = useRef(false);
   const endedToastCallRef = useRef<string | null>(null);
 
+  /**
+   * Browser refresh destroys React state and the RTCPeerConnection, but it must
+   * not make a still-active server-side call disappear. Recover the newest
+   * active call in which this user still has an open participant row.
+   *
+   * MessagesPage already has a hardened `?call=<uuid>` join path. Publishing
+   * the recovered call into the current URL and dispatching popstate lets React
+   * Router drive that exact path again: it restores activeCallId/isInCall and
+   * recreates media + signaling without duplicating a second recovery stack.
+   */
+  useEffect(() => {
+    if (!user?.id) return;
+
+    let cancelled = false;
+
+    const recoverActiveCall = async () => {
+      try {
+        const { data: participantRows, error: participantError } = await supabase
+          .from('call_participants')
+          .select('call_id, joined_at')
+          .eq('user_id', user.id)
+          .is('left_at', null)
+          .order('joined_at', { ascending: false })
+          .limit(8);
+
+        if (participantError) throw participantError;
+        if (cancelled || !participantRows?.length) return;
+
+        const callIds = participantRows.map((row) => row.call_id);
+        const { data: activeCalls, error: callError } = await supabase
+          .from('video_calls')
+          .select('*')
+          .in('id', callIds)
+          .eq('status', 'active')
+          .is('ended_at', null)
+          .order('created_at', { ascending: false })
+          .limit(1);
+
+        if (callError) throw callError;
+        const recovered = activeCalls?.[0] as VideoCallRecord | undefined;
+        if (cancelled || !recovered) return;
+
+        console.info('[VideoCall] Recovering active call after page reload:', recovered.id);
+        setCallEnded(false);
+        endedToastCallRef.current = null;
+        setCurrentCall((previous) => previous ?? recovered);
+
+        if (
+          typeof window !== 'undefined' &&
+          window.location.pathname.startsWith('/messages')
+        ) {
+          const url = new URL(window.location.href);
+          if (!url.searchParams.get('call')) {
+            url.searchParams.set('call', recovered.id);
+            url.searchParams.set('type', recovered.call_type === 'audio' ? 'audio' : 'video');
+            window.history.replaceState(
+              window.history.state,
+              '',
+              `${url.pathname}${url.search}${url.hash}`
+            );
+            // BrowserRouter observes popstate. MessagesPage then runs its normal
+            // call-link join flow and recreates the native WebRTC room.
+            window.dispatchEvent(new PopStateEvent('popstate', { state: window.history.state }));
+          }
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.warn('[VideoCall] active-call recovery failed', error);
+        }
+      }
+    };
+
+    void recoverActiveCall();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
+
   // Subscribe once per call id. Updating currentCall with realtime payloads must
   // NOT tear down and recreate the channel on every status update.
   const currentCallId = currentCall?.id ?? null;
@@ -237,12 +315,32 @@ export function useVideoCall() {
     if (!callId || !user?.id || currentCall?.ended_at) return;
 
     let cancelled = false;
+    let inFlight = false;
+    let lastWarningAt = 0;
+
+    const warnHeartbeatFailure = (error: unknown) => {
+      const now = Date.now();
+      if (now - lastWarningAt < 60_000) return;
+      lastWarningAt = now;
+      console.warn('[VideoCall] heartbeat failed', error);
+    };
+
     const ping = async () => {
-      if (cancelled || document.visibilityState === 'hidden') return;
+      if (cancelled || inFlight || document.visibilityState === 'hidden') return;
+
+      inFlight = true;
       try {
-        await supabase.rpc('call_heartbeat', { p_call_id: callId });
-      } catch (e) {
-        console.warn('[VideoCall] heartbeat failed', e);
+        // Supabase RPC failures are normally returned in `error`; they do not
+        // necessarily reject the promise. Always inspect the result so a 4xx
+        // cannot silently look like a successful heartbeat.
+        const { error } = await supabase.rpc('call_heartbeat', { p_call_id: callId });
+        if (error && !cancelled) {
+          warnHeartbeatFailure({ code: error.code, message: error.message });
+        }
+      } catch (error) {
+        if (!cancelled) warnHeartbeatFailure(error);
+      } finally {
+        inFlight = false;
       }
     };
 
@@ -288,9 +386,12 @@ export function useVideoCall() {
 
       if (error) throw error;
 
-      const result = (data ?? {}) as { call_ended?: boolean; active_participants?: number };
+      // Production RPC returns { left, ended, active_count }. The previous
+      // client looked for non-existent `call_ended`, so a fully ended call was
+      // incorrectly reported as false even when the database returned ended=true.
+      const result = (data ?? {}) as { left?: boolean; ended?: boolean; active_count?: number };
       console.log('[VideoCall] Leave result:', result);
-      return !!result.call_ended;
+      return !!result.ended;
     } catch (error) {
       console.error('Error leaving call:', error);
       return false;
