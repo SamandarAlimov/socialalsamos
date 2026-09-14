@@ -7,10 +7,14 @@ interface UseCameraCaptureOptions {
   facingMode: 'user' | 'environment';
   aspectRatio: '1:1' | '9:16' | '16:9';
   lens: CameraLens;
+  drawOverlay?: (
+    context: CanvasRenderingContext2D,
+    canvas: HTMLCanvasElement,
+  ) => void;
 }
 
 export function useCameraCapture(options: UseCameraCaptureOptions) {
-  const { captureMode, facingMode, aspectRatio, lens } = options;
+  const { captureMode, facingMode, aspectRatio, lens, drawOverlay } = options;
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -27,6 +31,8 @@ export function useCameraCapture(options: UseCameraCaptureOptions) {
   const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
   const [recordedUrl, setRecordedUrl] = useState<string | null>(null);
   const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
+  const [torchSupported, setTorchSupported] = useState(false);
+  const [torchEnabled, setTorchEnabled] = useState(false);
 
   const stopRenderLoop = useCallback(() => {
     if (renderFrameRef.current !== null) {
@@ -43,6 +49,8 @@ export function useCameraCapture(options: UseCameraCaptureOptions) {
   const stopCameraStream = useCallback(() => {
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
+    setTorchEnabled(false);
+    setTorchSupported(false);
   }, []);
 
   const startCamera = useCallback(async () => {
@@ -74,6 +82,13 @@ export function useCameraCapture(options: UseCameraCaptureOptions) {
         });
       }
       streamRef.current = stream;
+      const videoTrack = stream.getVideoTracks()[0];
+      if (videoTrack?.getCapabilities) {
+        const capabilities = videoTrack.getCapabilities() as MediaTrackCapabilities & {
+          torch?: boolean;
+        };
+        setTorchSupported(Boolean(capabilities.torch));
+      }
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         await videoRef.current.play();
@@ -110,13 +125,31 @@ export function useCameraCapture(options: UseCameraCaptureOptions) {
     return context ? { video, canvas, context } : null;
   }, [aspectRatio]);
 
+  const drawPreparedFrame = useCallback(
+    (prepared: {
+      video: HTMLVideoElement;
+      canvas: HTMLCanvasElement;
+      context: CanvasRenderingContext2D;
+    }) => {
+      drawCameraFrame(
+        prepared.context,
+        prepared.canvas,
+        prepared.video,
+        facingMode === 'user',
+        lens,
+      );
+      drawOverlay?.(prepared.context, prepared.canvas);
+    },
+    [drawOverlay, facingMode, lens],
+  );
+
   const takePhoto = useCallback(() => {
     const prepared = prepareCanvas();
     if (!prepared) return;
-    drawCameraFrame(prepared.context, prepared.canvas, prepared.video, facingMode === 'user', lens);
+    drawPreparedFrame(prepared);
     setCapturedPhoto(prepared.canvas.toDataURL('image/jpeg', 0.92));
     stopCameraStream();
-  }, [facingMode, lens, prepareCanvas, stopCameraStream]);
+  }, [drawPreparedFrame, prepareCanvas, stopCameraStream]);
 
   const startRecording = useCallback(() => {
     if (!streamRef.current || isRecording) return;
@@ -131,7 +164,7 @@ export function useCameraCapture(options: UseCameraCaptureOptions) {
     stopRenderLoop();
     stopProcessedStream();
     const draw = () => {
-      drawCameraFrame(prepared.context, prepared.canvas, prepared.video, facingMode === 'user', lens);
+      drawPreparedFrame(prepared);
       renderFrameRef.current = requestAnimationFrame(draw);
     };
     draw();
@@ -141,31 +174,47 @@ export function useCameraCapture(options: UseCameraCaptureOptions) {
     processedStreamRef.current = processed;
     const recorder = new MediaRecorder(processed, {
       mimeType,
-      videoBitsPerSecond: Math.max(prepared.canvas.width, prepared.canvas.height) >= 1080 ? 8_000_000 : 5_000_000,
+      videoBitsPerSecond:
+        Math.max(prepared.canvas.width, prepared.canvas.height) >= 1080
+          ? 8_000_000
+          : 5_000_000,
       audioBitsPerSecond: 128_000,
     });
     mediaRecorderRef.current = recorder;
     recorder.addEventListener('dataavailable', (event) => {
       if (event.data.size > 0) chunksRef.current.push(event.data);
     });
-    recorder.addEventListener('stop', () => {
-      stopRenderLoop();
-      stopProcessedStream();
-      const blob = new Blob(chunksRef.current, { type: mimeType });
-      if (blob.size === 0) return;
-      const url = URL.createObjectURL(blob);
-      setRecordedUrl((current) => {
-        if (current) URL.revokeObjectURL(current);
-        return url;
-      });
-      setRecordedBlob(blob);
-    }, { once: true });
+    recorder.addEventListener(
+      'stop',
+      () => {
+        stopRenderLoop();
+        stopProcessedStream();
+        const blob = new Blob(chunksRef.current, { type: mimeType });
+        if (blob.size === 0) return;
+        const url = URL.createObjectURL(blob);
+        setRecordedUrl((current) => {
+          if (current) URL.revokeObjectURL(current);
+          return url;
+        });
+        setRecordedBlob(blob);
+      },
+      { once: true },
+    );
 
     recorder.start(500);
     setIsRecording(true);
     setRecordingDuration(0);
-    timerRef.current = setInterval(() => setRecordingDuration((value) => value + 1), 1000);
-  }, [facingMode, isRecording, lens, prepareCanvas, stopProcessedStream, stopRenderLoop]);
+    timerRef.current = setInterval(
+      () => setRecordingDuration((value) => value + 1),
+      1000,
+    );
+  }, [
+    drawPreparedFrame,
+    isRecording,
+    prepareCanvas,
+    stopProcessedStream,
+    stopRenderLoop,
+  ]);
 
   const stopRecording = useCallback(() => {
     const recorder = mediaRecorderRef.current;
@@ -178,6 +227,24 @@ export function useCameraCapture(options: UseCameraCaptureOptions) {
     }
     stopCameraStream();
   }, [isRecording, stopCameraStream]);
+
+  const toggleTorch = useCallback(async () => {
+    const track = streamRef.current?.getVideoTracks()[0];
+    if (!track || !torchSupported) return false;
+    const next = !torchEnabled;
+    try {
+      await track.applyConstraints({
+        advanced: [{ torch: next } as MediaTrackConstraintSet],
+      });
+      setTorchEnabled(next);
+      return true;
+    } catch (error) {
+      console.warn('Camera torch toggle failed:', error);
+      setTorchSupported(false);
+      setTorchEnabled(false);
+      return false;
+    }
+  }, [torchEnabled, torchSupported]);
 
   const retake = useCallback(() => {
     setRecordedUrl((current) => {
@@ -200,10 +267,13 @@ export function useCameraCapture(options: UseCameraCaptureOptions) {
     capturedPhoto,
     recordedUrl,
     recordedBlob,
+    torchSupported,
+    torchEnabled,
     startCamera,
     takePhoto,
     startRecording,
     stopRecording,
+    toggleTorch,
     retake,
   };
 }
