@@ -28,21 +28,10 @@ export function reelDraftKey(userId: string): string {
 }
 
 function persistentMusic(input?: PostMusicInput | null): PostMusicInput | null {
-  if (!input) return null;
-
-  // MusicPicker device audioni avval private Storage ga yuklaydi va track ichida
-  // storage:// reference + bucket/key saqlaydi. Bu binary localStorage ga kirmaydi;
-  // faqat kichik, barqaror metadata saqlanadi. Shu sabab mode almashtirish/refresh
-  // paytida device audio ham xavfsiz tiklanadi.
-  if (input.track?.source === 'device') {
-    const hasStableStorage = Boolean(
-      (input.track.storageBucket && input.track.storageKey) ||
-        input.track.audioUrl.startsWith('storage://'),
-    );
-    return hasStableStorage ? input : null;
-  }
-
-  return input;
+  if (!input?.track) return input ?? null;
+  // Device audio storage lifecycle alohida cleanup bilan boshqariladi; katalog
+  // treklari esa faqat metadata bo‘lgani uchun localStorage da tiklanadi.
+  return input.track.source === 'device' ? null : input;
 }
 
 export function readStoredReelDraft(userId: string): StoredReelDraft | null {
