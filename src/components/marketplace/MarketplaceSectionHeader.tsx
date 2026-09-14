@@ -52,6 +52,7 @@ export function MarketplaceSectionHeader({
   onSearchEscape,
 }: MarketplaceSectionHeaderProps) {
   const navigate = useNavigate();
+  const handleFilterClick = onFilterClick ?? (() => navigate('/marketplace'));
 
   return (
     <header className="sticky top-0 z-40 border-b border-border/40 bg-background/92 backdrop-blur-2xl">
@@ -115,25 +116,24 @@ export function MarketplaceSectionHeader({
             <span className="hidden max-w-28 truncate text-xs font-semibold xl:inline">{catalogLabel}</span>
           </Button>
 
-          {onFilterClick && (
-            <Button
-              variant="outline"
-              size="icon"
-              className={cn(
-                'relative h-11 w-11 shrink-0 rounded-2xl',
-                filterCount > 0 && 'border-foreground/30 bg-foreground text-background',
-              )}
-              onClick={onFilterClick}
-              aria-label="Filtrlar"
-            >
-              <SlidersHorizontal className="h-4 w-4" />
-              {filterCount > 0 && (
-                <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-[9px] font-bold text-destructive-foreground">
-                  {filterCount > 99 ? '99+' : filterCount}
-                </span>
-              )}
-            </Button>
-          )}
+          <Button
+            variant="outline"
+            size="icon"
+            className={cn(
+              'relative h-11 w-11 shrink-0 rounded-2xl',
+              !onFilterClick && 'hidden md:inline-flex',
+              filterCount > 0 && 'border-foreground/30 bg-foreground text-background',
+            )}
+            onClick={handleFilterClick}
+            aria-label="Filtrlar"
+          >
+            <SlidersHorizontal className="h-4 w-4" />
+            {filterCount > 0 && (
+              <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-[9px] font-bold text-destructive-foreground">
+                {filterCount > 99 ? '99+' : filterCount}
+              </span>
+            )}
+          </Button>
 
           <Button
             variant="outline"
