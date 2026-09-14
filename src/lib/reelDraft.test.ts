@@ -46,7 +46,6 @@ describe('reel drafts', () => {
       visibility: 'public',
       music: {
         track: {
-          id: 'device-audio',
           title: 'Local audio',
           artist: 'Device',
           audioUrl: 'blob:local',
