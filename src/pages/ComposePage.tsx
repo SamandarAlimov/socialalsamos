@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { FileText, Radio, UserCircle2, Video, X } from 'lucide-react';
+import { Camera, FileText, Radio, UserCircle2, Video, X } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -9,6 +9,7 @@ import { useCameraFilterRail } from '@/hooks/useCameraFilterRail';
 import { PostComposer } from '@/components/create/PostComposer';
 import { StoryComposer } from '@/components/create/StoryComposer';
 import { ReelComposer } from '@/components/create/ReelComposer';
+import { CameraVideoRecorder } from '@/components/create/CameraVideoRecorder';
 import { LiveStreamBroadcast } from '@/components/live/LiveStreamBroadcast';
 import '@/styles/create-instagram.css';
 import '@/styles/create-instagram-fixes.css';
@@ -36,6 +37,7 @@ export default function ComposePage() {
   );
   const [storyDraftActive, setStoryDraftActive] = useState(false);
   const [reelDraftActive, setReelDraftActive] = useState(false);
+  const [postCameraOpen, setPostCameraOpen] = useState(false);
   const composerMainRef = useRef<HTMLElement>(null);
   const autoCameraModeRef = useRef<CreateMode | null>(null);
 
@@ -67,6 +69,7 @@ export default function ComposePage() {
       return;
     }
 
+    if (nextMode !== 'post') setPostCameraOpen(false);
     setMode(nextMode);
   }, [currentModeLocked, mode, searchParams, setSearchParams]);
 
@@ -198,6 +201,7 @@ export default function ComposePage() {
   const selectMode = (next: CreateMode) => {
     if (currentModeLocked && next !== mode) return;
 
+    if (next !== 'post') setPostCameraOpen(false);
     setMode(next);
     const params = new URLSearchParams(searchParams);
     if (next === 'post') params.delete('mode');
@@ -206,7 +210,30 @@ export default function ComposePage() {
   };
 
   const closeCreate = () => {
+    if (postCameraOpen) {
+      setPostCameraOpen(false);
+      return;
+    }
     if (!currentModeLocked) navigate('/home');
+  };
+
+  const handlePostCameraCapture = (file: File) => {
+    const input = composerMainRef.current?.querySelector<HTMLInputElement>(
+      'input[type="file"][multiple]',
+    );
+    if (!input) {
+      setPostCameraOpen(false);
+      return;
+    }
+
+    try {
+      const transfer = new DataTransfer();
+      transfer.items.add(file);
+      input.files = transfer.files;
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    } finally {
+      setPostCameraOpen(false);
+    }
   };
 
   const immersiveMode = mode === 'story' || mode === 'reel';
@@ -254,7 +281,38 @@ export default function ComposePage() {
           data-create-mode={mode}
         >
           {mode === 'post' ? (
-            <PostComposer />
+            <>
+              <PostComposer />
+              <button
+                type="button"
+                onClick={() => setPostCameraOpen(true)}
+                aria-label="Kamera"
+                title="Kamera"
+                className="absolute right-4 top-4 z-20 flex h-11 items-center gap-2 rounded-full border border-border/70 bg-background/90 px-3 text-sm font-medium text-foreground shadow-sm backdrop-blur-xl transition hover:bg-muted md:right-5 md:top-5"
+              >
+                <Camera className="h-5 w-5" />
+                <span className="hidden sm:inline">Kamera</span>
+              </button>
+
+              {postCameraOpen && (
+                <div className="absolute inset-0 z-30 overflow-hidden bg-[#080b10] md:rounded-2xl">
+                  <CameraVideoRecorder
+                    mode="both"
+                    aspectRatio="auto"
+                    onCapture={(file) => handlePostCameraCapture(file)}
+                    onClose={() => setPostCameraOpen(false)}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setPostCameraOpen(false)}
+                    aria-label="Post kamerasini yopish"
+                    className="absolute right-3 top-3 z-[95] flex h-10 w-10 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-xl transition hover:bg-black/60"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+              )}
+            </>
           ) : mode === 'story' ? (
             <StoryComposer onDraftStateChange={setStoryDraftActive} />
           ) : mode === 'reel' ? (
