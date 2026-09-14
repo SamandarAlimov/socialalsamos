@@ -3,6 +3,7 @@ import { MapPin } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { detectMediaKind, formatBytes, type MediaKind } from '@/lib/postComposer';
+import type { PostMusicInput } from '@/lib/postMeta';
 import { usePostMedia, type PostMediaItem } from '@/hooks/usePostMedia';
 import { usePostLocation, type PostLocation } from '@/hooks/usePostLocation';
 import { usePostMusic } from '@/hooks/usePostMusic';
@@ -210,6 +211,43 @@ export function PostExtras({
       : null;
   const displayMusic = structuredMusic ?? legacyMusic ?? null;
 
+  const backgroundMusic = useMemo<PostMusicInput | null>(() => {
+    if (!displayMusic?.audioUrl) return null;
+
+    if (structuredMusic && music?.track) {
+      return {
+        trackId: music.track_id,
+        startSeconds: music.start_seconds,
+        endSeconds: music.end_seconds,
+        volume: music.volume,
+        mutedOriginal: music.muted_original,
+        track: {
+          title: music.track.title,
+          artist: music.track.artist,
+          audioUrl: music.track.audio_url || displayMusic.audioUrl,
+          storageBucket: music.track.storage_bucket,
+          storageKey: music.track.storage_key,
+          coverUrl: music.track.cover_url,
+          durationSeconds: music.track.duration_seconds,
+        },
+      };
+    }
+
+    return {
+      startSeconds: 0,
+      endSeconds: null,
+      volume: 1,
+      mutedOriginal: false,
+      track: {
+        title: displayMusic.title,
+        artist: displayMusic.artist,
+        audioUrl: displayMusic.audioUrl,
+        coverUrl: displayMusic.coverUrl,
+        durationSeconds: displayMusic.durationSeconds,
+      },
+    };
+  }, [displayMusic, music, structuredMusic]);
+
   const structuredGroups = useMemo<MediaCandidateGroup[]>(
     () =>
       media.map((item) => ({
@@ -314,6 +352,7 @@ export function PostExtras({
                 />
               ) : null;
             })}
+            backgroundMusic={backgroundMusic}
           />
         </div>
       )}
@@ -338,7 +377,8 @@ export function PostExtras({
         );
       })}
 
-      {displayMusic && (
+      {/* Visual media bo‘lsa music o‘sha media ichida soundtrack sifatida ijro etiladi. */}
+      {displayMusic && visuals.length === 0 && (
         <PostMusicCard
           music={displayMusic}
           startSeconds={structuredMusic ? music?.start_seconds : 0}
