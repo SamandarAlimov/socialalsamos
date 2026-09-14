@@ -36,6 +36,18 @@ interface VideoCommerceSectionProps {
   onProductSelect: (product: Product) => void;
 }
 
+let videoCommerceWarningShown = false;
+
+function warnVideoCommerce(stage: string, error: unknown) {
+  if (videoCommerceWarningShown) return;
+  videoCommerceWarningShown = true;
+  console.warn(`Video shopping ${stage} is unavailable:`, error);
+}
+
+function uniqueIds(values: Array<string | null | undefined>): string[] {
+  return [...new Set(values.filter((value): value is string => Boolean(value)))];
+}
+
 export function VideoCommerceSection({ onProductSelect }: VideoCommerceSectionProps) {
   const [links, setLinks] = useState<VideoProductLink[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -43,66 +55,232 @@ export function VideoCommerceSection({ onProductSelect }: VideoCommerceSectionPr
   useEffect(() => {
     let cancelled = false;
 
+    const finish = (next: VideoProductLink[]) => {
+      if (cancelled) return;
+      setLinks(next);
+      setIsLoading(false);
+    };
+
     const fetchVideoCommerce = async () => {
       setIsLoading(true);
 
-      const { data, error } = await db
+      // Keep the first request deliberately relation-free. A missing/stale
+      // PostgREST relationship must never make an otherwise empty marketplace
+      // section look broken or spam the console.
+      const { data: linkRows, error: linkError } = await db
         .from('marketplace_video_products')
-        .select(`
-          post_id,
-          position,
-          post:posts!inner(
-            id, content, media_urls, media_type, views_count, likes_count, user_id, created_at,
-            user:profiles(username, display_name, avatar_url)
-          ),
-          product:products!inner(
-            *,
-            seller:sellers(
-              id, user_id, business_name, business_type, logo_url, location,
-              is_verified, rating, total_sales,
-              profile:profiles(username, display_name, avatar_url)
-            ),
-            category:product_categories(id, name, slug, icon),
-            images:product_images(id, url, position)
-          )
-        `)
-        .eq('post.media_type', 'video')
-        .eq('product.status', 'active')
+        .select('post_id, product_id, position')
         .order('position', { ascending: true })
         .limit(40);
 
       if (cancelled) return;
 
-      if (error) {
-        // Migration hali hosted DBga push qilinmagan muhitda Marketplace buzilmasin.
-        console.warn('Video shopping relation is unavailable:', error);
-        setLinks([]);
-      } else {
-        setLinks(
-          (data ?? []).map((row: any) => ({
-            post_id: row.post_id,
-            position: Number(row.position ?? 0),
-            post: {
-              ...row.post,
-              user: row.post?.user,
-              media_urls: row.post?.media_urls ?? [],
-            },
-            product: {
-              ...row.product,
-              seller: row.product?.seller,
-              category: row.product?.category,
-              images: ((row.product?.images ?? []) as Product['images'])
-                .slice()
-                .sort((a, b) => a.position - b.position),
-            } as Product,
-          })),
-        );
+      if (linkError) {
+        warnVideoCommerce('links', linkError);
+        finish([]);
+        return;
       }
 
-      setIsLoading(false);
+      const rawLinks = (linkRows ?? []) as Array<{
+        post_id: string;
+        product_id: string;
+        position: number | null;
+      }>;
+
+      // No shoppable-video links is a normal state, not an error.
+      if (rawLinks.length === 0) {
+        finish([]);
+        return;
+      }
+
+      const postIds = uniqueIds(rawLinks.map(row => row.post_id));
+      const productIds = uniqueIds(rawLinks.map(row => row.product_id));
+
+      const [postsResult, productsResult] = await Promise.all([
+        db
+          .from('posts')
+          .select('id, content, media_urls, media_type, views_count, likes_count, user_id, created_at')
+          .in('id', postIds)
+          .eq('media_type', 'video'),
+        db
+          .from('products')
+          .select('*')
+          .in('id', productIds)
+          .eq('status', 'active'),
+      ]);
+
+      if (cancelled) return;
+
+      if (postsResult.error) {
+        warnVideoCommerce('posts', postsResult.error);
+        finish([]);
+        return;
+      }
+      if (productsResult.error) {
+        warnVideoCommerce('products', productsResult.error);
+        finish([]);
+        return;
+      }
+
+      const posts = (postsResult.data ?? []) as any[];
+      const products = (productsResult.data ?? []) as any[];
+
+      // A deleted/non-video post or inactive/deleted product is simply omitted.
+      // The linking table remains the source of ordering.
+      if (posts.length === 0 || products.length === 0) {
+        finish([]);
+        return;
+      }
+
+      const sellerIds = uniqueIds(products.map(product => product.seller_id));
+      const categoryIds = uniqueIds(products.map(product => product.category_id));
+
+      const [sellersResult, categoriesResult, imagesResult] = await Promise.all([
+        sellerIds.length > 0
+          ? db
+              .from('sellers')
+              .select(
+                'id, user_id, business_name, business_type, description, logo_url, location, is_verified, rating, total_sales, status',
+              )
+              .in('id', sellerIds)
+          : Promise.resolve({ data: [], error: null }),
+        categoryIds.length > 0
+          ? db
+              .from('product_categories')
+              .select('id, name, slug, icon, position')
+              .in('id', categoryIds)
+          : Promise.resolve({ data: [], error: null }),
+        db
+          .from('product_images')
+          .select('id, product_id, url, position')
+          .in('product_id', productIds)
+          .order('position', { ascending: true }),
+      ]);
+
+      if (cancelled) return;
+
+      if (sellersResult.error) {
+        warnVideoCommerce('sellers', sellersResult.error);
+        finish([]);
+        return;
+      }
+      if (categoriesResult.error) {
+        warnVideoCommerce('categories', categoriesResult.error);
+        finish([]);
+        return;
+      }
+      if (imagesResult.error) {
+        warnVideoCommerce('images', imagesResult.error);
+        finish([]);
+        return;
+      }
+
+      const sellers = (sellersResult.data ?? []) as any[];
+      const profileIds = uniqueIds([
+        ...posts.map(post => post.user_id),
+        ...sellers.map(seller => seller.user_id),
+      ]);
+
+      const profilesResult = profileIds.length > 0
+        ? await db
+            .from('profiles')
+            .select('id, username, display_name, avatar_url, is_online, last_seen, followers_count')
+            .in('id', profileIds)
+        : { data: [], error: null };
+
+      if (cancelled) return;
+
+      if (profilesResult.error) {
+        // Profile decoration is non-essential. Keep products/videos usable even
+        // if this optional read is temporarily unavailable.
+        warnVideoCommerce('profiles', profilesResult.error);
+      }
+
+      const profiles = (profilesResult.data ?? []) as any[];
+      const categories = (categoriesResult.data ?? []) as any[];
+      const images = (imagesResult.data ?? []) as any[];
+
+      const profileById = new Map(profiles.map(profile => [profile.id, profile]));
+      const sellerById = new Map(
+        sellers.map(seller => [
+          seller.id,
+          {
+            ...seller,
+            rating: Number(seller.rating ?? 0),
+            total_sales: Number(seller.total_sales ?? 0),
+            profile: profileById.get(seller.user_id),
+          },
+        ]),
+      );
+      const categoryById = new Map(categories.map(category => [category.id, category]));
+      const imagesByProduct = new Map<string, Product['images']>();
+
+      for (const image of images) {
+        const current = imagesByProduct.get(image.product_id) ?? [];
+        current.push({
+          id: image.id,
+          url: image.url,
+          position: Number(image.position ?? 0),
+        });
+        imagesByProduct.set(image.product_id, current);
+      }
+      for (const productImages of imagesByProduct.values()) {
+        productImages.sort((a, b) => a.position - b.position);
+      }
+
+      const postById = new Map<string, VideoPost>(
+        posts.map(post => [
+          post.id,
+          {
+            ...post,
+            media_urls: Array.isArray(post.media_urls) ? post.media_urls : [],
+            views_count: Number(post.views_count ?? 0),
+            likes_count: Number(post.likes_count ?? 0),
+            user: profileById.get(post.user_id),
+          } as VideoPost,
+        ]),
+      );
+
+      const productById = new Map<string, Product>(
+        products.map(product => [
+          product.id,
+          {
+            ...product,
+            price: Number(product.price ?? 0),
+            compare_at_price:
+              product.compare_at_price == null ? null : Number(product.compare_at_price),
+            quantity: Number(product.quantity ?? 0),
+            shipping_price: Number(product.shipping_price ?? 0),
+            views_count: Number(product.views_count ?? 0),
+            likes_count: Number(product.likes_count ?? 0),
+            seller: sellerById.get(product.seller_id),
+            category: product.category_id ? categoryById.get(product.category_id) : undefined,
+            images: imagesByProduct.get(product.id) ?? [],
+          } as Product,
+        ]),
+      );
+
+      const hydrated = rawLinks.flatMap<VideoProductLink>(row => {
+        const post = postById.get(row.post_id);
+        const product = productById.get(row.product_id);
+        if (!post || !product) return [];
+        return [{
+          post_id: row.post_id,
+          position: Number(row.position ?? 0),
+          post,
+          product,
+        }];
+      });
+
+      finish(hydrated);
     };
 
-    void fetchVideoCommerce();
+    void fetchVideoCommerce().catch(error => {
+      if (cancelled) return;
+      warnVideoCommerce('loader', error);
+      finish([]);
+    });
+
     return () => {
       cancelled = true;
     };
