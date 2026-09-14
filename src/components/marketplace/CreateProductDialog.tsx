@@ -89,6 +89,31 @@ type RestaurantOptionGroup = {
   options: RestaurantOption[];
 };
 
+type CreateProductDraft = {
+  version: 1;
+  updatedAt: number;
+  wasOpen: boolean;
+  title: string;
+  description: string;
+  price: string;
+  compareAtPrice: string;
+  categoryId: string;
+  condition: string;
+  quantity: string;
+  isNegotiable: boolean;
+  shippingAvailable: boolean;
+  shippingPrice: string;
+  media: ProductMediaDraft[];
+  hasVariants: boolean;
+  optionGroups: OptionGroup[];
+  variantEdits: Record<string, VariantEdit>;
+  location: MarketplaceLocationValue | null;
+  restaurantCategory: string;
+  preparationMinutes: string;
+  servingLabel: string;
+  restaurantOptionGroups: RestaurantOptionGroup[];
+};
+
 const copy = marketplaceUz.productForm;
 const conditions = [
   { value: 'new', label: copy.conditions.new },
@@ -124,6 +149,12 @@ const RESTAURANT_CATEGORIES = [
 ];
 
 const MAX_VARIANTS = 100;
+const PRODUCT_DRAFT_VERSION = 1 as const;
+const PRODUCT_DRAFT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+function createProductDraftKey(userId: string) {
+  return `alsamos:marketplace:create-product-draft:v${PRODUCT_DRAFT_VERSION}:${userId}`;
+}
 
 function createId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -226,8 +257,167 @@ export function CreateProductDialog({ open, onOpenChange, onSuccess }: CreatePro
   const [restaurantOptionGroups, setRestaurantOptionGroups] = useState<RestaurantOptionGroup[]>([
     createRestaurantOptionGroup(),
   ]);
+  const [draftReady, setDraftReady] = useState(false);
 
   const isRestaurant = sellerBusinessType === 'restaurant';
+
+  const draftSnapshot = useMemo<Omit<CreateProductDraft, 'version' | 'updatedAt' | 'wasOpen'>>(() => ({
+    title,
+    description,
+    price,
+    compareAtPrice,
+    categoryId,
+    condition,
+    quantity,
+    isNegotiable,
+    shippingAvailable,
+    shippingPrice,
+    media,
+    hasVariants,
+    optionGroups,
+    variantEdits,
+    location,
+    restaurantCategory,
+    preparationMinutes,
+    servingLabel,
+    restaurantOptionGroups,
+  }), [
+    categoryId,
+    compareAtPrice,
+    condition,
+    description,
+    hasVariants,
+    isNegotiable,
+    location,
+    media,
+    optionGroups,
+    preparationMinutes,
+    price,
+    quantity,
+    restaurantCategory,
+    restaurantOptionGroups,
+    servingLabel,
+    shippingAvailable,
+    shippingPrice,
+    title,
+    variantEdits,
+  ]);
+
+  const writeDraft = (wasOpen: boolean) => {
+    if (!user || typeof window === 'undefined') return;
+    try {
+      const draft: CreateProductDraft = {
+        version: PRODUCT_DRAFT_VERSION,
+        updatedAt: Date.now(),
+        wasOpen,
+        ...draftSnapshot,
+      };
+      localStorage.setItem(createProductDraftKey(user.id), JSON.stringify(draft));
+    } catch (error) {
+      console.warn('Marketplace product draft could not be saved:', error);
+    }
+  };
+
+  const clearDraft = () => {
+    if (!user || typeof window === 'undefined') return;
+    try {
+      localStorage.removeItem(createProductDraftKey(user.id));
+    } catch {
+      // Storage may be unavailable in strict/private browsing; form still works.
+    }
+  };
+
+  const handleDialogOpenChange = (nextOpen: boolean) => {
+    if (draftReady) writeDraft(nextOpen);
+    onOpenChange(nextOpen);
+  };
+
+  useEffect(() => {
+    setDraftReady(false);
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!user || draftReady || typeof window === 'undefined') return;
+
+    try {
+      const key = createProductDraftKey(user.id);
+      const raw = localStorage.getItem(key);
+      if (!raw) {
+        setDraftReady(true);
+        return;
+      }
+
+      const draft = JSON.parse(raw) as Partial<CreateProductDraft>;
+      const isValid =
+        draft.version === PRODUCT_DRAFT_VERSION &&
+        typeof draft.updatedAt === 'number' &&
+        Date.now() - draft.updatedAt <= PRODUCT_DRAFT_TTL_MS;
+
+      if (!isValid) {
+        localStorage.removeItem(key);
+        setDraftReady(true);
+        return;
+      }
+
+      setTitle(typeof draft.title === 'string' ? draft.title : '');
+      setDescription(typeof draft.description === 'string' ? draft.description : '');
+      setPrice(typeof draft.price === 'string' ? draft.price : '');
+      setCompareAtPrice(typeof draft.compareAtPrice === 'string' ? draft.compareAtPrice : '');
+      setCategoryId(typeof draft.categoryId === 'string' ? draft.categoryId : '');
+      setCondition(typeof draft.condition === 'string' ? draft.condition : 'new');
+      setQuantity(typeof draft.quantity === 'string' ? draft.quantity : '1');
+      setIsNegotiable(Boolean(draft.isNegotiable));
+      setShippingAvailable(draft.shippingAvailable !== false);
+      setShippingPrice(typeof draft.shippingPrice === 'string' ? draft.shippingPrice : '0');
+      setMedia(Array.isArray(draft.media) ? draft.media.slice(0, MAX_PRODUCT_MEDIA) : []);
+      setHasVariants(Boolean(draft.hasVariants));
+      setOptionGroups(Array.isArray(draft.optionGroups) && draft.optionGroups.length > 0
+        ? draft.optionGroups
+        : [{ id: createId('option'), name: 'Rang', valuesText: '' }]);
+      setVariantEdits(draft.variantEdits && typeof draft.variantEdits === 'object'
+        ? draft.variantEdits
+        : {});
+      setLocation(draft.location ?? null);
+      setRestaurantCategory(typeof draft.restaurantCategory === 'string'
+        ? draft.restaurantCategory
+        : RESTAURANT_CATEGORIES[0]);
+      setPreparationMinutes(typeof draft.preparationMinutes === 'string'
+        ? draft.preparationMinutes
+        : '25');
+      setServingLabel(typeof draft.servingLabel === 'string' ? draft.servingLabel : '1 porsiya');
+      setRestaurantOptionGroups(
+        Array.isArray(draft.restaurantOptionGroups) && draft.restaurantOptionGroups.length > 0
+          ? draft.restaurantOptionGroups
+          : [createRestaurantOptionGroup()],
+      );
+
+      setDraftReady(true);
+      if (draft.wasOpen) onOpenChange(true);
+    } catch (error) {
+      console.warn('Marketplace product draft could not be restored:', error);
+      clearDraft();
+      setDraftReady(true);
+    }
+  }, [draftReady, onOpenChange, user]);
+
+  useEffect(() => {
+    if (!draftReady || !open || !user) return;
+    writeDraft(true);
+  }, [draftReady, draftSnapshot, open, user]);
+
+  useEffect(() => {
+    if (!draftReady || !open || !user || typeof document === 'undefined') return;
+    const persistBeforeBackground = () => {
+      if (document.visibilityState === 'hidden') writeDraft(true);
+    };
+    const persistBeforePageHide = () => writeDraft(true);
+    document.addEventListener('visibilitychange', persistBeforeBackground);
+    window.addEventListener('pagehide', persistBeforePageHide);
+    return () => {
+      document.removeEventListener('visibilitychange', persistBeforeBackground);
+      window.removeEventListener('pagehide', persistBeforePageHide);
+    };
+  }, [draftReady, draftSnapshot, open, user]);
 
   useEffect(() => {
     if (!open || !user) {
@@ -387,6 +577,7 @@ export function CreateProductDialog({ open, onOpenChange, onSuccess }: CreatePro
   };
 
   const resetForm = () => {
+    clearDraft();
     setTitle('');
     setDescription('');
     setPrice('');
@@ -551,7 +742,7 @@ export function CreateProductDialog({ open, onOpenChange, onSuccess }: CreatePro
 
   return (
     <>
-      <Dialog open={open} onOpenChange={onOpenChange}>
+      <Dialog open={open} onOpenChange={handleDialogOpenChange}>
         <DialogContent className="marketplace-neutral max-h-[94dvh] max-w-4xl overflow-hidden p-0 sm:rounded-3xl">
           <DialogHeader className="border-b border-border/60 px-5 py-4 text-left">
             <div className="flex items-center gap-3">
