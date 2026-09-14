@@ -2,6 +2,175 @@ import { useEffect, type RefObject } from 'react';
 
 const FILTER_SELECTOR = '.alsamos-camera-filter-scroll';
 const FILTER_BUTTON_SELECTOR = 'button[aria-label$=" filtri"]';
+const RECORDER_SELECTOR = '[data-camera-recorder-root="true"]';
+const LIVE_STAGE_SELECTOR = '[data-create-mode="live"]';
+const ZOOM_MIN = 1;
+const ZOOM_MAX = 5;
+
+interface ActiveZoomGesture {
+  host: HTMLElement;
+  video: HTMLVideoElement | null;
+  kind: 'recorder' | 'live';
+  startDistance: number;
+  startZoom: number;
+}
+
+interface ZoomCapabilities {
+  zoom?: {
+    min?: number;
+    max?: number;
+    step?: number;
+  } | number;
+}
+
+function clampZoom(value: number) {
+  if (!Number.isFinite(value)) return ZOOM_MIN;
+  return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, value));
+}
+
+function touchDistance(first: Touch, second: Touch) {
+  return Math.hypot(first.clientX - second.clientX, first.clientY - second.clientY);
+}
+
+function pointInside(rect: DOMRect, x: number, y: number) {
+  return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
+}
+
+function showZoomBadge(host: HTMLElement, zoom: number) {
+  let badge = host.querySelector<HTMLElement>('[data-camera-zoom-badge="true"]');
+  if (!badge) {
+    badge = document.createElement('div');
+    badge.dataset.cameraZoomBadge = 'true';
+    Object.assign(badge.style, {
+      position: 'absolute',
+      left: '50%',
+      bottom: '168px',
+      zIndex: '85',
+      transform: 'translateX(-50%)',
+      border: '1px solid rgba(255,255,255,.16)',
+      borderRadius: '999px',
+      background: 'rgba(8,11,16,.58)',
+      color: '#fff',
+      padding: '5px 10px',
+      fontSize: '12px',
+      fontWeight: '700',
+      letterSpacing: '.02em',
+      lineHeight: '1',
+      backdropFilter: 'blur(14px)',
+      pointerEvents: 'none',
+      opacity: '0',
+      transition: 'opacity 120ms ease',
+    });
+    host.appendChild(badge);
+  }
+
+  badge.textContent = `${zoom.toFixed(zoom < 2 ? 1 : 0)}×`;
+  badge.style.opacity = '1';
+  const previousTimer = Number(badge.dataset.hideTimer || 0);
+  if (previousTimer) window.clearTimeout(previousTimer);
+  const timer = window.setTimeout(() => {
+    if (badge) badge.style.opacity = '0';
+  }, 650);
+  badge.dataset.hideTimer = String(timer);
+}
+
+function getCurrentZoom(host: HTMLElement) {
+  const value = Number(host.dataset.cameraZoom || '1');
+  return clampZoom(value || 1);
+}
+
+async function applyNativeLiveZoom(video: HTMLVideoElement, zoom: number) {
+  const stream = video.srcObject instanceof MediaStream ? video.srcObject : null;
+  const track = stream?.getVideoTracks()[0];
+  if (!track || typeof track.applyConstraints !== 'function') return false;
+
+  const capabilities = typeof track.getCapabilities === 'function'
+    ? (track.getCapabilities() as MediaTrackCapabilities & ZoomCapabilities)
+    : null;
+  const capability = capabilities?.zoom;
+
+  let target = zoom;
+  if (capability && typeof capability === 'object') {
+    const min = typeof capability.min === 'number' ? capability.min : ZOOM_MIN;
+    const max = typeof capability.max === 'number' ? capability.max : ZOOM_MAX;
+    target = Math.min(max, Math.max(min, zoom));
+  }
+
+  try {
+    await track.applyConstraints({
+      advanced: [{ zoom: target } as MediaTrackConstraintSet],
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function setCameraZoom(
+  host: HTMLElement,
+  video: HTMLVideoElement | null,
+  kind: 'recorder' | 'live',
+  requestedZoom: number,
+) {
+  const zoom = clampZoom(requestedZoom);
+  host.dataset.cameraZoom = String(zoom);
+  showZoomBadge(host, zoom);
+
+  if (kind === 'recorder') {
+    host.style.setProperty('--alsamos-camera-zoom', String(zoom));
+    window.dispatchEvent(
+      new CustomEvent('alsamos-camera-zoom', { detail: { zoom } }),
+    );
+    return;
+  }
+
+  // Live prefers hardware zoom so viewers receive exactly what the broadcaster
+  // sees. If the browser/device does not expose camera zoom constraints, keep a
+  // preview fallback instead of making the gesture appear broken.
+  host.style.setProperty('--alsamos-live-camera-zoom', String(zoom));
+  if (!video) return;
+  void applyNativeLiveZoom(video, zoom).then((nativeApplied) => {
+    if (nativeApplied) {
+      host.style.setProperty('--alsamos-live-camera-zoom', '1');
+    }
+  });
+}
+
+function resolveZoomTarget(
+  root: HTMLElement,
+  target: EventTarget | null,
+  touches?: TouchList,
+): Omit<ActiveZoomGesture, 'startDistance' | 'startZoom'> | null {
+  const element = target instanceof Element ? target : null;
+  const recorder = element?.closest<HTMLElement>(RECORDER_SELECTOR) ?? null;
+  if (recorder) {
+    return {
+      host: recorder,
+      video: recorder.querySelector<HTMLVideoElement>('video'),
+      kind: 'recorder',
+    };
+  }
+
+  const liveStage = root.querySelector<HTMLElement>(LIVE_STAGE_SELECTOR);
+  const liveVideo = liveStage?.querySelector<HTMLVideoElement>('video') ?? null;
+  if (!liveStage || !liveVideo) return null;
+
+  if (touches && touches.length >= 2) {
+    const rect = liveVideo.getBoundingClientRect();
+    if (
+      !pointInside(rect, touches[0].clientX, touches[0].clientY) ||
+      !pointInside(rect, touches[1].clientX, touches[1].clientY)
+    ) {
+      return null;
+    }
+  } else if (element === liveVideo) {
+    // Wheel/pointer event is directly over the live preview.
+  } else {
+    return null;
+  }
+
+  return { host: liveStage, video: liveVideo, kind: 'live' };
+}
 
 function setFilterPreview(rail: HTMLElement, button: HTMLButtonElement) {
   const shell = rail.parentElement;
@@ -195,6 +364,8 @@ export function useCameraFilterRail(rootRef: RefObject<HTMLElement>) {
     if (!root) return;
 
     const cleanups = new Map<HTMLElement, () => void>();
+    let activeZoom: ActiveZoomGesture | null = null;
+    let zoomFrame = 0;
 
     const attachRail = (rail: HTMLElement) => {
       if (cleanups.has(rail)) return;
@@ -238,6 +409,51 @@ export function useCameraFilterRail(rootRef: RefObject<HTMLElement>) {
       });
     };
 
+    const handleTouchStart = (event: TouchEvent) => {
+      if (event.touches.length !== 2) return;
+      const resolved = resolveZoomTarget(root, event.target, event.touches);
+      if (!resolved) return;
+      const distance = touchDistance(event.touches[0], event.touches[1]);
+      if (distance <= 0) return;
+
+      activeZoom = {
+        ...resolved,
+        startDistance: distance,
+        startZoom: getCurrentZoom(resolved.host),
+      };
+      event.preventDefault();
+    };
+
+    const handleTouchMove = (event: TouchEvent) => {
+      if (!activeZoom || event.touches.length !== 2) return;
+      const distance = touchDistance(event.touches[0], event.touches[1]);
+      if (distance <= 0 || activeZoom.startDistance <= 0) return;
+      event.preventDefault();
+
+      const nextZoom = activeZoom.startZoom * (distance / activeZoom.startDistance);
+      window.cancelAnimationFrame(zoomFrame);
+      zoomFrame = window.requestAnimationFrame(() => {
+        if (!activeZoom) return;
+        setCameraZoom(activeZoom.host, activeZoom.video, activeZoom.kind, nextZoom);
+      });
+    };
+
+    const handleTouchEnd = (event: TouchEvent) => {
+      if (event.touches.length < 2) activeZoom = null;
+    };
+
+    const handleWheel = (event: WheelEvent) => {
+      const resolved = resolveZoomTarget(root, event.target);
+      if (!resolved) return;
+      if ((event.target as Element | null)?.closest(FILTER_SELECTOR)) return;
+
+      event.preventDefault();
+      const current = getCurrentZoom(resolved.host);
+      const magnitude = Math.min(0.35, Math.max(0.08, Math.abs(event.deltaY) / 450));
+      const nextZoom = current + (event.deltaY < 0 ? magnitude : -magnitude);
+      setCameraZoom(resolved.host, resolved.video, resolved.kind, nextZoom);
+    };
+
     const scan = () => {
       root.querySelectorAll<HTMLElement>(FILTER_SELECTOR).forEach(attachRail);
       cleanups.forEach((cleanup, rail) => {
@@ -252,10 +468,22 @@ export function useCameraFilterRail(rootRef: RefObject<HTMLElement>) {
     const observer = new MutationObserver(scan);
     observer.observe(root, { childList: true, subtree: true });
 
+    root.addEventListener('touchstart', handleTouchStart, { passive: false });
+    root.addEventListener('touchmove', handleTouchMove, { passive: false });
+    root.addEventListener('touchend', handleTouchEnd, { passive: true });
+    root.addEventListener('touchcancel', handleTouchEnd, { passive: true });
+    root.addEventListener('wheel', handleWheel, { passive: false });
+
     return () => {
       observer.disconnect();
+      window.cancelAnimationFrame(zoomFrame);
       cleanups.forEach((cleanup) => cleanup());
       cleanups.clear();
+      root.removeEventListener('touchstart', handleTouchStart);
+      root.removeEventListener('touchmove', handleTouchMove);
+      root.removeEventListener('touchend', handleTouchEnd);
+      root.removeEventListener('touchcancel', handleTouchEnd);
+      root.removeEventListener('wheel', handleWheel);
     };
   }, [rootRef]);
 }
