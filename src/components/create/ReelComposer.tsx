@@ -26,6 +26,11 @@ import { cn } from '@/lib/utils';
 import { parseStorageReference } from '@/lib/mediaUpload';
 import type { PostMusicInput } from '@/lib/postMeta';
 import { supabase } from '@/integrations/supabase/client';
+import {
+  clearStoredReelDraft,
+  readStoredReelDraft,
+  writeStoredReelDraft,
+} from '@/lib/reelDraft';
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Slider } from '@/components/ui/slider';
@@ -122,11 +127,12 @@ async function cleanupDraftMusic(input?: PostMusicInput | null) {
 
 export function ReelComposer({ onDraftStateChange }: ReelComposerProps) {
   const navigate = useNavigate();
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
   const { createPost } = usePosts();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const musicRef = useRef<PostMusicInput | null>(null);
+  const hydratedDraftOwnerRef = useRef<string | null>(null);
 
   const [caption, setCaption] = useState('');
   const [visibility, setVisibility] = useState<PostVisibility>('public');
@@ -143,10 +149,12 @@ export function ReelComposer({ onDraftStateChange }: ReelComposerProps) {
   const [coverSecond, setCoverSecond] = useState(0);
   const [coverPreviewUrl, setCoverPreviewUrl] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [draftHydrated, setDraftHydrated] = useState(false);
 
   const {
     attachments,
     isUploading,
+    isDraftHydrated: mediaDraftHydrated,
     addFiles,
     removeAttachment,
     clearAttachments,
@@ -161,6 +169,25 @@ export function ReelComposer({ onDraftStateChange }: ReelComposerProps) {
     uploadKind: 'reel',
     visibility,
   });
+
+  const draftOwnerId = user?.id ?? profile?.id ?? null;
+
+  useEffect(() => {
+    if (!draftOwnerId || hydratedDraftOwnerRef.current === draftOwnerId) return;
+
+    hydratedDraftOwnerRef.current = draftOwnerId;
+    const draft = readStoredReelDraft(draftOwnerId);
+    if (draft) {
+      setCaption(draft.caption);
+      setVisibility(draft.visibility);
+      setMusic(draft.music);
+      musicRef.current = draft.music;
+      setCollaborators(draft.collaborators.slice(0, MAX_COLLABORATORS));
+      setCoverSecond(draft.coverSecond);
+      setSelectedClipId(draft.selectedClipId);
+    }
+    setDraftHydrated(true);
+  }, [draftOwnerId]);
 
   const activeClip = useMemo(
     () =>
@@ -190,6 +217,7 @@ export function ReelComposer({ onDraftStateChange }: ReelComposerProps) {
   const activeSpeed = clipPlaybackRate(activeClip);
 
   useEffect(() => {
+    if (!mediaDraftHydrated) return;
     if (totalDuration <= 0) {
       setCoverSecond(0);
       return;
@@ -197,7 +225,7 @@ export function ReelComposer({ onDraftStateChange }: ReelComposerProps) {
     setCoverSecond((current) =>
       Math.max(0, Math.min(current, Math.max(0, totalDuration - 0.05))),
     );
-  }, [totalDuration]);
+  }, [mediaDraftHydrated, totalDuration]);
 
   useEffect(() => {
     if (attachments.length === 0 || totalDuration <= 0) {
@@ -253,6 +281,7 @@ export function ReelComposer({ onDraftStateChange }: ReelComposerProps) {
   }, [attachments, coverSecond, totalDuration]);
 
   useEffect(() => {
+    if (!mediaDraftHydrated) return;
     if (attachments.length === 0) {
       setSelectedClipId(null);
       return;
@@ -260,17 +289,51 @@ export function ReelComposer({ onDraftStateChange }: ReelComposerProps) {
     if (!attachments.some((item) => item.id === selectedClipId)) {
       setSelectedClipId(attachments[0].id);
     }
-  }, [attachments, selectedClipId]);
+  }, [attachments, mediaDraftHydrated, selectedClipId]);
 
   const hasDraft =
     attachments.length > 0 ||
     caption.trim().length > 0 ||
     Boolean(music) ||
-    collaborators.length > 0;
+    collaborators.length > 0 ||
+    visibility !== 'public';
 
   useEffect(() => {
     onDraftStateChange?.(hasDraft);
   }, [hasDraft, onDraftStateChange]);
+
+  useEffect(() => {
+    if (!draftHydrated || !mediaDraftHydrated || !draftOwnerId) return;
+
+    const timer = window.setTimeout(() => {
+      if (!hasDraft) {
+        clearStoredReelDraft(draftOwnerId);
+        return;
+      }
+
+      writeStoredReelDraft(draftOwnerId, {
+        caption,
+        visibility,
+        music,
+        collaborators,
+        coverSecond,
+        selectedClipId,
+      });
+    }, 220);
+
+    return () => window.clearTimeout(timer);
+  }, [
+    caption,
+    collaborators,
+    coverSecond,
+    draftHydrated,
+    draftOwnerId,
+    hasDraft,
+    mediaDraftHydrated,
+    music,
+    selectedClipId,
+    visibility,
+  ]);
 
   useEffect(() => {
     musicRef.current = music;
@@ -475,6 +538,7 @@ export function ReelComposer({ onDraftStateChange }: ReelComposerProps) {
       if (!created) return;
 
       markAttachmentsPublished();
+      if (draftOwnerId) clearStoredReelDraft(draftOwnerId);
       musicRef.current = null;
       clearAttachments();
       setCaption('');
@@ -495,6 +559,7 @@ export function ReelComposer({ onDraftStateChange }: ReelComposerProps) {
     collaborators,
     coverSecond,
     createPost,
+    draftOwnerId,
     isCombining,
     isPosting,
     isUploading,
