@@ -75,6 +75,32 @@ function centerActiveFilter(rail: HTMLElement) {
   active.scrollIntoView({ behavior: 'auto', block: 'nearest', inline: 'center' });
 }
 
+function polishFilterRail(rail: HTMLElement) {
+  const shell = rail.parentElement;
+  const captureTray = rail.closest<HTMLElement>('.bg-gradient-to-t');
+  const isPhone = window.matchMedia('(max-width: 767.98px)').matches;
+
+  if (shell) {
+    shell.style.setProperty('background', 'transparent', 'important');
+    shell.style.setProperty('box-shadow', 'none', 'important');
+    shell.style.setProperty('border-radius', '0', 'important');
+    shell.style.setProperty('overflow', 'visible', 'important');
+  }
+
+  if (captureTray) {
+    captureTray.style.setProperty('background', 'transparent', 'important');
+    captureTray.style.setProperty('background-image', 'none', 'important');
+  }
+
+  // Instagram leaves noticeably more breathing room between effect bubbles.
+  rail.style.setProperty('column-gap', isPhone ? '22px' : '18px', 'important');
+  rail.style.setProperty(
+    'padding-inline',
+    isPhone ? '112px' : '100px',
+    'important',
+  );
+}
+
 function attachShutterDragBridge(rail: HTMLElement) {
   const shell = rail.parentElement;
   const shutter = shell?.querySelector<HTMLButtonElement>(
@@ -88,6 +114,7 @@ function attachShutterDragBridge(rail: HTMLElement) {
   let dragged = false;
   let suppressNextClick = false;
   const previousTouchAction = shutter.style.touchAction;
+  const previousSnapType = rail.style.scrollSnapType;
   shutter.style.touchAction = 'none';
 
   const onPointerDown = (event: PointerEvent) => {
@@ -97,6 +124,7 @@ function attachShutterDragBridge(rail: HTMLElement) {
     startScrollLeft = rail.scrollLeft;
     dragged = false;
     suppressNextClick = false;
+    rail.style.setProperty('scroll-snap-type', 'none', 'important');
     try {
       shutter.setPointerCapture(event.pointerId);
     } catch {
@@ -126,6 +154,11 @@ function attachShutterDragBridge(rail: HTMLElement) {
     }
     pointerId = null;
     dragged = false;
+    if (previousSnapType) {
+      rail.style.scrollSnapType = previousSnapType;
+    } else {
+      rail.style.removeProperty('scroll-snap-type');
+    }
   };
 
   const onClickCapture = (event: MouseEvent) => {
@@ -143,6 +176,11 @@ function attachShutterDragBridge(rail: HTMLElement) {
 
   return () => {
     shutter.style.touchAction = previousTouchAction;
+    if (previousSnapType) {
+      rail.style.scrollSnapType = previousSnapType;
+    } else {
+      rail.style.removeProperty('scroll-snap-type');
+    }
     shutter.removeEventListener('pointerdown', onPointerDown);
     shutter.removeEventListener('pointermove', onPointerMove);
     shutter.removeEventListener('pointerup', finishPointer);
@@ -163,6 +201,7 @@ export function useCameraFilterRail(rootRef: RefObject<HTMLElement>) {
 
       let commitTimer = 0;
       let frame = 0;
+      polishFilterRail(rail);
       const detachShutterDragBridge = attachShutterDragBridge(rail);
 
       const updateNearest = () => {
