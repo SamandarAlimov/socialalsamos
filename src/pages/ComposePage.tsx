@@ -10,6 +10,7 @@ import { StoryComposer } from '@/components/create/StoryComposer';
 import { ReelComposer } from '@/components/create/ReelComposer';
 import { LiveStreamBroadcast } from '@/components/live/LiveStreamBroadcast';
 import '@/styles/create-instagram.css';
+import '@/styles/create-instagram-fixes.css';
 
 type CreateMode = 'post' | 'story' | 'reel' | 'live';
 
