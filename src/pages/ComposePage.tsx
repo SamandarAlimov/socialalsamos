@@ -66,9 +66,10 @@ export default function ComposePage() {
     setMode(nextMode);
   }, [currentModeLocked, mode, searchParams, setSearchParams]);
 
-  // Story/Reel are camera-first on every form factor. The camera implementation
-  // owns getUserMedia and also exposes a device-library picker, so mobile,
-  // tablet and desktop all enter one canonical capture pipeline.
+  // Story/Reel camera is part of the Create stage, not a viewport portal.
+  // We still trigger the canonical composer camera action so Story/Reel keep a
+  // single upload/draft pipeline while the recorder itself stays inside this
+  // page and therefore cannot hide the mode navbar or desktop application shell.
   useEffect(() => {
     if (mode !== 'story' && mode !== 'reel') {
       autoCameraModeRef.current = null;
@@ -92,9 +93,6 @@ export default function ComposePage() {
         return;
       }
 
-      // Child composers can finish mounting a frame later on slower mobile
-      // browsers. A short bounded retry keeps direct /create?mode=story links
-      // camera-first without leaving a permanent observer behind.
       attempts += 1;
       if (attempts < 20) {
         frame = window.requestAnimationFrame(openCameraWhenReady);
@@ -128,7 +126,7 @@ export default function ComposePage() {
   return (
     <div
       className={cn(
-        'create-page relative flex h-[100dvh] min-h-0 flex-col overflow-hidden overscroll-none bg-background',
+        'create-page relative flex h-full min-h-0 flex-col overflow-hidden overscroll-none bg-background',
         immersiveMode && 'create-page--immersive',
       )}
       data-create-mode={mode}
@@ -162,7 +160,7 @@ export default function ComposePage() {
       >
         <div
           className={cn(
-            'create-mode-stage mx-auto w-full max-w-6xl pb-8 pt-14 md:pt-3 lg:h-full lg:pb-3',
+            'create-mode-stage relative min-h-0 mx-auto w-full max-w-6xl pb-8 pt-14 md:pt-3 lg:h-full lg:pb-3',
             immersiveMode && 'create-mode-stage--immersive',
           )}
           data-create-mode={mode}
