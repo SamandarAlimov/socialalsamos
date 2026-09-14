@@ -28,11 +28,15 @@ import { useToast } from '@/hooks/use-toast';
 import { usePosts, type PostVisibility } from '@/hooks/usePosts';
 import { usePostAttachments } from '@/hooks/usePostAttachments';
 import type { PostMediaInput } from '@/lib/postMeta';
-import { AttachmentGrid } from '@/components/create/AttachmentGrid';
 import { ImageEditor } from '@/components/create/ImageEditor';
 import { CameraVideoRecorder } from '@/components/create/CameraVideoRecorder';
 import { StoryStickerComposer } from '@/components/create/StoryStickerComposer';
 import { VideoEditor, type VideoEditData } from '@/components/VideoEditor';
+import {
+  clearStoredStoryDraft,
+  readStoredStoryDraft,
+  writeStoredStoryDraft,
+} from '@/lib/storyDraft';
 
 interface StoryDraftIdentity {
   storyId: string;
@@ -80,12 +84,13 @@ interface StoryComposerProps {
 export function StoryComposer({ onDraftStateChange }: StoryComposerProps) {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
   // usePosts hook feed state is not used, but keeps shared post types/context loaded.
   usePosts();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const draftRef = useRef<StoryDraftIdentity | null>(null);
+  const hydratedDraftOwnerRef = useRef<string | null>(null);
 
   const [visibility, setVisibility] = useState<PostVisibility>('public');
   const [caption, setCaption] = useState('');
@@ -98,10 +103,12 @@ export function StoryComposer({ onDraftStateChange }: StoryComposerProps) {
   const [isFinalizing, setIsFinalizing] = useState(false);
   const [isDiscarding, setIsDiscarding] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [metadataDraftHydrated, setMetadataDraftHydrated] = useState(false);
 
   const {
     attachments,
     isUploading,
+    isDraftHydrated: mediaDraftHydrated,
     addFiles,
     removeAttachment,
     clearAttachments,
@@ -113,8 +120,10 @@ export function StoryComposer({ onDraftStateChange }: StoryComposerProps) {
     maxFiles: 1,
     uploadKind: 'story',
     visibility,
+    persistDraft: true,
   });
 
+  const draftOwnerId = user?.id ?? profile?.id ?? null;
   const attachment = attachments[0] ?? null;
   const imageTarget = useMemo(
     () => attachments.find((item) => item.id === imageTargetId) ?? null,
@@ -126,12 +135,55 @@ export function StoryComposer({ onDraftStateChange }: StoryComposerProps) {
   );
 
   useEffect(() => {
+    if (!draftOwnerId || hydratedDraftOwnerRef.current === draftOwnerId) return;
+
+    hydratedDraftOwnerRef.current = draftOwnerId;
+    const stored = readStoredStoryDraft(draftOwnerId);
+    if (stored) {
+      setCaption(stored.caption);
+      setVisibility(stored.visibility);
+    }
+    setMetadataDraftHydrated(true);
+  }, [draftOwnerId]);
+
+  useEffect(() => {
     draftRef.current = storyDraft;
   }, [storyDraft]);
 
   useEffect(() => {
     onDraftStateChange?.(Boolean(storyDraft));
   }, [onDraftStateChange, storyDraft]);
+
+  /**
+   * Rasm/video, caption va audience birga tiklanadi. Hidden DB draft esa faqat
+   * sticker bosqichida yashaydi; route yopilsa u discard qilinadi va local
+   * source draft keyingi kirishda yangi server draft yaratishga tayyor qoladi.
+   */
+  useEffect(() => {
+    if (!draftOwnerId || !metadataDraftHydrated || !mediaDraftHydrated) return;
+
+    const hasLocalDraft =
+      Boolean(attachment) ||
+      caption.trim().length > 0 ||
+      visibility !== 'public';
+
+    const timer = window.setTimeout(() => {
+      if (!hasLocalDraft) {
+        clearStoredStoryDraft(draftOwnerId);
+        return;
+      }
+      writeStoredStoryDraft(draftOwnerId, { caption, visibility });
+    }, 220);
+
+    return () => window.clearTimeout(timer);
+  }, [
+    attachment,
+    caption,
+    draftOwnerId,
+    mediaDraftHydrated,
+    metadataDraftHydrated,
+    visibility,
+  ]);
 
   // Hidden Story draft abandoned bo'lsa DB graph ham best-effort tozalanadi.
   useEffect(() => {
@@ -205,12 +257,7 @@ export function StoryComposer({ onDraftStateChange }: StoryComposerProps) {
 
       setVideoTargetId(null);
     },
-    [
-      attachments,
-      replaceAttachmentFile,
-      setEditState,
-      videoTargetId,
-    ],
+    [attachments, replaceAttachmentFile, setEditState, videoTargetId],
   );
 
   const createHiddenDraft = useCallback(async () => {
@@ -290,6 +337,7 @@ export function StoryComposer({ onDraftStateChange }: StoryComposerProps) {
 
       // Endi Storage obyektlari live story graphiga tegishli.
       markAttachmentsPublished();
+      if (draftOwnerId) clearStoredStoryDraft(draftOwnerId);
       draftRef.current = null;
       setStoryDraft(null);
       setShowStickers(false);
@@ -312,6 +360,7 @@ export function StoryComposer({ onDraftStateChange }: StoryComposerProps) {
     }
   }, [
     clearAttachments,
+    draftOwnerId,
     isFinalizing,
     markAttachmentsPublished,
     navigate,
@@ -332,9 +381,12 @@ export function StoryComposer({ onDraftStateChange }: StoryComposerProps) {
       draftRef.current = null;
       setStoryDraft(null);
       setShowStickers(false);
+      if (draftOwnerId) clearStoredStoryDraft(draftOwnerId);
 
       // DB graph o'chgach Storage obyektini ham hook orqali tozalaymiz.
       if (attachment) removeAttachment(attachment.id);
+      setCaption('');
+      setVisibility('public');
 
       toast({
         title: 'Story qoralamasi bekor qilindi',
@@ -349,7 +401,7 @@ export function StoryComposer({ onDraftStateChange }: StoryComposerProps) {
     } finally {
       setIsDiscarding(false);
     }
-  }, [attachment, isDiscarding, removeAttachment, toast]);
+  }, [attachment, draftOwnerId, isDiscarding, removeAttachment, toast]);
 
   const canContinue =
     Boolean(attachment) &&
