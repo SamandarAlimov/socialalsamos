@@ -308,4 +308,50 @@
     background-color: transparent !important;
     background-image: none !important;
   }
+
+  /* Match Instagram/Telegram/YouTube capture navigation: device media lives at
+     the far left, mode tabs remain compact in the middle, and camera flip lives
+     at the far right. The two camera actions are rendered by the recorder but
+     visually share the same bottom navigation lane. */
+  .create-page .create-mode-tabs,
+  .create-page--immersive .create-mode-tabs {
+    width: min(290px, calc(100vw - 136px)) !important;
+    padding-right: 5px !important;
+    padding-left: 5px !important;
+  }
+
+  .create-page .create-mode-tab,
+  .create-page--immersive .create-mode-tab {
+    padding-right: 4px !important;
+    padding-left: 4px !important;
+    font-size: 11px !important;
+  }
+
+  [data-camera-recorder-root='true'] button[aria-label='Qurilmadan tanlash'] {
+    position: fixed !important;
+    left: 14px !important;
+    bottom: max(10px, env(safe-area-inset-bottom)) !important;
+    z-index: 96 !important;
+    width: 52px !important;
+    height: 52px !important;
+    border: 1px solid rgb(255 255 255 / 0.16) !important;
+    border-radius: 16px !important;
+    background: rgb(10 13 17 / 0.72) !important;
+    box-shadow: 0 10px 28px -18px rgb(0 0 0 / 0.9) !important;
+    backdrop-filter: blur(18px) saturate(1.15) !important;
+  }
+
+  [data-camera-recorder-root='true'] button[aria-label='Kamerani aylantirish'] {
+    position: fixed !important;
+    right: 14px !important;
+    bottom: max(10px, env(safe-area-inset-bottom)) !important;
+    z-index: 96 !important;
+    width: 52px !important;
+    height: 52px !important;
+    border: 1px solid rgb(255 255 255 / 0.16) !important;
+    border-radius: 999px !important;
+    background: rgb(10 13 17 / 0.72) !important;
+    box-shadow: 0 10px 28px -18px rgb(0 0 0 / 0.9) !important;
+    backdrop-filter: blur(18px) saturate(1.15) !important;
+  }
 }
