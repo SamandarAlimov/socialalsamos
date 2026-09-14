@@ -15,7 +15,6 @@ import { cn } from '@/lib/utils';
 import { UI_LAYER } from '@/lib/uiLayers';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { CAMERA_LENSES, cameraOverlayCss } from './filters/CameraLensData';
-import { CameraLensRail } from './CameraLensRail';
 import { extensionForMime } from './cameraCaptureUtils';
 import { useCameraCapture } from './useCameraCapture';
 
@@ -25,6 +24,8 @@ interface CameraVideoRecorderProps {
   mode?: 'photo' | 'video' | 'both';
   aspectRatio?: '1:1' | '9:16' | '16:9' | 'auto';
 }
+
+type CameraLens = (typeof CAMERA_LENSES)[number];
 
 export function CameraVideoRecorder({
   onCapture,
@@ -57,10 +58,11 @@ export function CameraVideoRecorder({
     [computedAspectRatio],
   );
 
-  const lens = useMemo(
-    () => CAMERA_LENSES.find((item) => item.id === lensId) ?? CAMERA_LENSES[0],
-    [lensId],
+  const lensIndex = Math.max(
+    0,
+    CAMERA_LENSES.findIndex((item) => item.id === lensId),
   );
+  const lens = CAMERA_LENSES[lensIndex] ?? CAMERA_LENSES[0];
 
   const camera = useCameraCapture({
     captureMode,
@@ -199,7 +201,7 @@ export function CameraVideoRecorder({
         onClick={camera.takePhoto}
         disabled={!camera.cameraReady || Boolean(camera.cameraError)}
         aria-label="Rasmga olish"
-        className="flex h-[76px] w-[76px] items-center justify-center rounded-full border-[5px] border-white bg-white/15 shadow-[0_12px_36px_rgba(0,0,0,.38)] transition active:scale-95 disabled:opacity-40"
+        className="flex h-[76px] w-[76px] shrink-0 items-center justify-center rounded-full border-[5px] border-white bg-white/15 shadow-[0_12px_36px_rgba(0,0,0,.42)] transition active:scale-95 disabled:opacity-40"
       >
         <span className="h-[54px] w-[54px] rounded-full bg-white" />
       </button>
@@ -210,7 +212,7 @@ export function CameraVideoRecorder({
         disabled={!camera.cameraReady || Boolean(camera.cameraError)}
         aria-label={camera.isRecording ? 'To‘xtatish' : 'Yozishni boshlash'}
         className={cn(
-          'flex h-[76px] w-[76px] items-center justify-center rounded-full border-[5px] border-white shadow-[0_12px_36px_rgba(0,0,0,.38)] transition active:scale-95 disabled:opacity-40',
+          'flex h-[76px] w-[76px] shrink-0 items-center justify-center rounded-full border-[5px] border-white shadow-[0_12px_36px_rgba(0,0,0,.42)] transition active:scale-95 disabled:opacity-40',
           camera.isRecording ? 'bg-white/10' : 'bg-red-500/15',
         )}
       >
@@ -221,6 +223,90 @@ export function CameraVideoRecorder({
         )}
       </button>
     );
+
+  const relativeLens = useCallback(
+    (offset: number): CameraLens => {
+      const length = CAMERA_LENSES.length;
+      const index = (lensIndex + offset + length) % length;
+      return CAMERA_LENSES[index] ?? CAMERA_LENSES[0];
+    },
+    [lensIndex],
+  );
+
+  const renderLensBubble = (item: CameraLens, dimmed = false) => {
+    const overlay = item.overlays?.[0];
+    const active = item.id === lensId;
+
+    return (
+      <button
+        key={`${item.id}-${dimmed ? 'far' : 'near'}`}
+        type="button"
+        disabled={camera.isRecording}
+        onClick={() => setLensId(item.id)}
+        aria-label={`${item.name} filtri`}
+        aria-pressed={active}
+        className={cn(
+          'group flex shrink-0 flex-col items-center gap-1 transition active:scale-95 disabled:opacity-30',
+          dimmed && 'opacity-60',
+        )}
+      >
+        <span
+          className={cn(
+            'relative flex h-11 w-11 overflow-hidden rounded-full border-2 border-white/35 bg-zinc-700 shadow-lg transition sm:h-12 sm:w-12',
+            active && 'scale-110 border-white shadow-[0_0_0_3px_rgba(255,255,255,.2)]',
+          )}
+        >
+          <span
+            className="absolute inset-0 bg-gradient-to-br from-orange-300 via-rose-500 to-indigo-700"
+            style={{ filter: item.style || undefined }}
+          />
+          {overlay && (
+            <span
+              className="absolute inset-0"
+              style={{
+                background: cameraOverlayCss(overlay),
+                mixBlendMode: overlay.blendMode,
+                opacity: overlay.opacity ?? 1,
+              }}
+            />
+          )}
+          {item.id === 'none' && (
+            <span className="relative z-10 m-auto h-6 w-px rotate-45 bg-white/90 shadow" />
+          )}
+        </span>
+      </button>
+    );
+  };
+
+  const captureRail = (
+    <div className="flex items-center justify-center gap-2 sm:gap-3">
+      <button
+        type="button"
+        onClick={chooseFromDevice}
+        disabled={camera.isRecording}
+        aria-label="Qurilmadan tanlash"
+        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white/[0.13] text-white backdrop-blur-md transition active:scale-95 disabled:opacity-30 md:hidden"
+      >
+        <Images className="h-6 w-6" />
+      </button>
+
+      {renderLensBubble(relativeLens(-2), true)}
+      {renderLensBubble(relativeLens(-1))}
+      {shutter}
+      {renderLensBubble(relativeLens(1))}
+      {renderLensBubble(relativeLens(2), true)}
+
+      <button
+        type="button"
+        onClick={switchCamera}
+        disabled={camera.isRecording}
+        aria-label="Kamerani aylantirish"
+        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/[0.13] text-white backdrop-blur-md transition active:scale-95 disabled:opacity-30 md:hidden"
+      >
+        <FlipHorizontal2 className="h-6 w-6" />
+      </button>
+    </div>
+  );
 
   const captureModeSwitcher = mode === 'both' && !camera.isRecording && (
     <div className="flex items-center justify-center gap-7">
@@ -260,10 +346,24 @@ export function CameraVideoRecorder({
         <canvas ref={camera.canvasRef} className="hidden" />
         {mediaPicker}
 
-        <div className="mx-auto flex h-full w-full max-w-[1240px] items-center justify-center md:gap-8 md:px-8 md:py-6">
+        <div className="mx-auto flex h-full w-full max-w-[1120px] items-center justify-center gap-5 px-0 py-0 md:px-8 md:py-6">
+          <div className="hidden w-14 shrink-0 flex-col gap-3 md:flex">
+            <button
+              type="button"
+              onClick={() => {
+                setIsPlaying(false);
+                camera.retake();
+              }}
+              aria-label="Qayta olish"
+              className="flex h-12 w-12 items-center justify-center rounded-full bg-white/[0.08] text-white transition hover:bg-white/[0.14]"
+            >
+              <RotateCcw className="h-5 w-5" />
+            </button>
+          </div>
+
           <div
             className={cn(
-              'relative h-full w-full overflow-hidden bg-black md:h-[min(82dvh,780px)] md:w-auto md:max-w-[78vw] md:rounded-[30px] md:shadow-2xl',
+              'relative h-full w-full overflow-hidden bg-black md:h-[min(88dvh,800px)] md:w-auto md:max-w-[78vw] md:rounded-[30px] md:shadow-2xl',
               aspectRatioClass,
             )}
           >
@@ -314,15 +414,15 @@ export function CameraVideoRecorder({
               <button
                 type="button"
                 onClick={confirmCapture}
-                aria-label="Tanlash"
+                aria-label="Davom etish"
                 className="flex h-11 w-11 items-center justify-center rounded-full bg-white text-black shadow-lg"
               >
                 <Check className="h-6 w-6" />
               </button>
             </div>
 
-            <div className="absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black/80 via-black/25 to-transparent px-5 pb-[max(env(safe-area-inset-bottom),1.25rem)] pt-24 md:hidden">
-              <div className="flex items-center justify-center gap-5">
+            <div className="absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black/80 via-black/20 to-transparent px-5 pb-[max(env(safe-area-inset-bottom),1.25rem)] pt-24 md:hidden">
+              <div className="flex items-center justify-center gap-4">
                 <button
                   type="button"
                   onClick={() => {
@@ -344,27 +444,16 @@ export function CameraVideoRecorder({
             </div>
           </div>
 
-          <aside className="hidden w-[220px] shrink-0 flex-col gap-3 md:flex">
-            <button
-              type="button"
-              onClick={() => {
-                setIsPlaying(false);
-                camera.retake();
-              }}
-              className="flex min-h-12 items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.06] px-4 text-sm font-semibold text-white transition hover:bg-white/10"
-            >
-              <RotateCcw className="h-5 w-5" />
-              Qayta olish
-            </button>
+          <div className="hidden w-14 shrink-0 flex-col items-center gap-3 md:flex">
             <button
               type="button"
               onClick={confirmCapture}
-              className="flex min-h-12 items-center gap-3 rounded-2xl bg-white px-4 text-sm font-semibold text-black transition hover:bg-white/90"
+              aria-label="Davom etish"
+              className="flex h-12 w-12 items-center justify-center rounded-full bg-white text-black transition hover:bg-white/90"
             >
               <Check className="h-5 w-5" />
-              Tanlash
             </button>
-          </aside>
+          </div>
         </div>
       </div>
     );
@@ -386,10 +475,31 @@ export function CameraVideoRecorder({
       <canvas ref={camera.canvasRef} className="hidden" />
       {mediaPicker}
 
-      <div className="mx-auto flex h-full w-full max-w-[1240px] items-center justify-center md:gap-8 md:px-8 md:py-6">
+      <div className="mx-auto flex h-full w-full max-w-[1120px] items-center justify-center gap-5 px-0 py-0 md:px-8 md:py-6">
+        <div className="hidden w-14 shrink-0 flex-col items-center gap-3 md:flex">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={camera.isRecording}
+            aria-label="Yopish"
+            className="flex h-12 w-12 items-center justify-center rounded-full bg-white/[0.08] text-white transition hover:bg-white/[0.14] disabled:opacity-35"
+          >
+            <X className="h-6 w-6" />
+          </button>
+          <button
+            type="button"
+            onClick={chooseFromDevice}
+            disabled={camera.isRecording}
+            aria-label="Qurilmadan tanlash"
+            className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/[0.08] text-white transition hover:bg-white/[0.14] disabled:opacity-35"
+          >
+            <Images className="h-6 w-6" />
+          </button>
+        </div>
+
         <div
           className={cn(
-            'relative h-full w-full overflow-hidden bg-black md:h-[min(82dvh,780px)] md:w-auto md:max-w-[78vw] md:rounded-[30px] md:shadow-2xl',
+            'relative h-full w-full overflow-hidden bg-black md:h-[min(88dvh,800px)] md:w-auto md:max-w-[78vw] md:rounded-[30px] md:shadow-2xl',
             aspectRatioClass,
           )}
         >
@@ -462,13 +572,11 @@ export function CameraVideoRecorder({
               <X className="h-7 w-7" />
             </button>
 
-            {camera.isRecording ? (
-              <span className="rounded-full bg-black/45 px-3 py-1.5 text-sm font-semibold text-white backdrop-blur-md">
-                {formatDuration(camera.recordingDuration)}
-              </span>
-            ) : (
-              <span />
-            )}
+            <span className="rounded-full bg-black/42 px-3 py-1.5 text-xs font-semibold text-white/90 backdrop-blur-md">
+              {camera.isRecording
+                ? formatDuration(camera.recordingDuration)
+                : lens?.name ?? 'Normal'}
+            </span>
 
             <button
               type="button"
@@ -481,104 +589,28 @@ export function CameraVideoRecorder({
             </button>
           </div>
 
-          <div className="absolute inset-x-0 bottom-0 z-30 bg-gradient-to-t from-black via-black/55 to-transparent px-3 pb-[max(env(safe-area-inset-bottom),0.9rem)] pt-24 md:hidden">
-            {!camera.isRecording && (
-              <div className="mb-1">
-                <CameraLensRail value={lensId} onChange={setLensId} />
-              </div>
-            )}
-
-            <div className="mb-2">{captureModeSwitcher}</div>
-
-            <div className="grid grid-cols-[1fr_auto_1fr] items-center px-2">
-              <div className="flex justify-start">
-                <button
-                  type="button"
-                  onClick={chooseFromDevice}
-                  disabled={camera.isRecording}
-                  aria-label="Qurilmadan tanlash"
-                  className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/[0.12] text-white backdrop-blur-md transition active:scale-95 disabled:opacity-35"
-                >
-                  <Images className="h-6 w-6" />
-                </button>
-              </div>
-
-              {shutter}
-
-              <div className="flex justify-end">
-                <button
-                  type="button"
-                  onClick={switchCamera}
-                  disabled={camera.isRecording}
-                  aria-label="Kamerani aylantirish"
-                  className="flex h-12 w-12 items-center justify-center rounded-full bg-white/[0.12] text-white backdrop-blur-md transition active:scale-95 disabled:opacity-35"
-                >
-                  <FlipHorizontal2 className="h-6 w-6" />
-                </button>
-              </div>
+          <div className="absolute inset-x-0 bottom-0 z-30 bg-gradient-to-t from-black via-black/45 to-transparent px-2 pb-[max(env(safe-area-inset-bottom),0.95rem)] pt-28">
+            <div className="mb-2 text-center text-[10px] font-semibold uppercase tracking-[0.16em] text-white/70">
+              {camera.isRecording
+                ? formatDuration(camera.recordingDuration)
+                : lens?.name ?? 'Normal'}
             </div>
+            {captureRail}
+            <div className="mt-3">{captureModeSwitcher}</div>
           </div>
         </div>
 
-        <aside className="hidden w-[230px] shrink-0 flex-col gap-3 md:flex">
-          <div className="rounded-[24px] border border-white/10 bg-white/[0.055] p-2 backdrop-blur-xl">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={camera.isRecording}
-              className="flex min-h-12 w-full items-center gap-3 rounded-2xl px-3 text-sm font-semibold text-white transition hover:bg-white/10 disabled:opacity-40"
-            >
-              <X className="h-5 w-5" />
-              Yopish
-            </button>
-            <button
-              type="button"
-              onClick={chooseFromDevice}
-              disabled={camera.isRecording}
-              className="flex min-h-12 w-full items-center gap-3 rounded-2xl px-3 text-sm font-semibold text-white transition hover:bg-white/10 disabled:opacity-40"
-            >
-              <Images className="h-5 w-5" />
-              Qurilmadan
-            </button>
-            <button
-              type="button"
-              onClick={switchCamera}
-              disabled={camera.isRecording}
-              className="flex min-h-12 w-full items-center gap-3 rounded-2xl px-3 text-sm font-semibold text-white transition hover:bg-white/10 disabled:opacity-40"
-            >
-              <FlipHorizontal2 className="h-5 w-5" />
-              Kamerani aylantirish
-            </button>
-          </div>
-
-          {mode === 'both' && !camera.isRecording && (
-            <div className="rounded-[24px] border border-white/10 bg-white/[0.055] p-3 backdrop-blur-xl">
-              {captureModeSwitcher}
-            </div>
-          )}
-
-          {!camera.isRecording && (
-            <div className="overflow-hidden rounded-[24px] border border-white/10 bg-white/[0.055] py-2 backdrop-blur-xl">
-              <CameraLensRail value={lensId} onChange={setLensId} />
-            </div>
-          )}
-
-          <div className="flex flex-col items-center gap-3 rounded-[24px] border border-white/10 bg-white/[0.055] px-4 py-5 backdrop-blur-xl">
-            {camera.isRecording && (
-              <span className="rounded-full bg-red-500/15 px-3 py-1 text-xs font-semibold text-red-300">
-                {formatDuration(camera.recordingDuration)}
-              </span>
-            )}
-            {shutter}
-            <span className="text-center text-[11px] leading-4 text-white/55">
-              {captureMode === 'photo'
-                ? 'Rasmga olish uchun bosing'
-                : camera.isRecording
-                  ? 'Yozuvni tugatish uchun bosing'
-                  : 'Video yozishni boshlash uchun bosing'}
-            </span>
-          </div>
-        </aside>
+        <div className="hidden w-14 shrink-0 flex-col items-center gap-3 md:flex">
+          <button
+            type="button"
+            onClick={switchCamera}
+            disabled={camera.isRecording}
+            aria-label="Kamerani aylantirish"
+            className="flex h-12 w-12 items-center justify-center rounded-full bg-white/[0.08] text-white transition hover:bg-white/[0.14] disabled:opacity-35"
+          >
+            <FlipHorizontal2 className="h-6 w-6" />
+          </button>
+        </div>
       </div>
     </div>
   );
