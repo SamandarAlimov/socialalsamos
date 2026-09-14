@@ -7,13 +7,17 @@ import {
   normalizeAlsamosRichTextDocument,
   type AlsamosRichTextDocument,
 } from '@/lib/richTextDocument';
+import {
+  createMediaDraftKey,
+  hasPersistedCreateMediaDraft,
+} from '@/lib/createMediaDraftStore';
 
 /**
  * Post qoralamasini localStorage da saqlash va tiklash.
  *
- * Bu mantiq PostComposer ichida turgan edi; create UI ni map dizayn tiliga
- * (SnapSheet) o'tkazish uchun komponent faqat holat va yuklashni boshqarishi,
- * saqlash esa alohida qatlamda bo'lishi kerak.
+ * Matn/meta kichik bo‘lgani uchun localStorage da qoladi. Media binary esa
+ * createMediaDraftStore orqali IndexedDB da saqlanadi; shu sabab refreshdan
+ * keyin foydalanuvchiga faylni qayta tanlash talab qilinmaydi.
  */
 
 /** MentionCollaborator ichidagi Profile bilan bir xil shakl. */
@@ -61,6 +65,10 @@ export function readStoredPostDraft(userId: string): StoredPostDraft | null {
       return null;
     }
 
+    const mediaDraftPersisted = hasPersistedCreateMediaDraft(
+      createMediaDraftKey(userId, 'post'),
+    );
+
     return {
       version: POST_DRAFT_VERSION,
       savedAt: parsed.savedAt,
@@ -87,7 +95,9 @@ export function readStoredPostDraft(userId: string): StoredPostDraft | null {
         : [],
       scheduledAt:
         typeof parsed.scheduledAt === 'string' ? parsed.scheduledAt : null,
-      hadMedia: Boolean(parsed.hadMedia),
+      // Eski browser yoki IndexedDB saqlash muvaffaqiyatsiz bo‘lgan holatdagina
+      // qayta tanlash ogohlantirishi kerak. Persist qilingan media fonda tiklanadi.
+      hadMedia: Boolean(parsed.hadMedia) && !mediaDraftPersisted,
     };
   } catch {
     return null;
