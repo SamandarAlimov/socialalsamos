@@ -237,12 +237,32 @@ export function useVideoCall() {
     if (!callId || !user?.id || currentCall?.ended_at) return;
 
     let cancelled = false;
+    let inFlight = false;
+    let lastWarningAt = 0;
+
+    const warnHeartbeatFailure = (error: unknown) => {
+      const now = Date.now();
+      if (now - lastWarningAt < 60_000) return;
+      lastWarningAt = now;
+      console.warn('[VideoCall] heartbeat failed', error);
+    };
+
     const ping = async () => {
-      if (cancelled || document.visibilityState === 'hidden') return;
+      if (cancelled || inFlight || document.visibilityState === 'hidden') return;
+
+      inFlight = true;
       try {
-        await supabase.rpc('call_heartbeat', { p_call_id: callId });
-      } catch (e) {
-        console.warn('[VideoCall] heartbeat failed', e);
+        // Supabase RPC failures are normally returned in `error`; they do not
+        // necessarily reject the promise. Always inspect the result so a 4xx
+        // cannot silently look like a successful heartbeat.
+        const { error } = await supabase.rpc('call_heartbeat', { p_call_id: callId });
+        if (error && !cancelled) {
+          warnHeartbeatFailure({ code: error.code, message: error.message });
+        }
+      } catch (error) {
+        if (!cancelled) warnHeartbeatFailure(error);
+      } finally {
+        inFlight = false;
       }
     };
 
