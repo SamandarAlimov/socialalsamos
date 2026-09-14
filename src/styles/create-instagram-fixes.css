@@ -293,4 +293,19 @@
   [data-camera-recorder-root='true'] .alsamos-camera-filter-scroll + div {
     background: transparent !important;
   }
+
+  /* Keep the camera controls in their own lane above the Post/Story/Reel/Live
+     mode dock. This prevents gallery, shutter, effects and camera-flip from
+     falling behind the dock on devices with a home indicator/safe area. */
+  [data-camera-recorder-root='true'] .absolute.inset-x-0.bottom-0.z-30 {
+    bottom: calc(96px + env(safe-area-inset-bottom)) !important;
+    padding-bottom: 0 !important;
+  }
+
+  /* The old live-control gradient was the black strip visible behind the
+     shutter. The camera image should remain visible right through this area. */
+  [data-camera-recorder-root='true'] .absolute.inset-x-0.bottom-0.z-30.bg-gradient-to-t {
+    background-color: transparent !important;
+    background-image: none !important;
+  }
 }
