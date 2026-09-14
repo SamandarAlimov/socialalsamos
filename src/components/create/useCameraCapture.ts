@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CameraLens } from './filters/CameraLensData';
-import { captureSize, drawCameraFrame, supportedRecorderMime } from './cameraCaptureUtils';
+import {
+  captureSize,
+  clampCameraZoom,
+  drawCameraFrame,
+  supportedRecorderMime,
+} from './cameraCaptureUtils';
 
 interface UseCameraCaptureOptions {
   captureMode: 'photo' | 'video';
@@ -33,6 +38,23 @@ export function useCameraCapture(options: UseCameraCaptureOptions) {
   const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
   const [torchSupported, setTorchSupported] = useState(false);
   const [torchEnabled, setTorchEnabled] = useState(false);
+  const [zoom, setZoom] = useState(1);
+
+  // Zoom is controlled at the Create-page level so the same pinch / wheel
+  // gesture can drive Story and Reel without coupling layout code to this hook.
+  // The value is also used by the canvas renderer, therefore saved photos and
+  // recorded videos match the live preview instead of zooming only with CSS.
+  useEffect(() => {
+    const handleZoom = (event: Event) => {
+      const detail = (event as CustomEvent<number | { zoom?: number }>).detail;
+      const nextZoom = typeof detail === 'number' ? detail : detail?.zoom;
+      if (typeof nextZoom !== 'number') return;
+      setZoom(clampCameraZoom(nextZoom));
+    };
+
+    window.addEventListener('alsamos-camera-zoom', handleZoom);
+    return () => window.removeEventListener('alsamos-camera-zoom', handleZoom);
+  }, []);
 
   const stopRenderLoop = useCallback(() => {
     if (renderFrameRef.current !== null) {
@@ -137,10 +159,11 @@ export function useCameraCapture(options: UseCameraCaptureOptions) {
         prepared.video,
         facingMode === 'user',
         lens,
+        zoom,
       );
       drawOverlay?.(prepared.context, prepared.canvas);
     },
-    [drawOverlay, facingMode, lens],
+    [drawOverlay, facingMode, lens, zoom],
   );
 
   const takePhoto = useCallback(() => {
@@ -269,6 +292,7 @@ export function useCameraCapture(options: UseCameraCaptureOptions) {
     recordedBlob,
     torchSupported,
     torchEnabled,
+    zoom,
     startCamera,
     takePhoto,
     startRecording,
