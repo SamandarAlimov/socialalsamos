@@ -1,7 +1,6 @@
-import { useMemo, useState } from 'react';
+import { FormEvent, useMemo, useState } from 'react';
 import {
   AlertTriangle,
-  ArrowLeft,
   ArrowRight,
   ChevronRight,
   Globe2,
@@ -19,6 +18,7 @@ import { Button } from '@/components/ui/button';
 import { CheckoutSheet } from '@/components/marketplace/CheckoutSheet';
 import { InternationalCheckoutSheet } from '@/components/marketplace/InternationalCheckoutSheet';
 import { MarketplaceBottomNav } from '@/components/marketplace/MarketplaceBottomNav';
+import { MarketplaceSectionHeader } from '@/components/marketplace/MarketplaceSectionHeader';
 import {
   CartItem,
   getCartItemStock,
@@ -35,6 +35,7 @@ import '@/styles/marketplace-premium.css';
 
 export default function MarketplaceCartPage() {
   const navigate = useNavigate();
+  const [query, setQuery] = useState('');
   const {
     items,
     total,
@@ -63,36 +64,21 @@ export default function MarketplaceCartPage() {
     };
   }, [hasBlockingIssues, items]);
 
+  const submitSearch = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const value = query.trim();
+    if (value) navigate(`/marketplace?q=${encodeURIComponent(value)}`);
+  };
+
   return (
     <div className="marketplace-neutral min-h-screen min-w-0 overflow-x-clip bg-background pb-8">
-      <header className="sticky top-0 z-40 border-b border-border/40 bg-background/94 backdrop-blur-2xl">
-        <div className="mx-auto flex w-full max-w-5xl items-center gap-3 px-4 py-3 lg:px-6">
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="h-10 w-10 shrink-0 rounded-2xl"
-            onClick={() => navigate('/marketplace')}
-            aria-label="Bozorga qaytish"
-          >
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <h1 className="truncate text-lg font-extrabold tracking-tight sm:text-xl">Savat</h1>
-              {itemCount > 0 && (
-                <span className="rounded-full bg-foreground/10 px-2 py-0.5 text-xs font-extrabold tabular-nums">
-                  {itemCount}
-                </span>
-              )}
-            </div>
-            <p className="hidden text-xs text-muted-foreground sm:block">Mahsulotlar, yetkazish va checkout bir joyda</p>
-          </div>
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-foreground text-background">
-            <ShoppingBag className="h-5 w-5" />
-          </span>
-        </div>
-      </header>
+      <MarketplaceSectionHeader
+        activeSection="cart"
+        searchValue={query}
+        onSearchValueChange={setQuery}
+        onSearchSubmit={submitSearch}
+        itemCount={itemCount}
+      />
 
       <main className="mx-auto w-full max-w-5xl px-4 py-5 lg:px-6 lg:py-7">
         {items.length === 0 ? (
@@ -101,7 +87,9 @@ export default function MarketplaceCartPage() {
               <ShoppingBag className="h-10 w-10 text-muted-foreground/35" />
             </div>
             <h2 className="text-xl font-extrabold">{marketplaceUz.cart.emptyTitle}</h2>
-            <p className="mt-2 max-w-sm text-sm leading-6 text-muted-foreground">{marketplaceUz.cart.emptyDescription}</p>
+            <p className="mt-2 max-w-sm text-sm leading-6 text-muted-foreground">
+              {marketplaceUz.cart.emptyDescription}
+            </p>
             <Button className="mt-5 rounded-xl" onClick={() => navigate('/marketplace')}>
               Bozorga o‘tish
               <ArrowRight className="ml-2 h-4 w-4" />
@@ -157,15 +145,21 @@ export default function MarketplaceCartPage() {
                   onClick={() => void locate()}
                   className="group mt-4 flex w-full min-w-0 items-center gap-3 rounded-2xl border border-border/50 bg-muted/25 p-3 text-left transition hover:bg-muted/50"
                 >
-                  <span className={cn(
-                    'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl',
-                    location ? 'bg-foreground text-background' : 'bg-background text-muted-foreground shadow-sm',
-                  )}>
+                  <span
+                    className={cn(
+                      'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl',
+                      location ? 'bg-foreground text-background' : 'bg-background text-muted-foreground shadow-sm',
+                    )}
+                  >
                     <MapPin className="h-4 w-4" />
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block text-[9px] font-bold uppercase tracking-[0.12em] text-muted-foreground">Yetkazish manzili</span>
-                    <span className="mt-0.5 block truncate text-xs font-semibold">{location?.label || 'Xaritadan manzil tanlang'}</span>
+                    <span className="block text-[9px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
+                      Yetkazish manzili
+                    </span>
+                    <span className="mt-0.5 block truncate text-xs font-semibold">
+                      {location?.label || 'Xaritadan manzil tanlang'}
+                    </span>
                   </span>
                   <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground transition group-hover:translate-x-0.5" />
                 </button>
@@ -177,7 +171,9 @@ export default function MarketplaceCartPage() {
                   </div>
                   <div className="flex items-center justify-between gap-3">
                     <span className="text-muted-foreground">Mahalliy yetkazib berish</span>
-                    <span className="font-medium tabular-nums">{shippingTotal > 0 ? formatPrice(shippingTotal, currency) : 'Bepul'}</span>
+                    <span className="font-medium tabular-nums">
+                      {shippingTotal > 0 ? formatPrice(shippingTotal, currency) : 'Bepul'}
+                    </span>
                   </div>
                   <div className="my-3 h-px bg-border/50" />
                   <div className="flex items-center justify-between gap-3">
@@ -223,8 +219,14 @@ export default function MarketplaceCartPage() {
                 )}
 
                 <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
-                  <span className="flex items-center gap-1"><ShieldCheck className="h-3.5 w-3.5 text-green-500" />{marketplaceUz.cart.securePayment}</span>
-                  <span className="flex items-center gap-1"><Truck className="h-3.5 w-3.5 text-blue-500" />{marketplaceUz.cart.delivery}</span>
+                  <span className="flex items-center gap-1">
+                    <ShieldCheck className="h-3.5 w-3.5 text-green-500" />
+                    {marketplaceUz.cart.securePayment}
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <Truck className="h-3.5 w-3.5 text-blue-500" />
+                    {marketplaceUz.cart.delivery}
+                  </span>
                 </div>
               </div>
             </aside>
@@ -287,10 +289,14 @@ function CartPageItem({
   const exceedsStock = !isSoldOut && item.quantity > stock;
 
   return (
-    <article className={cn(
-      'flex min-w-0 gap-3 rounded-2xl border bg-card p-3 shadow-sm sm:gap-4 sm:p-4',
-      isSoldOut || exceedsStock ? 'border-destructive/35 bg-destructive/[0.03]' : 'border-border/50',
-    )}>
+    <article
+      className={cn(
+        'flex min-w-0 gap-3 rounded-2xl border bg-card p-3 shadow-sm sm:gap-4 sm:p-4',
+        isSoldOut || exceedsStock
+          ? 'border-destructive/35 bg-destructive/[0.03]'
+          : 'border-border/50',
+      )}
+    >
       <button
         type="button"
         onClick={onOpen}
@@ -329,13 +335,17 @@ function CartPageItem({
             </button>
           </div>
           <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{product.seller?.business_name}</p>
-          {variantLabel && <p className="mt-0.5 truncate text-[11px] font-medium text-foreground/75">{variantLabel}</p>}
+          {variantLabel && (
+            <p className="mt-0.5 truncate text-[11px] font-medium text-foreground/75">{variantLabel}</p>
+          )}
           {isSoldOut ? (
             <p className="mt-1 text-[11px] font-semibold text-destructive">{marketplaceUz.cart.soldOut}</p>
           ) : exceedsStock ? (
             <p className="mt-1 text-[11px] font-semibold text-destructive">{marketplaceUz.cart.stockOnly(stock)}</p>
           ) : itemShipping > 0 ? (
-            <p className="mt-1 text-[11px] text-muted-foreground">+ {formatPrice(itemShipping, currency)} {marketplaceUz.cart.shippingSuffix}</p>
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              + {formatPrice(itemShipping, currency)} {marketplaceUz.cart.shippingSuffix}
+            </p>
           ) : null}
         </div>
 
