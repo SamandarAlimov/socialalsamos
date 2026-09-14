@@ -1,0 +1,539 @@
+/*
+ * Camera-first Story/Reel Create skin.
+ *
+ * Business logic remains inside StoryComposer/ReelComposer. This file only
+ * reshapes those canonical composers when ComposePage marks the active mode,
+ * so publishing, draft cleanup, uploads and editors keep one implementation.
+ */
+
+.create-page--immersive {
+  background: #080b10;
+}
+
+.create-page--immersive .create-page-close {
+  border-color: rgb(255 255 255 / 0.12);
+  background: rgb(0 0 0 / 0.34);
+  color: white;
+}
+
+@media (max-width: 767.98px) {
+  .create-page--immersive .create-page-main {
+    overflow: hidden;
+    background: #080b10;
+  }
+
+  .create-page--immersive .create-mode-stage--immersive {
+    height: 100%;
+    max-width: none;
+    padding: 0;
+  }
+
+  .create-page--immersive .create-mode-footer {
+    border-top-color: rgb(255 255 255 / 0.08);
+    background: rgb(8 11 16 / 0.96);
+    box-shadow: none;
+  }
+
+  .create-page--immersive .create-mode-footer > div {
+    max-width: none;
+    padding-left: 14px;
+    padding-right: 14px;
+    padding-top: 4px;
+  }
+
+  .create-page--immersive .create-mode-tabs {
+    gap: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    padding: 0;
+    box-shadow: none;
+  }
+
+  .create-page--immersive .create-mode-tab {
+    min-height: 46px;
+    border-radius: 0;
+    background: transparent !important;
+    box-shadow: none !important;
+    color: rgb(255 255 255 / 0.43);
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    --tw-ring-color: transparent !important;
+  }
+
+  .create-page--immersive .create-mode-tab:hover {
+    background: transparent !important;
+    color: rgb(255 255 255 / 0.72);
+  }
+
+  .create-page--immersive .create-mode-tab.is-active {
+    color: white;
+  }
+
+  .create-page--immersive .create-mode-tab-icon {
+    display: none;
+  }
+
+  /* Shared mobile Story/Reel canvas. */
+  .create-mode-stage[data-create-mode='story'] > div,
+  .create-mode-stage[data-create-mode='reel'] > div {
+    height: 100%;
+    max-width: none;
+    padding: 0;
+  }
+
+  .create-mode-stage[data-create-mode='story'] > div > section,
+  .create-mode-stage[data-create-mode='reel'] > div > section {
+    position: relative;
+    display: block !important;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+    border: 0 !important;
+    border-radius: 28px 28px 0 0;
+    background: #000;
+    box-shadow: none;
+  }
+
+  /* Identity becomes an unobtrusive audience control over the media. */
+  .create-mode-stage[data-create-mode='story'] > div > section > div:nth-of-type(1),
+  .create-mode-stage[data-create-mode='reel'] > div > section > div:nth-of-type(1) {
+    position: absolute;
+    z-index: 34;
+    top: 12px;
+    right: 12px;
+    left: auto;
+    display: flex;
+    width: auto;
+    border: 0 !important;
+    padding: 0 !important;
+  }
+
+  .create-mode-stage[data-create-mode='story'] > div > section > div:nth-of-type(1) > :first-child,
+  .create-mode-stage[data-create-mode='reel'] > div > section > div:nth-of-type(1) > :first-child,
+  .create-mode-stage[data-create-mode='story'] > div > section > div:nth-of-type(1) > p,
+  .create-mode-stage[data-create-mode='reel'] > div > section > div:nth-of-type(1) > p {
+    display: none;
+  }
+
+  .create-mode-stage[data-create-mode='story'] > div > section > div:nth-of-type(1) button,
+  .create-mode-stage[data-create-mode='reel'] > div > section > div:nth-of-type(1) button {
+    min-height: 38px;
+    border: 1px solid rgb(255 255 255 / 0.12) !important;
+    background: rgb(0 0 0 / 0.36) !important;
+    color: white !important;
+    backdrop-filter: blur(16px);
+  }
+
+  /* Portrait media becomes the entire mobile work surface. */
+  .create-mode-stage[data-create-mode='story'] > div > section > div:nth-of-type(2),
+  .create-mode-stage[data-create-mode='reel'] > div > section > div:nth-of-type(2) {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    min-height: 0;
+    overflow: visible !important;
+    border: 0 !important;
+    background: #000;
+    padding: 0 !important;
+  }
+
+  .create-mode-stage[data-create-mode='story'] > div > section > div:nth-of-type(2) > div:first-child,
+  .create-mode-stage[data-create-mode='reel'] > div > section > div:nth-of-type(2) > div:first-child {
+    width: 100% !important;
+    height: 100% !important;
+    max-width: none !important;
+    max-height: none !important;
+    border-radius: 28px 28px 0 0 !important;
+    background: #000;
+    box-shadow: none;
+  }
+
+  .create-mode-stage[data-create-mode='story'] > div > section > div:nth-of-type(2) > div:first-child img,
+  .create-mode-stage[data-create-mode='story'] > div > section > div:nth-of-type(2) > div:first-child video,
+  .create-mode-stage[data-create-mode='reel'] > div > section > div:nth-of-type(2) > div:first-child img,
+  .create-mode-stage[data-create-mode='reel'] > div > section > div:nth-of-type(2) > div:first-child video {
+    object-fit: cover !important;
+  }
+
+  .create-mode-stage[data-create-mode='story'] > div > section > div:nth-of-type(2) > div:first-child::after,
+  .create-mode-stage[data-create-mode='reel'] > div > section > div:nth-of-type(2) > div:first-child::after {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    content: '';
+    background: linear-gradient(
+      to bottom,
+      rgb(0 0 0 / 0.16),
+      transparent 24%,
+      transparent 68%,
+      rgb(0 0 0 / 0.42)
+    );
+  }
+
+  .create-mode-stage[data-create-mode='story'] > div > section > div:nth-of-type(2) > div:first-child > span {
+    top: 14px !important;
+    left: 66px !important;
+  }
+
+  .create-mode-stage[data-create-mode='reel'] > div > section > div:nth-of-type(2) > div:first-child > span {
+    top: 62px !important;
+  }
+
+  /* Caption floats over the media instead of owning a separate panel. */
+  .create-mode-stage[data-create-mode='story'] > div > section > div:nth-of-type(3),
+  .create-mode-stage[data-create-mode='reel'] > div > section > div:nth-of-type(3) {
+    position: absolute;
+    z-index: 28;
+    right: 82px;
+    bottom: 90px;
+    left: 14px;
+    border: 0 !important;
+    background: transparent;
+    padding: 0 !important;
+  }
+
+  .create-mode-stage[data-create-mode='story'] > div > section > div:nth-of-type(3) textarea,
+  .create-mode-stage[data-create-mode='reel'] > div > section > div:nth-of-type(3) textarea {
+    min-height: 44px !important;
+    max-height: 88px;
+    border: 1px solid rgb(255 255 255 / 0.1);
+    border-radius: 18px;
+    background: rgb(0 0 0 / 0.36);
+    padding: 11px 13px;
+    color: white;
+    font-size: 13px;
+    line-height: 1.4;
+    backdrop-filter: blur(18px);
+  }
+
+  .create-mode-stage[data-create-mode='story'] > div > section > div:nth-of-type(3) textarea::placeholder,
+  .create-mode-stage[data-create-mode='reel'] > div > section > div:nth-of-type(3) textarea::placeholder {
+    color: rgb(255 255 255 / 0.58);
+  }
+
+  /* Story tool rail. */
+  .create-mode-stage[data-create-mode='story'] > div > section > div:nth-of-type(4) {
+    position: absolute;
+    z-index: 32;
+    top: 78px;
+    right: 10px;
+    bottom: 18px;
+    display: flex;
+    width: 56px;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    border: 0 !important;
+    background: transparent;
+    padding: 0 !important;
+  }
+
+  .create-mode-stage[data-create-mode='story'] > div > section > div:nth-of-type(4) > div:first-child {
+    display: flex;
+    flex: 0 0 auto;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .create-mode-stage[data-create-mode='story'] > div > section > div:nth-of-type(4) button:not(:last-child),
+  .create-mode-stage[data-create-mode='story'] > div > section > div:nth-of-type(4) > div:first-child button {
+    width: 48px !important;
+    height: 48px !important;
+    min-height: 48px;
+    justify-content: center;
+    border: 1px solid rgb(255 255 255 / 0.09);
+    border-radius: 999px !important;
+    background: rgb(0 0 0 / 0.34) !important;
+    color: white !important;
+    padding: 0 !important;
+    backdrop-filter: blur(16px);
+    font-size: 0;
+  }
+
+  .create-mode-stage[data-create-mode='story'] > div > section > div:nth-of-type(4) button:not(:last-child) svg,
+  .create-mode-stage[data-create-mode='story'] > div > section > div:nth-of-type(4) > div:first-child button svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  .create-mode-stage[data-create-mode='story'] > div > section > div:nth-of-type(4) > button:last-child {
+    width: 52px;
+    height: 52px;
+    min-height: 52px;
+    margin-top: auto;
+    justify-content: center;
+    border: 0;
+    border-radius: 999px;
+    background: white !important;
+    color: #05070a !important;
+    padding: 0 !important;
+    font-size: 0;
+    box-shadow: 0 10px 30px rgb(0 0 0 / 0.34);
+  }
+
+  .create-mode-stage[data-create-mode='story'] > div > section > div:nth-of-type(4) > button:last-child svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  /* Reel option rail: real existing controls, now over the video. */
+  .create-mode-stage[data-create-mode='reel'] > div > section > div:nth-of-type(4) {
+    position: absolute;
+    z-index: 30;
+    top: 76px;
+    left: 10px;
+    display: flex;
+    width: min(170px, 44vw);
+    max-height: calc(100% - 255px);
+    flex-direction: column;
+    gap: 7px;
+    overflow-y: auto;
+    border: 0 !important;
+    background: transparent;
+    scrollbar-width: none;
+  }
+
+  .create-mode-stage[data-create-mode='reel'] > div > section > div:nth-of-type(4)::-webkit-scrollbar {
+    display: none;
+  }
+
+  .create-mode-stage[data-create-mode='reel'] > div > section > div:nth-of-type(4) > * {
+    border: 1px solid rgb(255 255 255 / 0.09) !important;
+    border-radius: 16px !important;
+    background: rgb(0 0 0 / 0.34) !important;
+    color: white !important;
+    backdrop-filter: blur(16px);
+  }
+
+  .create-mode-stage[data-create-mode='reel'] > div > section > div:nth-of-type(4) button {
+    min-height: 46px;
+    padding: 9px 11px;
+  }
+
+  .create-mode-stage[data-create-mode='reel'] > div > section > div:nth-of-type(4) button span,
+  .create-mode-stage[data-create-mode='reel'] > div > section > div:nth-of-type(4) svg,
+  .create-mode-stage[data-create-mode='reel'] > div > section > div:nth-of-type(4) div,
+  .create-mode-stage[data-create-mode='reel'] > div > section > div:nth-of-type(4) label {
+    color: inherit;
+  }
+
+  /* Reel clip rail floats over the preview. */
+  .create-mode-stage[data-create-mode='reel'] > div > section > div:nth-of-type(2) > div:nth-of-type(2) {
+    position: absolute;
+    z-index: 27;
+    right: 76px;
+    bottom: 172px;
+    left: 10px;
+    max-width: none !important;
+    max-height: 122px;
+    overflow-y: auto;
+    border: 1px solid rgb(255 255 255 / 0.08);
+    border-radius: 18px;
+    background: rgb(0 0 0 / 0.4);
+    padding: 8px;
+    backdrop-filter: blur(18px);
+  }
+
+  .create-mode-stage[data-create-mode='reel'] > div > section > div:nth-of-type(2) > div:nth-of-type(2) button,
+  .create-mode-stage[data-create-mode='reel'] > div > section > div:nth-of-type(2) > div:nth-of-type(2) span {
+    color: white;
+  }
+
+  /* Reel bottom capture/publish dock. */
+  .create-mode-stage[data-create-mode='reel'] > div > section > div:nth-of-type(5) {
+    position: absolute;
+    z-index: 33;
+    right: 12px;
+    bottom: 16px;
+    left: 12px;
+    display: flex;
+    border: 0 !important;
+    background: transparent;
+    padding: 0 !important;
+  }
+
+  .create-mode-stage[data-create-mode='reel'] > div > section > div:nth-of-type(5) > button:not(:last-child) {
+    width: 48px;
+    height: 48px;
+    border: 1px solid rgb(255 255 255 / 0.09);
+    border-radius: 999px;
+    background: rgb(0 0 0 / 0.38);
+    color: white;
+    backdrop-filter: blur(16px);
+  }
+
+  .create-mode-stage[data-create-mode='reel'] > div > section > div:nth-of-type(5) > button:last-child {
+    min-height: 48px;
+    border-radius: 999px;
+    background: white !important;
+    color: #05070a !important;
+    padding-right: 20px;
+    padding-left: 20px;
+    box-shadow: 0 10px 30px rgb(0 0 0 / 0.34);
+  }
+
+  .create-mode-stage[data-create-mode='reel'] > div > section > div:nth-of-type(5) > button:last-child:disabled {
+    background: rgb(255 255 255 / 0.42) !important;
+    color: rgb(0 0 0 / 0.62) !important;
+  }
+}
+
+/* Tablet/desktop: same portrait media card, editing controls outside it. */
+@media (min-width: 768px) {
+  .create-page--immersive {
+    background: hsl(var(--background));
+  }
+
+  .create-page--immersive .create-page-main {
+    overflow: hidden;
+  }
+
+  .create-page--immersive .create-mode-stage--immersive {
+    display: flex;
+    height: 100%;
+    max-width: 1180px;
+    align-items: center;
+    justify-content: center;
+    padding: 14px 24px 18px;
+  }
+
+  .create-mode-stage[data-create-mode='story'] > div,
+  .create-mode-stage[data-create-mode='reel'] > div {
+    width: 100%;
+    height: 100%;
+    max-width: none;
+    padding: 0;
+  }
+
+  .create-mode-stage[data-create-mode='story'] > div > section,
+  .create-mode-stage[data-create-mode='reel'] > div > section {
+    display: grid !important;
+    width: 100%;
+    height: min(760px, calc(100dvh - 132px)) !important;
+    min-height: 520px;
+    gap: 16px 24px;
+    overflow: visible !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+
+  .create-mode-stage[data-create-mode='story'] > div > section {
+    grid-template-columns: minmax(270px, 43%) minmax(310px, 1fr) !important;
+    grid-template-rows: auto minmax(0, 1fr) auto !important;
+  }
+
+  .create-mode-stage[data-create-mode='reel'] > div > section {
+    grid-template-columns: minmax(280px, 44%) minmax(320px, 1fr) !important;
+    grid-template-rows: auto auto minmax(0, 1fr) auto !important;
+  }
+
+  .create-mode-stage[data-create-mode='story'] > div > section > div:nth-of-type(1),
+  .create-mode-stage[data-create-mode='reel'] > div > section > div:nth-of-type(1),
+  .create-mode-stage[data-create-mode='story'] > div > section > div:nth-of-type(3),
+  .create-mode-stage[data-create-mode='reel'] > div > section > div:nth-of-type(3),
+  .create-mode-stage[data-create-mode='reel'] > div > section > div:nth-of-type(4),
+  .create-mode-stage[data-create-mode='story'] > div > section > div:nth-of-type(4),
+  .create-mode-stage[data-create-mode='reel'] > div > section > div:nth-of-type(5) {
+    border: 1px solid hsl(var(--border) / 0.62) !important;
+    border-radius: 18px;
+    background: hsl(var(--background) / 0.88);
+    box-shadow: 0 14px 40px -34px hsl(var(--foreground) / 0.45);
+    backdrop-filter: blur(18px);
+  }
+
+  .create-mode-stage[data-create-mode='story'] > div > section > div:nth-of-type(1),
+  .create-mode-stage[data-create-mode='reel'] > div > section > div:nth-of-type(1) {
+    grid-column: 2 !important;
+    grid-row: 1 !important;
+  }
+
+  .create-mode-stage[data-create-mode='story'] > div > section > div:nth-of-type(2),
+  .create-mode-stage[data-create-mode='reel'] > div > section > div:nth-of-type(2) {
+    grid-column: 1 !important;
+    grid-row: 1 / -1 !important;
+    display: flex;
+    min-height: 0;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    overflow: visible !important;
+    border: 0 !important;
+    background: transparent;
+    padding: 0 !important;
+  }
+
+  .create-mode-stage[data-create-mode='story'] > div > section > div:nth-of-type(2) > div:first-child,
+  .create-mode-stage[data-create-mode='reel'] > div > section > div:nth-of-type(2) > div:first-child {
+    width: auto !important;
+    height: min(100%, 720px) !important;
+    max-width: 100% !important;
+    max-height: 100% !important;
+    border-radius: 28px !important;
+    box-shadow: 0 24px 70px -38px rgb(0 0 0 / 0.7);
+  }
+
+  .create-mode-stage[data-create-mode='story'] > div > section > div:nth-of-type(2) > div:first-child img,
+  .create-mode-stage[data-create-mode='story'] > div > section > div:nth-of-type(2) > div:first-child video,
+  .create-mode-stage[data-create-mode='reel'] > div > section > div:nth-of-type(2) > div:first-child img,
+  .create-mode-stage[data-create-mode='reel'] > div > section > div:nth-of-type(2) > div:first-child video {
+    object-fit: cover !important;
+  }
+
+  .create-mode-stage[data-create-mode='story'] > div > section > div:nth-of-type(3),
+  .create-mode-stage[data-create-mode='reel'] > div > section > div:nth-of-type(3) {
+    grid-column: 2 !important;
+    grid-row: 2 !important;
+    min-height: 0;
+  }
+
+  .create-mode-stage[data-create-mode='story'] > div > section > div:nth-of-type(4) {
+    grid-column: 2 !important;
+    grid-row: 3 !important;
+  }
+
+  .create-mode-stage[data-create-mode='reel'] > div > section > div:nth-of-type(4) {
+    grid-column: 2 !important;
+    grid-row: 3 !important;
+    min-height: 0;
+    overflow-y: auto;
+  }
+
+  .create-mode-stage[data-create-mode='reel'] > div > section > div:nth-of-type(5) {
+    grid-column: 2 !important;
+    grid-row: 4 !important;
+  }
+
+  .create-mode-stage[data-create-mode='reel'] > div > section > div:nth-of-type(2) > div:nth-of-type(2) {
+    width: 100%;
+    max-width: 520px !important;
+  }
+
+  .create-page--immersive .create-mode-footer {
+    border-top-color: hsl(var(--border) / 0.45);
+    box-shadow: none;
+  }
+
+  .create-page--immersive .create-mode-tabs {
+    border-color: hsl(var(--border) / 0.55);
+    background: hsl(var(--muted) / 0.22);
+    box-shadow: none;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 920px) {
+  .create-page--immersive .create-mode-stage--immersive {
+    padding-right: 14px;
+    padding-left: 14px;
+  }
+
+  .create-mode-stage[data-create-mode='story'] > div > section,
+  .create-mode-stage[data-create-mode='reel'] > div > section {
+    gap: 12px;
+    grid-template-columns: minmax(250px, 42%) minmax(300px, 1fr) !important;
+  }
+}
