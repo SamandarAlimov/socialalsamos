@@ -15,7 +15,6 @@ import {
   Trash2,
   Users,
   Video,
-  X,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -28,6 +27,7 @@ import type { PostMusicInput } from '@/lib/postMeta';
 import { supabase } from '@/integrations/supabase/client';
 import {
   clearStoredReelDraft,
+  readExpiredReelDraftMusic,
   readStoredReelDraft,
   writeStoredReelDraft,
 } from '@/lib/reelDraft';
@@ -42,6 +42,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { CameraVideoRecorder } from '@/components/create/CameraVideoRecorder';
+import { CreateMusicPreview } from '@/components/create/CreateMusicPreview';
 import { MusicPicker } from '@/components/create/MusicPicker';
 import { MentionCollaborator } from '@/components/create/MentionCollaborator';
 import { VideoEditor, type VideoEditData } from '@/components/VideoEditor';
@@ -62,6 +63,19 @@ interface CollaboratorProfile {
 
 interface ReelComposerProps {
   onDraftStateChange?: (hasDraft: boolean) => void;
+}
+
+interface LatestReelDraftSnapshot {
+  ownerId: string;
+  hasDraft: boolean;
+  draft: {
+    caption: string;
+    visibility: PostVisibility;
+    music: PostMusicInput | null;
+    collaborators: CollaboratorProfile[];
+    coverSecond: number;
+    selectedClipId: string | null;
+  };
 }
 
 const MAX_COLLABORATORS = 10;
@@ -133,6 +147,7 @@ export function ReelComposer({ onDraftStateChange }: ReelComposerProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const musicRef = useRef<PostMusicInput | null>(null);
   const hydratedDraftOwnerRef = useRef<string | null>(null);
+  const latestDraftRef = useRef<LatestReelDraftSnapshot | null>(null);
 
   const [caption, setCaption] = useState('');
   const [visibility, setVisibility] = useState<PostVisibility>('public');
@@ -176,6 +191,10 @@ export function ReelComposer({ onDraftStateChange }: ReelComposerProps) {
     if (!draftOwnerId || hydratedDraftOwnerRef.current === draftOwnerId) return;
 
     hydratedDraftOwnerRef.current = draftOwnerId;
+
+    const expiredDeviceMusic = readExpiredReelDraftMusic(draftOwnerId);
+    if (expiredDeviceMusic) void cleanupDraftMusic(expiredDeviceMusic);
+
     const draft = readStoredReelDraft(draftOwnerId);
     if (draft) {
       setCaption(draft.caption);
@@ -298,6 +317,21 @@ export function ReelComposer({ onDraftStateChange }: ReelComposerProps) {
     collaborators.length > 0 ||
     visibility !== 'public';
 
+  if (draftOwnerId) {
+    latestDraftRef.current = {
+      ownerId: draftOwnerId,
+      hasDraft,
+      draft: {
+        caption,
+        visibility,
+        music,
+        collaborators,
+        coverSecond,
+        selectedClipId,
+      },
+    };
+  }
+
   useEffect(() => {
     onDraftStateChange?.(hasDraft);
   }, [hasDraft, onDraftStateChange]);
@@ -339,29 +373,69 @@ export function ReelComposer({ onDraftStateChange }: ReelComposerProps) {
     musicRef.current = music;
   }, [music]);
 
+  // Mode almashtirishda qoralama o‘chirilmaydi. Debounce hali ishlamagan bo‘lsa
+  // ham eng so‘nggi metadata sinxron tarzda localStorage ga tushadi.
   useEffect(() => {
     return () => {
-      void cleanupDraftMusic(musicRef.current);
+      const latest = latestDraftRef.current;
+      if (!latest) return;
+      if (latest.hasDraft) writeStoredReelDraft(latest.ownerId, latest.draft);
+      else clearStoredReelDraft(latest.ownerId);
     };
   }, []);
 
-  const handleMusicChange = useCallback((next: PostMusicInput | null) => {
-    const current = musicRef.current;
-    const currentObject = draftMusicObject(current);
-    const nextObject = draftMusicObject(next);
-    const sameObject =
-      currentObject &&
-      nextObject &&
-      currentObject.bucket === nextObject.bucket &&
-      currentObject.key === nextObject.key;
+  const handleMusicChange = useCallback(
+    (next: PostMusicInput | null) => {
+      const current = musicRef.current;
+      const currentObject = draftMusicObject(current);
+      const nextObject = draftMusicObject(next);
+      const sameObject =
+        currentObject &&
+        nextObject &&
+        currentObject.bucket === nextObject.bucket &&
+        currentObject.key === nextObject.key;
 
-    if (current && !sameObject) {
-      void cleanupDraftMusic(current);
-    }
+      // Device audio tanlangach darhol draft ownership yoziladi. Shundan keyin
+      // mode almashtirish/unmount uni orphan qilib yoki tasodifan o‘chirib yubormaydi.
+      if (draftOwnerId) {
+        const nextHasDraft =
+          attachments.length > 0 ||
+          caption.trim().length > 0 ||
+          Boolean(next) ||
+          collaborators.length > 0 ||
+          visibility !== 'public';
 
-    musicRef.current = next;
-    setMusic(next);
-  }, []);
+        if (nextHasDraft) {
+          writeStoredReelDraft(draftOwnerId, {
+            caption,
+            visibility,
+            music: next,
+            collaborators,
+            coverSecond,
+            selectedClipId,
+          });
+        } else {
+          clearStoredReelDraft(draftOwnerId);
+        }
+      }
+
+      if (current && !sameObject) {
+        void cleanupDraftMusic(current);
+      }
+
+      musicRef.current = next;
+      setMusic(next);
+    },
+    [
+      attachments.length,
+      caption,
+      collaborators,
+      coverSecond,
+      draftOwnerId,
+      selectedClipId,
+      visibility,
+    ],
+  );
 
   const addVideoFiles = useCallback(
     async (files: File[]) => {
@@ -539,6 +613,7 @@ export function ReelComposer({ onDraftStateChange }: ReelComposerProps) {
 
       markAttachmentsPublished();
       if (draftOwnerId) clearStoredReelDraft(draftOwnerId);
+      latestDraftRef.current = null;
       musicRef.current = null;
       clearAttachments();
       setCaption('');
@@ -647,11 +722,12 @@ export function ReelComposer({ onDraftStateChange }: ReelComposerProps) {
               </button>
             )}
 
-            {music && (
-              <span className="pointer-events-none absolute right-3 top-3 flex max-w-[65%] items-center gap-1.5 rounded-full bg-black/55 px-2.5 py-1 text-[10px] font-medium text-white backdrop-blur">
-                <Music2 className="h-3 w-3 shrink-0" />
-                <span className="truncate">{music.track?.title ?? 'Musiqa'}</span>
-              </span>
+            {music && activeClip && (
+              <CreateMusicPreview
+                music={music}
+                enabled
+                className="absolute right-3 top-3 max-w-[70%]"
+              />
             )}
           </div>
 
