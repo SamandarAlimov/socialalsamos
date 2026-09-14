@@ -28,6 +28,7 @@ export function useCameraCapture(options: UseCameraCaptureOptions) {
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const renderFrameRef = useRef<number | null>(null);
+  const zoomRef = useRef(1);
 
   const [cameraReady, setCameraReady] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
@@ -41,15 +42,17 @@ export function useCameraCapture(options: UseCameraCaptureOptions) {
   const [zoom, setZoom] = useState(1);
 
   // Zoom is controlled at the Create-page level so the same pinch / wheel
-  // gesture can drive Story and Reel without coupling layout code to this hook.
-  // The value is also used by the canvas renderer, therefore saved photos and
-  // recorded videos match the live preview instead of zooming only with CSS.
+  // gesture can drive Post, Story and Reel without coupling layout code to this
+  // hook. zoomRef lets an already-running recording read the latest value on
+  // every canvas frame rather than freezing the zoom from recording start.
   useEffect(() => {
     const handleZoom = (event: Event) => {
       const detail = (event as CustomEvent<number | { zoom?: number }>).detail;
       const nextZoom = typeof detail === 'number' ? detail : detail?.zoom;
       if (typeof nextZoom !== 'number') return;
-      setZoom(clampCameraZoom(nextZoom));
+      const safeZoom = clampCameraZoom(nextZoom);
+      zoomRef.current = safeZoom;
+      setZoom(safeZoom);
     };
 
     window.addEventListener('alsamos-camera-zoom', handleZoom);
@@ -170,11 +173,11 @@ export function useCameraCapture(options: UseCameraCaptureOptions) {
         prepared.video,
         facingMode === 'user',
         lens,
-        zoom,
+        zoomRef.current,
       );
       drawOverlay?.(prepared.context, prepared.canvas);
     },
-    [drawOverlay, facingMode, lens, zoom],
+    [drawOverlay, facingMode, lens],
   );
 
   const takePhoto = useCallback(() => {
