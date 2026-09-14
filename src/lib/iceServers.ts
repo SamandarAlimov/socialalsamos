@@ -1,28 +1,11 @@
 /**
  * Centralised ICE server configuration for Alsamos native WebRTC.
  *
- * Reliable internet calling needs two paths:
- *   1) direct P2P (host/srflx candidates) whenever NAT traversal succeeds;
- *   2) TURN relay as a fallback when CGNAT, symmetric NAT, corporate Wi-Fi,
- *      mobile carrier NAT, VPNs or firewalls block the direct path.
- *
- * Browsers still prefer the best/direct candidate pair automatically. Merely
- * providing TURN does NOT force every call through a relay; it only makes a
- * relay candidate available when direct connectivity cannot be established.
- *
- * TURN may be configured either through Vite environment variables:
- *   VITE_TURN_URLS="turn:turn.example.com:3478,turns:turn.example.com:5349"
- *   VITE_TURN_USERNAME
- *   VITE_TURN_CREDENTIAL
- *
- * or through public.call_webrtc_config(key='ice_servers'), which is the existing
- * rotatable production configuration path.
- *
- * Both sources are intentionally kept. A stale database value must never hide
- * a valid deployment-time TURN fallback (and vice versa).
- *
- * Emergency/debug opt-out only:
- *   VITE_WEBRTC_ALLOW_TURN_RELAY=false
+ * Production uses public.call_webrtc_config as the rotatable source of truth.
+ * Vite TURN variables are an emergency fallback only when the remote config
+ * cannot be fetched at all. This is important because deployment-time TURN
+ * credentials can outlive their provider account/credential and otherwise get
+ * merged back into a newer STUN-only or rotated remote configuration.
  */
 
 const STUN_SERVERS: RTCIceServer[] = [
@@ -38,12 +21,6 @@ const TURN_RELAY_ENABLED =
     .trim()
     .toLowerCase() !== "false";
 
-/**
- * Remote TURN credentials are deliberately short cached. Production providers
- * commonly rotate ephemeral credentials; keeping them for the lifetime of the
- * SPA makes later calls fail even though call_webrtc_config already contains a
- * replacement credential.
- */
 export const REMOTE_ICE_CACHE_TTL_MS = 60_000;
 export const RELAY_PROBE_TTL_MS = 60_000;
 
@@ -64,7 +41,6 @@ export interface TurnRelayProbeResult {
 }
 
 export interface LoadIceServersOptions {
-  /** Bypass a still-fresh remote cache. Concurrent refreshes are still deduped. */
   forceRefresh?: boolean;
 }
 
@@ -115,7 +91,6 @@ export function applyRelayPolicy(
     });
 
     if (allowedUrls.length === 0) continue;
-
     directOnly.push({
       ...server,
       urls: Array.isArray(server.urls) ? allowedUrls : allowedUrls[0],
@@ -132,9 +107,25 @@ export function applyRelayPolicy(
   return directOnly;
 }
 
+function withoutTurnServers(servers: RTCIceServer[]): RTCIceServer[] {
+  const directOnly: RTCIceServer[] = [];
+
+  for (const server of servers) {
+    const allowedUrls = urlsOfIceServer(server).filter((url) => !isTurnUrl(url));
+    if (allowedUrls.length === 0) continue;
+    directOnly.push({
+      ...server,
+      urls: Array.isArray(server.urls) ? allowedUrls : allowedUrls[0],
+      username: undefined,
+      credential: undefined,
+    });
+  }
+
+  return directOnly;
+}
+
 function iceServerCredentialKey(server: RTCIceServer): string {
-  const credential =
-    typeof server.credential === "string" ? server.credential : "";
+  const credential = typeof server.credential === "string" ? server.credential : "";
   return `${server.username ?? ""}|${credential}`;
 }
 
@@ -169,15 +160,6 @@ export function mergeIceServerSources(
   );
 }
 
-/**
- * Accept both supported database payload shapes:
- *   1) legacy/direct array: [{ urls: ... }]
- *   2) RTCConfiguration-style object: { iceServers: [{ urls: ... }] }
- *
- * Production currently stores the second shape. Treating only the top-level
- * value as an array silently discarded valid TURN credentials and left calls
- * with STUN-only candidates.
- */
 export function normalizeRemoteIceServers(value: unknown): RTCIceServer[] {
   const candidates = Array.isArray(value)
     ? value
@@ -225,7 +207,7 @@ function reportRelayConfiguration(servers: RTCIceServer[]) {
   if (!warnedTurnMissing) {
     warnedTurnMissing = true;
     console.warn(
-      "[ICE] No TURN relay is configured. Direct calls can fail on CGNAT/symmetric NAT/restrictive firewalls.",
+      "[ICE] No operational TURN relay credential is currently configured. Direct calls can fail on CGNAT/symmetric NAT/restrictive firewalls.",
     );
   }
 }
@@ -281,7 +263,6 @@ export async function probeTurnRelay(
       bundlePolicy: "max-bundle",
       rtcpMuxPolicy: "require",
     });
-
     pc.createDataChannel("turn-relay-probe");
 
     const relayGathered = new Promise<boolean>((resolve) => {
@@ -328,10 +309,7 @@ export async function probeTurnRelay(
       configured: true,
       relayCandidateGathered,
       ...(!relayCandidateGathered
-        ? {
-            error:
-              "TURN is configured but this browser could not gather a relay candidate",
-          }
+        ? { error: "TURN is configured but this browser could not gather a relay candidate" }
         : {}),
     };
   } catch (error) {
@@ -351,8 +329,6 @@ export async function probeTurnRelay(
 }
 
 function relayConfigFingerprint(servers: RTCIceServer[]) {
-  // Never log this value: credentials deliberately participate so credential
-  // rotation triggers a new operational probe.
   return getTurnIceServers(servers)
     .map((server) => `${urlsOfIceServer(server).join(",")}|${iceServerCredentialKey(server)}`)
     .sort()
@@ -385,8 +361,6 @@ function verifyRelayOperationally(servers: RTCIceServer[]) {
           "[ICE] TURN relay operational check passed: a relay candidate was gathered.",
         );
       } else {
-        // Do not keep a potentially expired remote credential for the rest of
-        // the SPA lifetime. The next call/recovery gets a fresh DB value.
         invalidateCachedRemoteIceServers();
         console.error(
           "[ICE] TURN relay operational check FAILED: configured TURN did not produce a relay candidate.",
@@ -413,8 +387,10 @@ function verifyRelayOperationally(servers: RTCIceServer[]) {
 /**
  * Load rotatable production ICE configuration.
  *
- * Remote TURN credentials are cached only briefly. `inflight` is request
- * deduplication, not a permanent cache: it MUST be cleared after resolution.
+ * If the DB row is successfully fetched and contains a valid ICE array, its
+ * TURN decision is authoritative. Environment TURN is only used when the DB
+ * cannot be fetched/parsed. This prevents retired deployment credentials from
+ * being silently merged back into a newer production configuration.
  */
 export async function loadIceServers(
   options: LoadIceServersOptions = {},
@@ -431,7 +407,9 @@ export async function loadIceServers(
 
   const request = (async () => {
     const environmentServers = getEnvironmentIceServers();
+    const environmentHasTurn = hasTurnRelay(environmentServers);
     let remoteServers: RTCIceServer[] = [];
+    let remoteAuthoritative = false;
 
     try {
       const { supabase } = await import("@/integrations/supabase/client");
@@ -445,6 +423,7 @@ export async function loadIceServers(
 
       const value = (data as { value?: unknown } | null)?.value;
       remoteServers = normalizeRemoteIceServers(value);
+      remoteAuthoritative = remoteServers.length > 0;
     } catch (error) {
       console.warn(
         "[ICE] remote ICE config unavailable, using environment/defaults",
@@ -452,10 +431,23 @@ export async function loadIceServers(
       );
     }
 
+    const environmentForMerge = remoteAuthoritative
+      ? withoutTurnServers(environmentServers)
+      : environmentServers;
+
     const merged = mergeIceServerSources(
-      applyRelayPolicy(environmentServers),
+      applyRelayPolicy(environmentForMerge),
       applyRelayPolicy(remoteServers),
     );
+
+    console.info("[ICE] transport source audit", {
+      remoteAuthoritative,
+      remoteTurnConfigured: hasTurnRelay(remoteServers),
+      environmentTurnConfigured: environmentHasTurn,
+      activeTurnConfigured: hasTurnRelay(merged),
+      serverEntries: merged.length,
+    });
+
     cachedRemote = merged;
     cachedRemoteAt = Date.now();
     reportRelayConfiguration(merged);
