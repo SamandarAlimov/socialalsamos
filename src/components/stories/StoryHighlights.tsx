@@ -32,7 +32,6 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ProfileCommercePanel } from '@/components/profile/ProfileCommercePanel';
 
 interface StoryHighlightsProps {
   userId: string;
@@ -119,8 +118,6 @@ export function StoryHighlights({ userId, className }: StoryHighlightsProps) {
 
   return (
     <>
-      {isOwnProfile && <ProfileCommercePanel className="mb-6" />}
-
       <div className={cn('space-y-2', className)}>
         <div className="flex items-center justify-between">
           <h2 className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
