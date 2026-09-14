@@ -12,7 +12,8 @@ interface CreateMusicPreviewProps {
   compact?: boolean;
   /**
    * Video bilan ishlaganda parent media holatini beradi. Undefined bo‘lsa
-   * komponent rasm/creator preview kabi mustaqil ishlaydi.
+   * komponent yonidagi video elementni avtomatik topib, unga sinxronlanadi;
+   * video bo‘lmasa rasm/creator preview kabi mustaqil ishlaydi.
    */
   mediaPlaying?: boolean;
   mediaTimeSeconds?: number | null;
@@ -41,10 +42,14 @@ export function CreateMusicPreview({
   const playerId = useId();
   const rootRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
+  const nearbyVideoRef = useRef<HTMLVideoElement | null>(null);
   const [resolvedUrl, setResolvedUrl] = useState('');
   const [isPlaying, setIsPlaying] = useState(false);
   const [autoplayBlocked, setAutoplayBlocked] = useState(false);
   const [isVisible, setIsVisible] = useState(!visibilityManaged);
+  const [hasNearbyVideo, setHasNearbyVideo] = useState(false);
+  const [nearbyVideoPlaying, setNearbyVideoPlaying] = useState(false);
+  const [nearbyVideoTimeSeconds, setNearbyVideoTimeSeconds] = useState(0);
 
   const track = music?.track ?? null;
   const startSeconds = Math.max(0, music?.startSeconds ?? 0);
@@ -68,6 +73,19 @@ export function CreateMusicPreview({
         : music?.trackId ?? '',
     [music?.trackId, track],
   );
+
+  const effectiveMediaPlaying =
+    mediaPlaying !== undefined
+      ? mediaPlaying
+      : hasNearbyVideo
+        ? nearbyVideoPlaying
+        : undefined;
+  const effectiveMediaTimeSeconds =
+    mediaPlaying !== undefined
+      ? mediaTimeSeconds
+      : hasNearbyVideo
+        ? nearbyVideoTimeSeconds
+        : null;
 
   useEffect(() => {
     let cancelled = false;
@@ -120,6 +138,91 @@ export function CreateMusicPreview({
     observer.observe(node);
     return () => observer.disconnect();
   }, [visibilityManaged]);
+
+  // Creator/Post previewlarda parent alohida playback state bermasa, shu music
+  // chip turgan media konteyneridagi videoni avtomatik topamiz. Natijada rasmda
+  // soundtrack mustaqil kuylaydi, videoda esa play/pause/seek bilan birga yuradi.
+  useEffect(() => {
+    if (mediaPlaying !== undefined) {
+      nearbyVideoRef.current = null;
+      setHasNearbyVideo(false);
+      setNearbyVideoPlaying(false);
+      setNearbyVideoTimeSeconds(0);
+      return;
+    }
+
+    const root = rootRef.current;
+    const scope = root?.parentElement;
+    if (!scope) return;
+
+    let boundVideo: HTMLVideoElement | null = null;
+    let detach = () => {};
+
+    const sync = () => {
+      const video = boundVideo;
+      if (!video) return;
+      setNearbyVideoPlaying(!video.paused && !video.ended);
+      setNearbyVideoTimeSeconds(
+        Number.isFinite(video.currentTime) ? video.currentTime : 0,
+      );
+    };
+
+    const bind = () => {
+      const nextVideo = scope.querySelector<HTMLVideoElement>('video');
+      if (nextVideo === boundVideo) {
+        sync();
+        return;
+      }
+
+      detach();
+      boundVideo = nextVideo;
+      nearbyVideoRef.current = nextVideo;
+      setHasNearbyVideo(Boolean(nextVideo));
+
+      if (!nextVideo) {
+        setNearbyVideoPlaying(false);
+        setNearbyVideoTimeSeconds(0);
+        detach = () => {};
+        return;
+      }
+
+      const events: Array<keyof HTMLMediaElementEventMap> = [
+        'play',
+        'playing',
+        'pause',
+        'ended',
+        'timeupdate',
+        'seeking',
+        'seeked',
+        'loadedmetadata',
+      ];
+      events.forEach((eventName) => nextVideo.addEventListener(eventName, sync));
+      sync();
+
+      detach = () => {
+        events.forEach((eventName) => nextVideo.removeEventListener(eventName, sync));
+      };
+    };
+
+    bind();
+
+    const observer =
+      typeof MutationObserver === 'undefined'
+        ? null
+        : new MutationObserver(bind);
+    observer?.observe(scope, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['src'],
+    });
+
+    return () => {
+      observer?.disconnect();
+      detach();
+      if (nearbyVideoRef.current === boundVideo) nearbyVideoRef.current = null;
+    };
+  }, [mediaPlaying, sourceIdentity]);
 
   const seekToStart = useCallback(() => {
     const audio = audioRef.current;
@@ -186,29 +289,37 @@ export function CreateMusicPreview({
 
   // Video bilan biriktirilganda music uning play/pause holatiga ergashadi.
   useEffect(() => {
-    if (mediaPlaying === undefined) return;
+    if (effectiveMediaPlaying === undefined) return;
     const audio = audioRef.current;
     if (!audio || !resolvedUrl) return;
 
-    if (!enabled || !isVisible || !mediaPlaying) {
+    if (!enabled || !isVisible || !effectiveMediaPlaying) {
       audio.pause();
       return;
     }
 
-    seekToMediaClock(mediaTimeSeconds, true);
+    seekToMediaClock(effectiveMediaTimeSeconds, true);
     void play();
-  }, [enabled, isVisible, mediaPlaying, mediaTimeSeconds, play, resolvedUrl, seekToMediaClock]);
+  }, [
+    effectiveMediaPlaying,
+    effectiveMediaTimeSeconds,
+    enabled,
+    isVisible,
+    play,
+    resolvedUrl,
+    seekToMediaClock,
+  ]);
 
   // Video timeupdate/seek bilan music driftini tuzatadi.
   useEffect(() => {
-    if (mediaPlaying === undefined || !mediaPlaying) return;
-    seekToMediaClock(mediaTimeSeconds);
-  }, [mediaPlaying, mediaTimeSeconds, seekToMediaClock]);
+    if (effectiveMediaPlaying === undefined || !effectiveMediaPlaying) return;
+    seekToMediaClock(effectiveMediaTimeSeconds);
+  }, [effectiveMediaPlaying, effectiveMediaTimeSeconds, seekToMediaClock]);
 
-  // Rasm yoki creator preview: media play state yo‘q bo‘lsa mustaqil ijro.
+  // Rasm yoki creator preview: video topilmasa mustaqil ijro.
   useEffect(() => {
     const audio = audioRef.current;
-    if (!audio || mediaPlaying !== undefined) return;
+    if (!audio || effectiveMediaPlaying !== undefined) return;
 
     if (!enabled || !resolvedUrl || !isVisible || !autoPlay) {
       audio.pause();
@@ -225,7 +336,15 @@ export function CreateMusicPreview({
     else audio.addEventListener('loadedmetadata', startPlayback, { once: true });
 
     return () => audio.removeEventListener('loadedmetadata', startPlayback);
-  }, [autoPlay, enabled, isVisible, mediaPlaying, play, resolvedUrl, seekToStart]);
+  }, [
+    autoPlay,
+    effectiveMediaPlaying,
+    enabled,
+    isVisible,
+    play,
+    resolvedUrl,
+    seekToStart,
+  ]);
 
   useEffect(() => {
     if (isVisible) return;
@@ -236,27 +355,55 @@ export function CreateMusicPreview({
     const audio = audioRef.current;
     if (!audio || endSeconds == null || audio.currentTime < endSeconds) return;
 
-    if (mediaPlaying !== undefined && mediaTimeSeconds != null) {
-      seekToMediaClock(mediaTimeSeconds, true);
-      if (mediaPlaying) void play();
+    if (effectiveMediaPlaying !== undefined && effectiveMediaTimeSeconds != null) {
+      seekToMediaClock(effectiveMediaTimeSeconds, true);
+      if (effectiveMediaPlaying) void play();
       return;
     }
 
     seekToStart();
     void play();
-  }, [endSeconds, mediaPlaying, mediaTimeSeconds, play, seekToMediaClock, seekToStart]);
+  }, [
+    effectiveMediaPlaying,
+    effectiveMediaTimeSeconds,
+    endSeconds,
+    play,
+    seekToMediaClock,
+    seekToStart,
+  ]);
 
   const togglePlayback = useCallback(() => {
     const audio = audioRef.current;
     if (!audio) return;
+
+    // Auto-detected creator video bo‘lsa chip play/pause'i videoni ham boshqaradi.
+    // Shunda soundtrack hech qachon videodan alohida yugurib ketmaydi.
+    const nearbyVideo = nearbyVideoRef.current;
+    if (mediaPlaying === undefined && nearbyVideo) {
+      if (nearbyVideo.paused || nearbyVideo.ended) {
+        void nearbyVideo.play().catch(() => {});
+      } else {
+        nearbyVideo.pause();
+      }
+      return;
+    }
+
     if (audio.paused) {
-      if (mediaPlaying !== undefined) seekToMediaClock(mediaTimeSeconds, true);
+      if (effectiveMediaPlaying !== undefined) {
+        seekToMediaClock(effectiveMediaTimeSeconds, true);
+      }
       void play();
     } else {
       audio.pause();
       setIsPlaying(false);
     }
-  }, [mediaPlaying, mediaTimeSeconds, play, seekToMediaClock]);
+  }, [
+    effectiveMediaPlaying,
+    effectiveMediaTimeSeconds,
+    mediaPlaying,
+    play,
+    seekToMediaClock,
+  ]);
 
   if (!music || !track?.audioUrl) return null;
 
@@ -268,12 +415,12 @@ export function CreateMusicPreview({
         preload="metadata"
         onTimeUpdate={handleTimeUpdate}
         onEnded={() => {
-          if (mediaPlaying !== undefined && mediaTimeSeconds != null) {
-            seekToMediaClock(mediaTimeSeconds, true);
+          if (effectiveMediaPlaying !== undefined && effectiveMediaTimeSeconds != null) {
+            seekToMediaClock(effectiveMediaTimeSeconds, true);
           } else {
             seekToStart();
           }
-          if (mediaPlaying !== false) void play();
+          if (effectiveMediaPlaying !== false) void play();
         }}
         onPlay={() => setIsPlaying(true)}
         onPause={() => setIsPlaying(false)}
