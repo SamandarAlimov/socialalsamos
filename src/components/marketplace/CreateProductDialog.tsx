@@ -458,6 +458,7 @@ export function CreateProductDialog({ open, onOpenChange, onSuccess }: CreatePro
     return valid.reduce((total, group) => total * group.values.length, 1);
   }, [optionGroups]);
   const variantLimitExceeded = potentialVariantCount > MAX_VARIANTS;
+  const hasUsableVariants = hasVariants && !variantLimitExceeded && generatedVariants.length > 0;
   const productImages = useMemo(
     () => media.filter(item => item.mediaType !== 'video'),
     [media],
@@ -614,18 +615,16 @@ export function CreateProductDialog({ open, onOpenChange, onSuccess }: CreatePro
       }
     }
 
-    if (hasVariants && (variantLimitExceeded || generatedVariants.length === 0)) {
+    if (hasVariants && variantLimitExceeded) {
       toast({
         title: 'Variantlarni tekshiring',
-        description: variantLimitExceeded
-          ? `Bitta mahsulot uchun ko‘pi bilan ${MAX_VARIANTS} variant yarating.`
-          : 'Kamida bitta xususiyat nomi va qiymatlarini kiriting.',
+        description: `Bitta mahsulot uchun ko‘pi bilan ${MAX_VARIANTS} variant yarating.`,
         variant: 'destructive',
       });
       return;
     }
 
-    if (hasVariants) {
+    if (hasUsableVariants) {
       const ready = await checkProductVariantsReady();
       if (!ready) return;
     }
@@ -644,7 +643,7 @@ export function CreateProductDialog({ open, onOpenChange, onSuccess }: CreatePro
       };
     });
 
-    const totalStock = hasVariants
+    const totalStock = hasUsableVariants
       ? parsedVariants.reduce((sum, variant) => sum + variant.quantity, 0)
       : Math.max(0, Math.floor(Number(quantity) || 0));
 
@@ -714,7 +713,7 @@ export function CreateProductDialog({ open, onOpenChange, onSuccess }: CreatePro
         if (error) console.warn('Marketplace product extra fields were not saved:', error);
       }
 
-      if (hasVariants) {
+      if (hasUsableVariants) {
         const variantsSaved = await createProductVariants(result.id, parsedVariants);
         if (!variantsSaved) {
           await rollbackCreatedProduct(result.id);
@@ -724,7 +723,7 @@ export function CreateProductDialog({ open, onOpenChange, onSuccess }: CreatePro
 
       toast({
         title: isRestaurant ? 'Menyu pozitsiyasi tayyor' : 'Mahsulot tayyor',
-        description: hasVariants
+        description: hasUsableVariants
           ? `${parsedVariants.length} ta variant, ${totalStock} dona umumiy qoldiq bilan e’lon qilindi.`
           : isRestaurant
             ? `${restaurantCategory} bo‘limiga qo‘shildi · tayyorlash ~${Math.round(Number(preparationMinutes) || 25)} daqiqa.`
@@ -753,11 +752,11 @@ export function CreateProductDialog({ open, onOpenChange, onSuccess }: CreatePro
                 <DialogTitle className="text-lg">
                   {isRestaurant ? 'Professional menyu pozitsiyasi' : 'Professional mahsulot yaratish'}
                 </DialogTitle>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  {isRestaurant
-                    ? 'Taom media, porsiya, qo‘shimchalar, tayyorlash vaqti va yetkazishni bitta joyda boshqaring.'
-                    : 'Media, variantlar, ombor, SKU va xaritadagi joylashuvni bitta joyda boshqaring.'}
-                </p>
+                {isRestaurant && (
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    Taom media, porsiya, qo‘shimchalar, tayyorlash vaqti va yetkazishni bitta joyda boshqaring.
+                  </p>
+                )}
               </div>
             </div>
           </DialogHeader>
@@ -1025,7 +1024,7 @@ export function CreateProductDialog({ open, onOpenChange, onSuccess }: CreatePro
                   {location && <p className="text-[10px] tabular-nums text-muted-foreground">{location.latitude.toFixed(5)}, {location.longitude.toFixed(5)}</p>}
                 </section>
 
-                {!hasVariants && (
+                {!hasUsableVariants && (
                   <section className="space-y-2 rounded-2xl border border-border/50 p-4">
                     <Label>{isRestaurant ? 'Sotuvdagi porsiya soni' : 'Ombordagi soni'}</Label>
                     <Input type="number" min="0" value={quantity} onChange={event => setQuantity(event.target.value)} className="h-11 rounded-xl" />
@@ -1048,8 +1047,8 @@ export function CreateProductDialog({ open, onOpenChange, onSuccess }: CreatePro
           </ScrollArea>
 
           <div className="flex items-center justify-between gap-3 border-t border-border/60 bg-background px-5 py-4">
-            <p className="hidden text-xs text-muted-foreground sm:block">{hasVariants ? `${generatedVariants.length} variant · ${generatedVariants.reduce((sum, variant) => sum + Math.max(0, Number(readVariantEdit(variant.key).quantity) || 0), 0)} dona` : `${Math.max(0, Number(quantity) || 0)} dona`}</p>
-            <Button className="ml-auto h-11 min-w-44 rounded-xl" onClick={() => void handleSubmit()} disabled={!title.trim() || !price || isSubmitting || isUploading || (hasVariants && (variantLimitExceeded || generatedVariants.length === 0))}>
+            <p className="hidden text-xs text-muted-foreground sm:block">{hasUsableVariants ? `${generatedVariants.length} variant · ${generatedVariants.reduce((sum, variant) => sum + Math.max(0, Number(readVariantEdit(variant.key).quantity) || 0), 0)} dona` : `${Math.max(0, Number(quantity) || 0)} dona`}</p>
+            <Button className="ml-auto h-11 min-w-44 rounded-xl" onClick={() => void handleSubmit()} disabled={!title.trim() || !price || isSubmitting || isUploading}>
               {isSubmitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saqlanmoqda…</> : <><PackagePlus className="mr-2 h-4 w-4" /> {isRestaurant ? 'Menyuga qo‘shish' : 'E’lon qilish'}</>}
             </Button>
           </div>
