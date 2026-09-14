@@ -206,3 +206,69 @@
   position: relative;
   z-index: 2;
 }
+
+/* -------------------------------------------------------------------------- */
+/* Mobile camera: the camera is the page, not a centered 9:16 card.           */
+/* -------------------------------------------------------------------------- */
+@media (max-width: 767.98px) {
+  /* The recorder's first flex row must stretch to the viewport width. Without
+     this override the 9:16 aspect ratio sizes the row from its height and leaves
+     large black gutters on narrow phones. */
+  [data-camera-recorder-root='true'] > div {
+    width: 100% !important;
+    max-width: none !important;
+    padding-right: 0 !important;
+    padding-left: 0 !important;
+  }
+
+  [data-camera-recorder-root='true'] > div > div:first-child {
+    width: 100% !important;
+    max-width: none !important;
+    align-self: stretch !important;
+    gap: 0 !important;
+  }
+
+  [data-camera-recorder-root='true'] > div > div:first-child > div {
+    width: 100% !important;
+    max-width: none !important;
+    flex: 1 1 auto !important;
+  }
+
+  /* Capture output remains 9:16 in useCameraCapture, while the live preview
+     crops edge-to-edge like Instagram instead of shrinking into a portrait card. */
+  [data-camera-recorder-root='true'] .aspect-\[9\/16\] {
+    width: 100% !important;
+    height: 100% !important;
+    max-width: none !important;
+    max-height: none !important;
+    aspect-ratio: auto !important;
+    border-radius: 24px 24px 0 0 !important;
+  }
+
+  [data-camera-recorder-root='true'] video,
+  [data-camera-recorder-root='true'] img {
+    object-fit: cover !important;
+  }
+
+  /* Instagram does not put a black rounded rectangle behind the shutter/filter
+     carousel. Keep the rail transparent so neighbouring effects stay visible. */
+  [data-camera-recorder-root='true'] div:has(> .alsamos-camera-filter-scroll) {
+    width: 100% !important;
+    max-width: none !important;
+    overflow: visible !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+
+  [data-camera-recorder-root='true'] .alsamos-camera-filter-scroll {
+    width: 100% !important;
+    background: transparent !important;
+  }
+
+  /* The shutter itself remains above the rail, but only the circular button is
+     opaque; there is no black plate masking the filters around it. */
+  [data-camera-recorder-root='true'] .alsamos-camera-filter-scroll + div {
+    background: transparent !important;
+  }
+}
