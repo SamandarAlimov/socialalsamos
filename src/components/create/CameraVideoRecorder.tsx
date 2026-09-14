@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   Check,
   FlipHorizontal2,
@@ -7,12 +6,9 @@ import {
   Play,
   RotateCcw,
   Square,
-  X,
 } from 'lucide-react';
 
-import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { UI_LAYER } from '@/lib/uiLayers';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { CAMERA_LENSES, cameraOverlayCss } from './filters/CameraLensData';
 import { extensionForMime } from './cameraCaptureUtils';
@@ -29,7 +25,6 @@ type CameraLens = (typeof CAMERA_LENSES)[number];
 
 export function CameraVideoRecorder({
   onCapture,
-  onClose,
   mode = 'both',
   aspectRatio = 'auto',
 }: CameraVideoRecorderProps) {
@@ -71,31 +66,6 @@ export function CameraVideoRecorder({
     lens,
   });
 
-  useEffect(() => {
-    if (typeof document === 'undefined') return;
-
-    const html = document.documentElement;
-    const body = document.body;
-    const previous = {
-      htmlOverflow: html.style.overflow,
-      htmlOverscroll: html.style.overscrollBehavior,
-      bodyOverflow: body.style.overflow,
-      bodyOverscroll: body.style.overscrollBehavior,
-    };
-
-    html.style.overflow = 'hidden';
-    html.style.overscrollBehavior = 'none';
-    body.style.overflow = 'hidden';
-    body.style.overscrollBehavior = 'none';
-
-    return () => {
-      html.style.overflow = previous.htmlOverflow;
-      html.style.overscrollBehavior = previous.htmlOverscroll;
-      body.style.overflow = previous.bodyOverflow;
-      body.style.overscrollBehavior = previous.bodyOverscroll;
-    };
-  }, []);
-
   const switchCamera = useCallback(() => {
     if (camera.isRecording) return;
     setFacingMode((current) =>
@@ -134,8 +104,7 @@ export function CameraVideoRecorder({
   }, [camera.capturedPhoto, camera.recordedBlob, camera.recordedUrl, onCapture]);
 
   const chooseFromDevice = useCallback(() => {
-    if (camera.isRecording) return;
-    deviceInputRef.current?.click();
+    if (!camera.isRecording) deviceInputRef.current?.click();
   }, [camera.isRecording]);
 
   const handleDeviceFile = useCallback(
@@ -154,8 +123,7 @@ export function CameraVideoRecorder({
       if (mode === 'video' && type !== 'video') return;
       if (mode === 'photo' && type !== 'image') return;
 
-      const sourceUrl = URL.createObjectURL(file);
-      onCapture(file, type, sourceUrl);
+      onCapture(file, type, URL.createObjectURL(file));
     },
     [mode, onCapture],
   );
@@ -163,7 +131,6 @@ export function CameraVideoRecorder({
   const togglePlayback = useCallback(() => {
     const preview = previewVideoRef.current;
     if (!preview) return;
-
     if (preview.paused) {
       void preview.play();
       setIsPlaying(true);
@@ -178,21 +145,58 @@ export function CameraVideoRecorder({
     return `${minutes}:${String(seconds % 60).padStart(2, '0')}`;
   };
 
-  const mediaPicker = (
-    <input
-      ref={deviceInputRef}
-      type="file"
-      accept={
-        mode === 'video'
-          ? 'video/*'
-          : mode === 'photo'
-            ? 'image/*'
-            : 'image/*,video/*'
-      }
-      className="hidden"
-      onChange={handleDeviceFile}
-    />
+  const relativeLens = useCallback(
+    (offset: number): CameraLens => {
+      const length = CAMERA_LENSES.length;
+      const index = (lensIndex + offset + length) % length;
+      return CAMERA_LENSES[index] ?? CAMERA_LENSES[0];
+    },
+    [lensIndex],
   );
+
+  const lensBubble = (item: CameraLens, dimmed = false) => {
+    const overlay = item.overlays?.[0];
+    return (
+      <button
+        key={`${item.id}-${dimmed ? 'far' : 'near'}`}
+        type="button"
+        disabled={camera.isRecording}
+        onClick={() => setLensId(item.id)}
+        aria-label={`${item.name} filtri`}
+        aria-pressed={item.id === lensId}
+        className={cn(
+          'group shrink-0 transition active:scale-95 disabled:opacity-30',
+          dimmed && 'opacity-55',
+        )}
+      >
+        <span
+          className={cn(
+            'relative block h-11 w-11 overflow-hidden rounded-full border-2 border-white/45 bg-zinc-700 shadow-lg transition sm:h-12 sm:w-12',
+            item.id === lensId &&
+              'scale-110 border-white shadow-[0_0_0_3px_rgba(255,255,255,.2)]',
+          )}
+        >
+          <span
+            className="absolute inset-0 bg-gradient-to-br from-orange-300 via-rose-500 to-indigo-700"
+            style={{ filter: item.style || undefined }}
+          />
+          {overlay && (
+            <span
+              className="absolute inset-0"
+              style={{
+                background: cameraOverlayCss(overlay),
+                mixBlendMode: overlay.blendMode,
+                opacity: overlay.opacity ?? 1,
+              }}
+            />
+          )}
+          {item.id === 'none' && (
+            <span className="absolute inset-0 m-auto h-7 w-px rotate-45 bg-white/90" />
+          )}
+        </span>
+      </button>
+    );
+  };
 
   const shutter =
     captureMode === 'photo' ? (
@@ -224,97 +228,23 @@ export function CameraVideoRecorder({
       </button>
     );
 
-  const relativeLens = useCallback(
-    (offset: number): CameraLens => {
-      const length = CAMERA_LENSES.length;
-      const index = (lensIndex + offset + length) % length;
-      return CAMERA_LENSES[index] ?? CAMERA_LENSES[0];
-    },
-    [lensIndex],
-  );
-
-  const renderLensBubble = (item: CameraLens, dimmed = false) => {
-    const overlay = item.overlays?.[0];
-    const active = item.id === lensId;
-
-    return (
-      <button
-        key={`${item.id}-${dimmed ? 'far' : 'near'}`}
-        type="button"
-        disabled={camera.isRecording}
-        onClick={() => setLensId(item.id)}
-        aria-label={`${item.name} filtri`}
-        aria-pressed={active}
-        className={cn(
-          'group flex shrink-0 flex-col items-center gap-1 transition active:scale-95 disabled:opacity-30',
-          dimmed && 'opacity-60',
-        )}
-      >
-        <span
-          className={cn(
-            'relative flex h-11 w-11 overflow-hidden rounded-full border-2 border-white/35 bg-zinc-700 shadow-lg transition sm:h-12 sm:w-12',
-            active && 'scale-110 border-white shadow-[0_0_0_3px_rgba(255,255,255,.2)]',
-          )}
-        >
-          <span
-            className="absolute inset-0 bg-gradient-to-br from-orange-300 via-rose-500 to-indigo-700"
-            style={{ filter: item.style || undefined }}
-          />
-          {overlay && (
-            <span
-              className="absolute inset-0"
-              style={{
-                background: cameraOverlayCss(overlay),
-                mixBlendMode: overlay.blendMode,
-                opacity: overlay.opacity ?? 1,
-              }}
-            />
-          )}
-          {item.id === 'none' && (
-            <span className="relative z-10 m-auto h-6 w-px rotate-45 bg-white/90 shadow" />
-          )}
-        </span>
-      </button>
-    );
-  };
-
   const captureRail = (
     <div className="flex items-center justify-center gap-2 sm:gap-3">
-      <button
-        type="button"
-        onClick={chooseFromDevice}
-        disabled={camera.isRecording}
-        aria-label="Qurilmadan tanlash"
-        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white/[0.13] text-white backdrop-blur-md transition active:scale-95 disabled:opacity-30 md:hidden"
-      >
-        <Images className="h-6 w-6" />
-      </button>
-
-      {renderLensBubble(relativeLens(-2), true)}
-      {renderLensBubble(relativeLens(-1))}
+      {lensBubble(relativeLens(-2), true)}
+      {lensBubble(relativeLens(-1))}
       {shutter}
-      {renderLensBubble(relativeLens(1))}
-      {renderLensBubble(relativeLens(2), true)}
-
-      <button
-        type="button"
-        onClick={switchCamera}
-        disabled={camera.isRecording}
-        aria-label="Kamerani aylantirish"
-        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/[0.13] text-white backdrop-blur-md transition active:scale-95 disabled:opacity-30 md:hidden"
-      >
-        <FlipHorizontal2 className="h-6 w-6" />
-      </button>
+      {lensBubble(relativeLens(1))}
+      {lensBubble(relativeLens(2), true)}
     </div>
   );
 
-  const captureModeSwitcher = mode === 'both' && !camera.isRecording && (
-    <div className="flex items-center justify-center gap-7">
+  const modeSwitcher = mode === 'both' && !camera.isRecording && (
+    <div className="flex items-center justify-center gap-7 text-white">
       <button
         type="button"
         onClick={() => setCaptureMode('photo')}
         className={cn(
-          'text-[11px] font-semibold uppercase tracking-[0.18em] transition',
+          'text-[11px] font-semibold uppercase tracking-[0.18em]',
           captureMode === 'photo' ? 'text-white' : 'text-white/45',
         )}
       >
@@ -324,7 +254,7 @@ export function CameraVideoRecorder({
         type="button"
         onClick={() => setCaptureMode('video')}
         className={cn(
-          'text-[11px] font-semibold uppercase tracking-[0.18em] transition',
+          'text-[11px] font-semibold uppercase tracking-[0.18em]',
           captureMode === 'video' ? 'text-white' : 'text-white/45',
         )}
       >
@@ -333,73 +263,216 @@ export function CameraVideoRecorder({
     </div>
   );
 
-  if (camera.capturedPhoto || camera.recordedUrl) {
-    const previewLayer = (
-      <div
-        data-camera-recorder-root="true"
-        data-camera-state="preview"
-        className={cn(
-          'fixed inset-0 isolate h-[100dvh] w-screen overflow-hidden overscroll-none bg-[#080b10] text-white',
-          UI_LAYER.immersive,
-        )}
-      >
-        <canvas ref={camera.canvasRef} className="hidden" />
-        {mediaPicker}
+  const mediaPicker = (
+    <input
+      ref={deviceInputRef}
+      type="file"
+      accept={
+        mode === 'video'
+          ? 'video/*'
+          : mode === 'photo'
+            ? 'image/*'
+            : 'image/*,video/*'
+      }
+      className="hidden"
+      onChange={handleDeviceFile}
+    />
+  );
 
-        <div className="mx-auto flex h-full w-full max-w-[1120px] items-center justify-center gap-5 px-0 py-0 md:px-8 md:py-6">
-          <div className="hidden w-14 shrink-0 flex-col gap-3 md:flex">
-            <button
-              type="button"
-              onClick={() => {
-                setIsPlaying(false);
-                camera.retake();
-              }}
-              aria-label="Qayta olish"
-              className="flex h-12 w-12 items-center justify-center rounded-full bg-white/[0.08] text-white transition hover:bg-white/[0.14]"
-            >
-              <RotateCcw className="h-5 w-5" />
-            </button>
-          </div>
+  const hasPreview = Boolean(camera.capturedPhoto || camera.recordedUrl);
 
+  return (
+    <div
+      data-camera-recorder-root="true"
+      data-camera-state={hasPreview ? 'preview' : 'live'}
+      className="absolute inset-0 z-30 min-h-0 overflow-hidden bg-[#080b10] text-white md:bg-background md:text-foreground"
+    >
+      <canvas ref={camera.canvasRef} className="hidden" />
+      {mediaPicker}
+
+      <div className="mx-auto flex h-full w-full max-w-[1080px] flex-col items-center justify-center gap-3 px-0 py-0 md:px-6 md:py-4">
+        <div className="flex min-h-0 flex-1 items-center justify-center gap-4 md:w-full">
           <div
             className={cn(
-              'relative h-full w-full overflow-hidden bg-black md:h-[min(88dvh,800px)] md:w-auto md:max-w-[78vw] md:rounded-[30px] md:shadow-2xl',
+              'relative h-full w-full overflow-hidden bg-black md:h-[min(66dvh,650px)] md:w-auto md:max-w-[70vw] md:rounded-[30px] md:shadow-[0_24px_70px_-32px_rgba(0,0,0,.6)]',
               aspectRatioClass,
             )}
           >
-            {camera.capturedPhoto ? (
-              <img
-                src={camera.capturedPhoto}
-                alt=""
-                className="h-full w-full object-cover"
-              />
+            {hasPreview ? (
+              camera.capturedPhoto ? (
+                <img
+                  src={camera.capturedPhoto}
+                  alt=""
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <>
+                  <video
+                    ref={previewVideoRef}
+                    src={camera.recordedUrl ?? undefined}
+                    className="h-full w-full object-cover"
+                    loop
+                    playsInline
+                    onPlay={() => setIsPlaying(true)}
+                    onPause={() => setIsPlaying(false)}
+                  />
+                  <button
+                    type="button"
+                    onClick={togglePlayback}
+                    className="absolute inset-0 flex items-center justify-center"
+                    aria-label={isPlaying ? 'Pauza' : 'Ijro'}
+                  >
+                    {!isPlaying && (
+                      <span className="flex h-16 w-16 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-md">
+                        <Play className="ml-1 h-7 w-7" />
+                      </span>
+                    )}
+                  </button>
+                </>
+              )
             ) : (
               <>
                 <video
-                  ref={previewVideoRef}
-                  src={camera.recordedUrl ?? undefined}
-                  className="h-full w-full object-cover"
-                  loop
+                  ref={camera.videoRef}
+                  autoPlay
                   playsInline
-                  onPlay={() => setIsPlaying(true)}
-                  onPause={() => setIsPlaying(false)}
-                />
-                <button
-                  type="button"
-                  onClick={togglePlayback}
-                  className="absolute inset-0 flex items-center justify-center"
-                  aria-label={isPlaying ? 'Pauza' : 'Ijro'}
-                >
-                  {!isPlaying && (
-                    <span className="flex h-16 w-16 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-md">
-                      <Play className="ml-1 h-7 w-7" />
-                    </span>
+                  muted
+                  className={cn(
+                    'h-full w-full object-cover',
+                    facingMode === 'user' && 'scale-x-[-1]',
                   )}
-                </button>
+                  style={{ filter: lens?.style || undefined }}
+                />
+
+                {lens?.overlays?.map((overlay, index) => (
+                  <div
+                    key={`${lens.id}-${index}`}
+                    className="pointer-events-none absolute inset-0"
+                    style={{
+                      background: cameraOverlayCss(overlay),
+                      mixBlendMode: overlay.blendMode,
+                      opacity: overlay.opacity ?? 1,
+                    }}
+                  />
+                ))}
+
+                {!camera.cameraReady && !camera.cameraError && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-black">
+                    <div className="h-10 w-10 animate-spin rounded-full border-4 border-white/25 border-t-white" />
+                  </div>
+                )}
+
+                {camera.cameraError && (
+                  <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/90 px-6 text-center text-white">
+                    <div className="max-w-xs space-y-4">
+                      <p className="text-sm leading-relaxed text-white/75">
+                        {camera.cameraError}
+                      </p>
+                      <div className="flex justify-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void camera.startCamera()}
+                          className="rounded-full bg-white px-4 py-2 text-xs font-semibold text-black"
+                        >
+                          Qayta urinish
+                        </button>
+                        <button
+                          type="button"
+                          onClick={chooseFromDevice}
+                          className="rounded-full bg-white/15 px-4 py-2 text-xs font-semibold text-white"
+                        >
+                          Qurilmadan
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {camera.isRecording && (
+                  <span className="absolute left-1/2 top-4 -translate-x-1/2 rounded-full bg-black/55 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur-md">
+                    {formatDuration(camera.recordingDuration)}
+                  </span>
+                )}
+
+                <div className="absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black via-black/45 to-transparent px-2 pb-4 pt-20 md:hidden">
+                  <div className="mb-2 text-center text-[10px] font-semibold uppercase tracking-[0.14em] text-white/80">
+                    {lens?.name ?? 'Normal'}
+                  </div>
+                  {modeSwitcher}
+                  <div className="mt-2 flex items-center justify-center gap-2">
+                    <button
+                      type="button"
+                      onClick={chooseFromDevice}
+                      disabled={camera.isRecording}
+                      aria-label="Qurilmadan tanlash"
+                      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white/15 text-white backdrop-blur-md disabled:opacity-30"
+                    >
+                      <Images className="h-6 w-6" />
+                    </button>
+                    {captureRail}
+                    <button
+                      type="button"
+                      onClick={switchCamera}
+                      disabled={camera.isRecording}
+                      aria-label="Kamerani aylantirish"
+                      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/15 text-white backdrop-blur-md disabled:opacity-30"
+                    >
+                      <FlipHorizontal2 className="h-6 w-6" />
+                    </button>
+                  </div>
+                </div>
               </>
             )}
 
-            <div className="absolute inset-x-0 top-0 z-20 flex items-center justify-between px-4 pb-5 pt-[max(env(safe-area-inset-top),1rem)] md:hidden">
+            {hasPreview && (
+              <div className="absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black/85 via-black/35 to-transparent px-5 pb-5 pt-24 md:hidden">
+                <div className="flex items-center justify-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsPlaying(false);
+                      camera.retake();
+                    }}
+                    className="flex h-11 items-center gap-2 rounded-full bg-black/45 px-5 text-sm font-semibold text-white backdrop-blur-md"
+                  >
+                    <RotateCcw className="h-5 w-5" />
+                    Qayta
+                  </button>
+                  <button
+                    type="button"
+                    onClick={confirmCapture}
+                    className="flex h-11 items-center gap-2 rounded-full bg-white px-5 text-sm font-semibold text-black"
+                  >
+                    <Check className="h-5 w-5" />
+                    Davom etish
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <aside className="hidden w-14 shrink-0 flex-col gap-3 md:flex">
+            <button
+              type="button"
+              onClick={chooseFromDevice}
+              disabled={camera.isRecording}
+              aria-label="Qurilmadan tanlash"
+              className="flex h-12 w-12 items-center justify-center rounded-full border border-border/70 bg-background text-foreground shadow-sm transition hover:bg-muted disabled:opacity-30"
+            >
+              <Images className="h-5 w-5" />
+            </button>
+            {!hasPreview && (
+              <button
+                type="button"
+                onClick={switchCamera}
+                disabled={camera.isRecording}
+                aria-label="Kamerani aylantirish"
+                className="flex h-12 w-12 items-center justify-center rounded-full border border-border/70 bg-background text-foreground shadow-sm transition hover:bg-muted disabled:opacity-30"
+              >
+                <FlipHorizontal2 className="h-5 w-5" />
+              </button>
+            )}
+            {hasPreview && (
               <button
                 type="button"
                 onClick={() => {
@@ -407,215 +480,37 @@ export function CameraVideoRecorder({
                   camera.retake();
                 }}
                 aria-label="Qayta olish"
-                className="flex h-11 w-11 items-center justify-center rounded-full bg-black/35 text-white backdrop-blur-md"
+                className="flex h-12 w-12 items-center justify-center rounded-full border border-border/70 bg-background text-foreground shadow-sm transition hover:bg-muted"
               >
-                <RotateCcw className="h-6 w-6" />
+                <RotateCcw className="h-5 w-5" />
               </button>
-              <button
-                type="button"
-                onClick={confirmCapture}
-                aria-label="Davom etish"
-                className="flex h-11 w-11 items-center justify-center rounded-full bg-white text-black shadow-lg"
-              >
-                <Check className="h-6 w-6" />
-              </button>
-            </div>
+            )}
+          </aside>
+        </div>
 
-            <div className="absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black/80 via-black/20 to-transparent px-5 pb-[max(env(safe-area-inset-bottom),1.25rem)] pt-24 md:hidden">
-              <div className="flex items-center justify-center gap-4">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsPlaying(false);
-                    camera.retake();
-                  }}
-                  className="rounded-full bg-black/45 px-5 py-3 text-sm font-semibold text-white backdrop-blur-md"
-                >
-                  Qayta
-                </button>
-                <button
-                  type="button"
-                  onClick={confirmCapture}
-                  className="rounded-full bg-white px-6 py-3 text-sm font-semibold text-black shadow-lg"
-                >
-                  Davom etish
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div className="hidden w-14 shrink-0 flex-col items-center gap-3 md:flex">
+        <div className="hidden min-h-[92px] shrink-0 items-center justify-center gap-4 md:flex">
+          {hasPreview ? (
             <button
               type="button"
               onClick={confirmCapture}
-              aria-label="Davom etish"
-              className="flex h-12 w-12 items-center justify-center rounded-full bg-white text-black transition hover:bg-white/90"
+              className="flex h-12 items-center gap-2 rounded-full bg-foreground px-6 text-sm font-semibold text-background shadow-lg"
             >
               <Check className="h-5 w-5" />
+              Davom etish
             </button>
-          </div>
-        </div>
-      </div>
-    );
-
-    return typeof document !== 'undefined'
-      ? createPortal(previewLayer, document.body)
-      : previewLayer;
-  }
-
-  const liveLayer = (
-    <div
-      data-camera-recorder-root="true"
-      data-camera-state="live"
-      className={cn(
-        'fixed inset-0 isolate h-[100dvh] w-screen touch-manipulation overflow-hidden overscroll-none bg-[#080b10] text-white',
-        UI_LAYER.immersive,
-      )}
-    >
-      <canvas ref={camera.canvasRef} className="hidden" />
-      {mediaPicker}
-
-      <div className="mx-auto flex h-full w-full max-w-[1120px] items-center justify-center gap-5 px-0 py-0 md:px-8 md:py-6">
-        <div className="hidden w-14 shrink-0 flex-col items-center gap-3 md:flex">
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={camera.isRecording}
-            aria-label="Yopish"
-            className="flex h-12 w-12 items-center justify-center rounded-full bg-white/[0.08] text-white transition hover:bg-white/[0.14] disabled:opacity-35"
-          >
-            <X className="h-6 w-6" />
-          </button>
-          <button
-            type="button"
-            onClick={chooseFromDevice}
-            disabled={camera.isRecording}
-            aria-label="Qurilmadan tanlash"
-            className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/[0.08] text-white transition hover:bg-white/[0.14] disabled:opacity-35"
-          >
-            <Images className="h-6 w-6" />
-          </button>
-        </div>
-
-        <div
-          className={cn(
-            'relative h-full w-full overflow-hidden bg-black md:h-[min(88dvh,800px)] md:w-auto md:max-w-[78vw] md:rounded-[30px] md:shadow-2xl',
-            aspectRatioClass,
-          )}
-        >
-          <video
-            ref={camera.videoRef}
-            autoPlay
-            playsInline
-            muted
-            className={cn(
-              'h-full w-full object-cover',
-              facingMode === 'user' && 'scale-x-[-1]',
-            )}
-            style={{ filter: lens?.style || undefined }}
-          />
-
-          {lens?.overlays?.map((overlay, index) => (
-            <div
-              key={`${lens.id}-${index}`}
-              className="pointer-events-none absolute inset-0"
-              style={{
-                background: cameraOverlayCss(overlay),
-                mixBlendMode: overlay.blendMode,
-                opacity: overlay.opacity ?? 1,
-              }}
-            />
-          ))}
-
-          {!camera.cameraReady && !camera.cameraError && (
-            <div className="absolute inset-0 z-10 flex items-center justify-center bg-black">
-              <div className="h-10 w-10 animate-spin rounded-full border-4 border-white/25 border-t-white" />
-            </div>
-          )}
-
-          {camera.cameraError && (
-            <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/90 px-6 text-center text-white">
-              <div className="max-w-sm space-y-4">
-                <p className="text-sm leading-relaxed text-white/80">
-                  {camera.cameraError}
-                </p>
-                <div className="flex flex-wrap justify-center gap-2">
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={() => void camera.startCamera()}
-                    className="rounded-full"
-                  >
-                    Qayta urinish
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={chooseFromDevice}
-                    className="rounded-full border-white/25 bg-white/10 text-white hover:bg-white/15 hover:text-white"
-                  >
-                    Qurilmadan tanlash
-                  </Button>
-                </div>
+          ) : (
+            <div className="flex flex-col items-center gap-2">
+              <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                {lens?.name ?? 'Normal'}
+              </span>
+              <div className="rounded-[28px] bg-[#080b10] px-5 py-2 text-white shadow-lg">
+                {captureRail}
               </div>
+              {modeSwitcher}
             </div>
           )}
-
-          <div className="absolute inset-x-0 top-0 z-30 flex items-center justify-between px-4 pb-5 pt-[max(env(safe-area-inset-top),1rem)] md:hidden">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={camera.isRecording}
-              aria-label="Yopish"
-              className="flex h-11 w-11 items-center justify-center rounded-full bg-black/30 text-white backdrop-blur-md disabled:opacity-40"
-            >
-              <X className="h-7 w-7" />
-            </button>
-
-            <span className="rounded-full bg-black/42 px-3 py-1.5 text-xs font-semibold text-white/90 backdrop-blur-md">
-              {camera.isRecording
-                ? formatDuration(camera.recordingDuration)
-                : lens?.name ?? 'Normal'}
-            </span>
-
-            <button
-              type="button"
-              onClick={switchCamera}
-              disabled={camera.isRecording}
-              aria-label="Kamerani aylantirish"
-              className="flex h-11 w-11 items-center justify-center rounded-full bg-black/30 text-white backdrop-blur-md disabled:opacity-40"
-            >
-              <FlipHorizontal2 className="h-6 w-6" />
-            </button>
-          </div>
-
-          <div className="absolute inset-x-0 bottom-0 z-30 bg-gradient-to-t from-black via-black/45 to-transparent px-2 pb-[max(env(safe-area-inset-bottom),0.95rem)] pt-28">
-            <div className="mb-2 text-center text-[10px] font-semibold uppercase tracking-[0.16em] text-white/70">
-              {camera.isRecording
-                ? formatDuration(camera.recordingDuration)
-                : lens?.name ?? 'Normal'}
-            </div>
-            {captureRail}
-            <div className="mt-3">{captureModeSwitcher}</div>
-          </div>
-        </div>
-
-        <div className="hidden w-14 shrink-0 flex-col items-center gap-3 md:flex">
-          <button
-            type="button"
-            onClick={switchCamera}
-            disabled={camera.isRecording}
-            aria-label="Kamerani aylantirish"
-            className="flex h-12 w-12 items-center justify-center rounded-full bg-white/[0.08] text-white transition hover:bg-white/[0.14] disabled:opacity-35"
-          >
-            <FlipHorizontal2 className="h-6 w-6" />
-          </button>
         </div>
       </div>
     </div>
   );
-
-  return typeof document !== 'undefined'
-    ? createPortal(liveLayer, document.body)
-    : liveLayer;
 }
