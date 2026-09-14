@@ -1,7 +1,5 @@
 import type { PostVisibility } from '@/hooks/usePosts';
 import type { PostMusicInput } from '@/lib/postMeta';
-import { parseStorageReference } from '@/lib/mediaUpload';
-import { supabase } from '@/integrations/supabase/client';
 
 export interface ReelDraftCollaborator {
   id: string;
@@ -29,42 +27,17 @@ export function reelDraftKey(userId: string): string {
   return `alsamos.create.reel.draft.v${REEL_DRAFT_VERSION}:${userId}`;
 }
 
-function deviceMusicObject(
-  input?: PostMusicInput | null,
-): { bucket: string; key: string } | null {
-  if (!input?.track || input.track.source !== 'device') return null;
-  if (input.track.storageBucket && input.track.storageKey) {
-    return { bucket: input.track.storageBucket, key: input.track.storageKey };
-  }
-  return parseStorageReference(input.track.audioUrl);
-}
-
-export async function cleanupReelDraftDeviceMusic(
-  input?: PostMusicInput | null,
-): Promise<void> {
-  const object = deviceMusicObject(input);
-  if (!object) return;
-
-  const { error } = await supabase.storage.from(object.bucket).remove([object.key]);
-  if (error) {
-    console.warn('Reel draft musiqasini tozalab bo‘lmadi:', error);
-  }
-}
-
 function persistentMusic(input?: PostMusicInput | null): PostMusicInput | null {
-  if (!input) return null;
-  if (input.track?.source !== 'device') return input;
-
-  // Device audio binary localStorage ga yozilmaydi: MusicPicker uni avval private
-  // Storage ga yuklaydi. Draft faqat stable storage reference metadata sini saqlaydi.
-  return deviceMusicObject(input) ? input : null;
+  if (!input?.track) return input ?? null;
+  // Device audio storage lifecycle alohida cleanup bilan boshqariladi; katalog
+  // treklari esa faqat metadata bo‘lgani uchun localStorage da tiklanadi.
+  return input.track.source === 'device' ? null : input;
 }
 
 export function readStoredReelDraft(userId: string): StoredReelDraft | null {
   if (typeof localStorage === 'undefined') return null;
   try {
-    const key = reelDraftKey(userId);
-    const raw = localStorage.getItem(key);
+    const raw = localStorage.getItem(reelDraftKey(userId));
     if (!raw) return null;
 
     const parsed = JSON.parse(raw) as Partial<StoredReelDraft>;
@@ -73,9 +46,7 @@ export function readStoredReelDraft(userId: string): StoredReelDraft | null {
       typeof parsed.savedAt !== 'number' ||
       Date.now() - parsed.savedAt > REEL_DRAFT_TTL_MS
     ) {
-      // Expired unpublished device audio should not become a permanent orphan.
-      void cleanupReelDraftDeviceMusic(parsed.music ?? null);
-      localStorage.removeItem(key);
+      localStorage.removeItem(reelDraftKey(userId));
       return null;
     }
 
