@@ -44,11 +44,10 @@ export default function ComposePage() {
 
   useCameraFilterRail(composerMainRef);
 
-  // Story hidden DB draft va Reelning hozirgi device-audio lifecycle holati
-  // navigation vaqtida yo‘qolishi mumkin, shuning uchun ular yakunlanguncha lock.
-  const currentModeLocked =
-    (mode === 'story' && storyDraftActive) ||
-    (mode === 'reel' && reelDraftActive);
+  // Faqat Story hidden server draft sticker graphini ochiq holda ushlab turadi.
+  // Reel esa media + metadata + device music ownership bilan to‘liq recoverable,
+  // shuning uchun Post/Story/Live orasida erkin yurish mumkin.
+  const currentModeLocked = mode === 'story' && storyDraftActive;
 
   const {
     handleTouchStart,
@@ -76,9 +75,8 @@ export default function ComposePage() {
     setMode(nextMode);
   }, [currentModeLocked, mode, searchParams, setSearchParams]);
 
-  // Story/Reel camera is part of the Create stage, not a viewport portal.
-  // Recoverable draft bo‘lsa kamera qayta avtomatik ochilmaydi: foydalanuvchi
-  // oldingi media/editor holatiga to‘g‘ridan-to‘g‘ri qaytadi.
+  // Recoverable Story/Reel draft bo‘lsa kamera qayta avtomatik ochilmaydi:
+  // foydalanuvchi oldingi media/editor holatiga qaytadi.
   useEffect(() => {
     if (mode !== 'story' && mode !== 'reel') {
       autoCameraModeRef.current = null;
@@ -132,9 +130,6 @@ export default function ComposePage() {
     storyLocalDraftActive,
   ]);
 
-  // Native touch scrolling already works on the filter rail. Desktop users also
-  // expect Instagram-like click/drag behavior, so convert mouse/pen dragging to
-  // horizontal scrolling without stealing normal filter clicks.
   useEffect(() => {
     const root = composerMainRef.current;
     if (!root) return;
