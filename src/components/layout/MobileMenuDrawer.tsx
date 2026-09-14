@@ -33,6 +33,7 @@ export function MobileMenuDrawer({
 }: MobileMenuDrawerProps) {
   const { theme, setTheme } = useTheme();
   const [showSwitchAccount, setShowSwitchAccount] = useState(false);
+  const [switchAccountPending, setSwitchAccountPending] = useState(false);
   const touchStartX = useRef(0);
   const touchCurrentX = useRef(0);
   const [dragOffset, setDragOffset] = useState(0);
@@ -63,8 +64,15 @@ export function MobileMenuDrawer({
 
   const handleSwitchAccount = (e: React.MouseEvent) => {
     e.stopPropagation();
-    setShowSwitchAccount(true);
+    setSwitchAccountPending(true);
+    onClose();
   };
+
+  const handleMenuExitComplete = useCallback(() => {
+    if (!switchAccountPending) return;
+    setSwitchAccountPending(false);
+    setShowSwitchAccount(true);
+  }, [switchAccountPending]);
 
   const backdropVariants = {
     hidden: { opacity: 0 },
@@ -101,7 +109,7 @@ export function MobileMenuDrawer({
 
   return (
     <>
-      <AnimatePresence>
+      <AnimatePresence onExitComplete={handleMenuExitComplete}>
         {isOpen && (
           <>
             <motion.div
