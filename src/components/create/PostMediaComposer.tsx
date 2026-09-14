@@ -13,12 +13,15 @@ import {
 
 import { cn } from '@/lib/utils';
 import type { Attachment } from '@/hooks/usePostAttachments';
+import type { PostMusicInput } from '@/lib/postMeta';
 import { formatBytes, mediaKindLabel } from '@/lib/postComposer';
 import { formatDuration } from '@/lib/mediaMetadata';
 import { MediaStickerOverlay } from '@/components/stickers/MediaStickerOverlay';
+import { CreateMusicPreview } from '@/components/create/CreateMusicPreview';
 
 interface PostMediaComposerProps {
   attachments: Attachment[];
+  backgroundMusic?: PostMusicInput | null;
   onRemove: (id: string) => void;
   onRetry: (id: string) => void;
   onEditImage?: (attachment: Attachment) => void;
@@ -53,6 +56,7 @@ function FileHero({ attachment }: { attachment: Attachment }) {
 
 export function PostMediaComposer({
   attachments,
+  backgroundMusic,
   onRemove,
   onRetry,
   onEditImage,
@@ -94,32 +98,44 @@ export function PostMediaComposer({
   const canSticker = active.kind === 'image' || active.kind === 'video';
   const canEditImage = active.kind === 'image' && Boolean(onEditImage);
   const canEditVideo = active.kind === 'video' && Boolean(onEditVideo);
+  const hasVisualBackgroundMusic =
+    Boolean(backgroundMusic?.track?.audioUrl) &&
+    (active.kind === 'image' || active.kind === 'video');
 
   return (
     <div className="overflow-hidden bg-background lg:h-full">
-      <div className="relative flex min-h-64 max-h-[48dvh] lg:max-h-[calc(100dvh-7.5rem)] w-full items-center justify-center overflow-hidden bg-black lg:h-full lg:max-h-none lg:min-h-0">
+      <div className="relative flex min-h-64 max-h-[48dvh] w-full items-center justify-center overflow-hidden bg-black lg:h-full lg:max-h-none lg:min-h-0">
         {active.kind === 'image' && active.previewUrl ? (
-          <div className="relative max-h-[48dvh] lg:max-h-[calc(100dvh-7.5rem)] max-w-full">
+          <div className="relative max-h-[48dvh] max-w-full lg:max-h-[calc(100dvh-7.5rem)]">
             <img
               src={active.previewUrl}
               alt={active.altText || active.file.name}
-              className="block max-h-[48dvh] lg:max-h-[calc(100dvh-7.5rem)] max-w-full object-contain"
+              className="block max-h-[48dvh] max-w-full object-contain lg:max-h-[calc(100dvh-7.5rem)]"
             />
             <MediaStickerOverlay editState={active.editState ?? null} />
           </div>
         ) : active.kind === 'video' && active.previewUrl ? (
-          <div className="relative max-h-[48dvh] lg:max-h-[calc(100dvh-7.5rem)] max-w-full">
+          <div className="relative max-h-[48dvh] max-w-full lg:max-h-[calc(100dvh-7.5rem)]">
             <video
               src={active.previewUrl}
               controls
               playsInline
               preload="metadata"
-              className="block max-h-[48dvh] lg:max-h-[calc(100dvh-7.5rem)] max-w-full object-contain"
+              muted={Boolean(backgroundMusic?.mutedOriginal)}
+              className="block max-h-[48dvh] max-w-full object-contain lg:max-h-[calc(100dvh-7.5rem)]"
             />
             <MediaStickerOverlay editState={active.editState ?? null} />
           </div>
         ) : (
           <FileHero attachment={active} />
+        )}
+
+        {hasVisualBackgroundMusic && (
+          <CreateMusicPreview
+            music={backgroundMusic}
+            enabled
+            className="absolute bottom-3 left-3 max-w-[62%]"
+          />
         )}
 
         {(active.kind === 'image' || active.kind === 'video') && (
