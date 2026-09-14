@@ -34,28 +34,56 @@ interface DrawerContentProps
   handleClassName?: string;
 }
 
+function hasDrawerPrimitive(
+  children: React.ReactNode,
+  primitive: typeof DrawerPrimitive.Title | typeof DrawerPrimitive.Description,
+): boolean {
+  let found = false;
+  React.Children.forEach(children, (child) => {
+    if (found || !React.isValidElement(child)) return;
+    const type = child.type as any;
+    if (type === primitive || type?.displayName === primitive.displayName) {
+      found = true;
+      return;
+    }
+    if (child.props?.children) found = hasDrawerPrimitive(child.props.children, primitive);
+  });
+  return found;
+}
+
 const DrawerContent = React.forwardRef<
   React.ElementRef<typeof DrawerPrimitive.Content>,
   DrawerContentProps
->(({ className, children, overlayClassName, hideHandle = false, handleClassName, ...props }, ref) => (
-  <DrawerPortal>
-    <DrawerOverlay className={overlayClassName} />
-    <DrawerPrimitive.Content
-      ref={ref}
-      className={cn(
-        "fixed inset-x-0 bottom-0 mt-24 flex h-auto flex-col rounded-t-[10px] border bg-background",
-        UI_LAYER.modalContent,
-        className,
-      )}
-      {...props}
-    >
-      {!hideHandle && (
-        <div className={cn("mx-auto mt-4 h-2 w-[100px] shrink-0 rounded-full bg-muted", handleClassName)} />
-      )}
-      {children}
-    </DrawerPrimitive.Content>
-  </DrawerPortal>
-));
+>(({ className, children, overlayClassName, hideHandle = false, handleClassName, ...props }, ref) => {
+  const hasTitle = hasDrawerPrimitive(children, DrawerPrimitive.Title);
+  const hasDescription = hasDrawerPrimitive(children, DrawerPrimitive.Description);
+
+  return (
+    <DrawerPortal>
+      <DrawerOverlay className={overlayClassName} />
+      <DrawerPrimitive.Content
+        ref={ref}
+        className={cn(
+          "fixed inset-x-0 bottom-0 mt-24 flex h-auto flex-col rounded-t-[10px] border bg-background",
+          UI_LAYER.modalContent,
+          className,
+        )}
+        {...props}
+      >
+        {!hasTitle && <DrawerPrimitive.Title className="sr-only">Panel</DrawerPrimitive.Title>}
+        {!hasDescription && (
+          <DrawerPrimitive.Description className="sr-only">
+            Ushbu panelda qo‘shimcha amal va sozlamalar mavjud.
+          </DrawerPrimitive.Description>
+        )}
+        {!hideHandle && (
+          <div className={cn("mx-auto mt-4 h-2 w-[100px] shrink-0 rounded-full bg-muted", handleClassName)} />
+        )}
+        {children}
+      </DrawerPrimitive.Content>
+    </DrawerPortal>
+  );
+});
 DrawerContent.displayName = "DrawerContent";
 
 const DrawerHeader = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
