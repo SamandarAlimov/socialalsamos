@@ -28,6 +28,9 @@ function distance(first: Touch, second: Touch) {
 
 function isCreateLiveCamera(video: HTMLVideoElement) {
   if (video.closest('[data-camera-recorder-root="true"]')) return false;
+  // The regular Live setup preview is already handled by useCameraFilterRail.
+  // This installer exists for the fullscreen portal, which lives outside main.
+  if (video.closest('.create-page-main')) return false;
   if (!(video.srcObject instanceof MediaStream)) return false;
   return Boolean(document.querySelector('.create-page[data-create-mode="live"]'));
 }
