@@ -169,6 +169,32 @@ export function mergeIceServerSources(
   );
 }
 
+/**
+ * Accept both supported database payload shapes:
+ *   1) legacy/direct array: [{ urls: ... }]
+ *   2) RTCConfiguration-style object: { iceServers: [{ urls: ... }] }
+ *
+ * Production currently stores the second shape. Treating only the top-level
+ * value as an array silently discarded valid TURN credentials and left calls
+ * with STUN-only candidates.
+ */
+export function normalizeRemoteIceServers(value: unknown): RTCIceServer[] {
+  const candidates = Array.isArray(value)
+    ? value
+    : value && typeof value === "object"
+      ? (value as { iceServers?: unknown }).iceServers
+      : null;
+
+  if (!Array.isArray(candidates)) return [];
+
+  return candidates.filter(
+    (entry): entry is RTCIceServer =>
+      Boolean(entry) &&
+      typeof entry === "object" &&
+      urlsOfIceServer(entry as RTCIceServer).length > 0,
+  );
+}
+
 export function getTurnIceServers(servers: RTCIceServer[]): RTCIceServer[] {
   return servers.flatMap((server) => {
     const turnUrls = urlsOfIceServer(server).filter(isTurnUrl);
@@ -418,14 +444,7 @@ export async function loadIceServers(
       if (error) throw error;
 
       const value = (data as { value?: unknown } | null)?.value;
-      if (Array.isArray(value)) {
-        remoteServers = value.filter(
-          (entry): entry is RTCIceServer =>
-            Boolean(entry) &&
-            typeof entry === "object" &&
-            urlsOfIceServer(entry as RTCIceServer).length > 0,
-        );
-      }
+      remoteServers = normalizeRemoteIceServers(value);
     } catch (error) {
       console.warn(
         "[ICE] remote ICE config unavailable, using environment/defaults",
