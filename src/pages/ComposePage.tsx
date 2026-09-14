@@ -5,6 +5,7 @@ import { FileText, Radio, UserCircle2, Video, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useSwipeNavigation } from '@/hooks/useSwipeNavigation';
+import { useCameraFilterRail } from '@/hooks/useCameraFilterRail';
 import { PostComposer } from '@/components/create/PostComposer';
 import { StoryComposer } from '@/components/create/StoryComposer';
 import { ReelComposer } from '@/components/create/ReelComposer';
@@ -37,6 +38,8 @@ export default function ComposePage() {
   const [reelDraftActive, setReelDraftActive] = useState(false);
   const composerMainRef = useRef<HTMLElement>(null);
   const autoCameraModeRef = useRef<CreateMode | null>(null);
+
+  useCameraFilterRail(composerMainRef);
 
   const currentModeLocked =
     (mode === 'story' && storyDraftActive) ||
