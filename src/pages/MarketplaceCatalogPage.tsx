@@ -2,16 +2,14 @@ import { FormEvent, useMemo, useState } from 'react';
 import {
   ChevronRight,
   Search,
-  SlidersHorizontal,
   Sparkles,
-  X,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { MarketplaceBottomNav } from '@/components/marketplace/MarketplaceBottomNav';
+import { MarketplaceSectionHeader } from '@/components/marketplace/MarketplaceSectionHeader';
 import { CategoryIcon } from '@/components/marketplace/CategoryIcon';
 import { ProductCard } from '@/components/marketplace/ProductCard';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { useCart, useCategories, useProducts, useSavedProducts } from '@/hooks/useMarketplace';
 import { cn } from '@/lib/utils';
@@ -22,7 +20,12 @@ export default function MarketplaceCatalogPage() {
   const [query, setQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [onlyWithProducts, setOnlyWithProducts] = useState(false);
-  const { categories, isLoading: categoriesLoading, error: categoriesError, refresh: refreshCategories } = useCategories();
+  const {
+    categories,
+    isLoading: categoriesLoading,
+    error: categoriesError,
+    refresh: refreshCategories,
+  } = useCategories();
   const { products, isLoading: productsLoading } = useProducts('all', '');
   const { itemCount } = useCart();
   const { products: savedProducts } = useSavedProducts();
@@ -55,7 +58,7 @@ export default function MarketplaceCatalogPage() {
     [products],
   );
 
-  const submitSearch = (event: FormEvent) => {
+  const submitSearch = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const value = query.trim();
     if (value) navigate(`/marketplace?q=${encodeURIComponent(value)}`);
@@ -67,49 +70,16 @@ export default function MarketplaceCatalogPage() {
 
   return (
     <div className="marketplace-neutral min-h-screen min-w-0 overflow-x-clip bg-background pb-8">
-      <header className="sticky top-0 z-40 border-b border-border/40 bg-background/94 backdrop-blur-2xl">
-        <div className="mx-auto flex w-full max-w-7xl min-w-0 items-center gap-2.5 px-4 py-3 lg:px-6">
-          <form onSubmit={submitSearch} className="relative min-w-0 flex-1">
-            <Search className="pointer-events-none absolute left-3.5 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              type="search"
-              inputMode="search"
-              value={query}
-              onChange={event => setQuery(event.target.value)}
-              placeholder="Mahsulot, brend yoki turkum qidiring"
-              aria-label="Katalog qidiruvi"
-              className="h-11 w-full rounded-2xl border-border/60 bg-muted/45 pl-10 pr-10 text-sm shadow-none transition focus:bg-background"
-            />
-            {query && (
-              <button
-                type="button"
-                aria-label="Qidiruvni tozalash"
-                className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-1 text-muted-foreground transition hover:bg-muted hover:text-foreground"
-                onClick={() => setQuery('')}
-              >
-                <X className="h-4 w-4" />
-              </button>
-            )}
-          </form>
-
-          <Button
-            type="button"
-            variant="outline"
-            size="icon"
-            className={cn(
-              'relative h-11 w-11 shrink-0 rounded-2xl',
-              onlyWithProducts && 'border-foreground/30 bg-foreground text-background',
-            )}
-            onClick={() => setShowFilters(true)}
-            aria-label="Katalog filtrlari"
-          >
-            <SlidersHorizontal className="h-4 w-4" />
-            {onlyWithProducts && (
-              <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-destructive ring-2 ring-background" />
-            )}
-          </Button>
-        </div>
-      </header>
+      <MarketplaceSectionHeader
+        activeSection="catalog"
+        searchValue={query}
+        onSearchValueChange={setQuery}
+        onSearchSubmit={submitSearch}
+        onFilterClick={() => setShowFilters(true)}
+        filterCount={onlyWithProducts ? 1 : 0}
+        itemCount={itemCount}
+        catalogLabel="Katalog"
+      />
 
       <main className="mx-auto w-full max-w-7xl px-4 py-5 lg:px-6 lg:py-7">
         <section className="relative overflow-hidden rounded-[30px] border border-border/50 bg-card px-5 py-6 sm:px-7 sm:py-8 lg:px-9">
@@ -185,7 +155,9 @@ export default function MarketplaceCatalogPage() {
               <Search className="mx-auto h-8 w-8 text-muted-foreground/40" />
               <p className="mt-3 font-bold">Bunday kategoriya topilmadi</p>
               <p className="mt-1 text-sm text-muted-foreground">
-                {onlyWithProducts ? 'Filtrni o‘chirib yoki boshqa nom bilan qidirib ko‘ring.' : 'Boshqa nom bilan qidirib ko‘ring.'}
+                {onlyWithProducts
+                  ? 'Filtrni o‘chirib yoki boshqa nom bilan qidirib ko‘ring.'
+                  : 'Boshqa nom bilan qidirib ko‘ring.'}
               </p>
             </div>
           )}
@@ -239,7 +211,10 @@ export default function MarketplaceCatalogPage() {
       />
 
       <Sheet open={showFilters} onOpenChange={setShowFilters}>
-        <SheetContent side="bottom" className="rounded-t-[30px] border-x border-t border-border/60 px-5 pb-[calc(env(safe-area-inset-bottom)+24px)] pt-5">
+        <SheetContent
+          side="bottom"
+          className="rounded-t-[30px] border-x border-t border-border/60 px-5 pb-[calc(env(safe-area-inset-bottom)+24px)] pt-5"
+        >
           <SheetHeader className="text-left">
             <SheetTitle>Katalog filtri</SheetTitle>
             <p className="text-xs text-muted-foreground">Katalogda ko‘rinadigan turkumlarni moslang.</p>
@@ -254,7 +229,9 @@ export default function MarketplaceCatalogPage() {
           >
             <span className="min-w-0">
               <span className="block text-sm font-bold">Faqat mahsuloti bor turkumlar</span>
-              <span className="mt-1 block text-xs leading-5 text-muted-foreground">Hozir mahsuloti yo‘q kategoriyalarni yashiradi.</span>
+              <span className="mt-1 block text-xs leading-5 text-muted-foreground">
+                Hozir mahsuloti yo‘q kategoriyalarni yashiradi.
+              </span>
             </span>
             <span
               className={cn(
@@ -325,7 +302,12 @@ function CategoryCard({
       </span>
       <span className="mt-4 min-w-0 w-full">
         <span className="block truncate text-sm font-extrabold">{label}</span>
-        <span className={cn('mt-0.5 block truncate text-[10px]', featured ? 'text-background/70' : 'text-muted-foreground')}>
+        <span
+          className={cn(
+            'mt-0.5 block truncate text-[10px]',
+            featured ? 'text-background/70' : 'text-muted-foreground',
+          )}
+        >
           {subtitle}
         </span>
       </span>
