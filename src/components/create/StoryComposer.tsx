@@ -78,10 +78,16 @@ function storyPayload(
 }
 
 interface StoryComposerProps {
-  onDraftStateChange?: (hasDraft: boolean) => void;
+  /** Hidden server draft: sticker graph mavjud, mode almashtirish xavfsiz emas. */
+  onDraftStateChange?: (hasBlockingDraft: boolean) => void;
+  /** Local recoverable source draft: camera auto-open qilinmasligi uchun. */
+  onLocalDraftStateChange?: (hasDraft: boolean) => void;
 }
 
-export function StoryComposer({ onDraftStateChange }: StoryComposerProps) {
+export function StoryComposer({
+  onDraftStateChange,
+  onLocalDraftStateChange,
+}: StoryComposerProps) {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { profile, user } = useAuth();
@@ -125,6 +131,12 @@ export function StoryComposer({ onDraftStateChange }: StoryComposerProps) {
 
   const draftOwnerId = user?.id ?? profile?.id ?? null;
   const attachment = attachments[0] ?? null;
+  const hasLocalDraft =
+    Boolean(attachment) ||
+    caption.trim().length > 0 ||
+    visibility !== 'public' ||
+    Boolean(storyDraft);
+
   const imageTarget = useMemo(
     () => attachments.find((item) => item.id === imageTargetId) ?? null,
     [attachments, imageTargetId],
@@ -154,6 +166,10 @@ export function StoryComposer({ onDraftStateChange }: StoryComposerProps) {
     onDraftStateChange?.(Boolean(storyDraft));
   }, [onDraftStateChange, storyDraft]);
 
+  useEffect(() => {
+    onLocalDraftStateChange?.(hasLocalDraft);
+  }, [hasLocalDraft, onLocalDraftStateChange]);
+
   /**
    * Rasm/video, caption va audience birga tiklanadi. Hidden DB draft esa faqat
    * sticker bosqichida yashaydi; route yopilsa u discard qilinadi va local
@@ -161,11 +177,6 @@ export function StoryComposer({ onDraftStateChange }: StoryComposerProps) {
    */
   useEffect(() => {
     if (!draftOwnerId || !metadataDraftHydrated || !mediaDraftHydrated) return;
-
-    const hasLocalDraft =
-      Boolean(attachment) ||
-      caption.trim().length > 0 ||
-      visibility !== 'public';
 
     const timer = window.setTimeout(() => {
       if (!hasLocalDraft) {
@@ -177,9 +188,9 @@ export function StoryComposer({ onDraftStateChange }: StoryComposerProps) {
 
     return () => window.clearTimeout(timer);
   }, [
-    attachment,
     caption,
     draftOwnerId,
+    hasLocalDraft,
     mediaDraftHydrated,
     metadataDraftHydrated,
     visibility,
