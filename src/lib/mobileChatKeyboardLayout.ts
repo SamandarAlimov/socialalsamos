@@ -1,21 +1,14 @@
 const EDITABLE_SELECTOR =
   'input, textarea, [contenteditable="true"], [contenteditable=""], [role="textbox"]';
 
-const SHELL_STYLE_PROPERTIES = [
-  'position',
-  'top',
-  'left',
-  'right',
-  'bottom',
-  'width',
-  'height',
-  'max-height',
-] as const;
-
-const FOOTER_STYLE_PROPERTIES = ['margin-bottom', 'padding-bottom'] as const;
+const ACTIVE_SHELL_ATTR = 'data-chat-keyboard-layout-active';
+const VIEWPORT_LOCK_ATTR = 'data-chat-viewport-lock';
+const KEYBOARD_OPEN_ATTR = 'data-chat-keyboard-open';
+const STYLE_ID = 'alsamos-chat-keyboard-layout';
+const GEOMETRY_EPSILON_PX = 2;
+const RELEASE_SETTLE_MS = 64;
 
 type OrientationKey = 'portrait' | 'landscape';
-type InlineStyleSnapshot = Record<string, { value: string; priority: string }>;
 
 interface KeyboardLayoutWindow extends Window {
   __alsamosMobileChatKeyboardLayoutInstalled?: boolean;
@@ -37,26 +30,16 @@ interface ViewportSnapshot {
   bottom: number;
 }
 
-function captureInlineStyles(
-  element: HTMLElement,
-  properties: readonly string[]
-): InlineStyleSnapshot {
-  const snapshot: InlineStyleSnapshot = {};
-  for (const property of properties) {
-    snapshot[property] = {
-      value: element.style.getPropertyValue(property),
-      priority: element.style.getPropertyPriority(property),
-    };
-  }
-  return snapshot;
-}
-
-function restoreInlineStyles(element: HTMLElement, snapshot: InlineStyleSnapshot | null) {
-  if (!snapshot) return;
-  for (const [property, saved] of Object.entries(snapshot)) {
-    if (saved.value) element.style.setProperty(property, saved.value, saved.priority);
-    else element.style.removeProperty(property);
-  }
+interface KeyboardSession {
+  shell: HTMLElement;
+  anchorRect: DOMRect;
+  baselineViewport: ViewportSnapshot;
+  baselineInnerHeight: number;
+  baselineClientHeight: number;
+  orientation: OrientationKey;
+  locked: boolean;
+  keyboardSeen: boolean;
+  focusLostAt: number | null;
 }
 
 function getOrientationKey(): OrientationKey {
@@ -66,23 +49,25 @@ function getOrientationKey(): OrientationKey {
   return window.innerWidth > window.innerHeight ? 'landscape' : 'portrait';
 }
 
-function keyboardThreshold(baselineHeight: number) {
-  // Browser chrome (address bar/toolbars) can move by tens of pixels. A software
-  // keyboard is materially larger, including compact landscape keyboards.
-  return Math.max(72, Math.min(160, baselineHeight * 0.14));
+function roundCssPixel(value: number) {
+  // Half-pixel rounding avoids visualViewport sub-pixel noise while remaining
+  // sharp on high-DPI mobile screens.
+  return Math.round(value * 2) / 2;
 }
 
 /**
- * Cross-browser mobile/virtual-keyboard layout synchronizer for chat.
+ * Keeps the active chat editor stable while a software keyboard opens/closes.
  *
- * Browsers use different keyboard viewport models:
- * - Chromium can resize the layout/content viewport (interactive-widget).
- * - Safari/WebKit commonly changes the VisualViewport and may pan it.
- * - Some embedded/older browsers only expose window.innerHeight changes.
- * - Browsers implementing the VirtualKeyboard API can expose keyboard geometry.
+ * The important part is that we do NOT wait until a keyboard is already large
+ * enough before changing layout. On touch devices the chat is locked to its
+ * current on-screen rectangle synchronously on focus, before the browser starts
+ * its keyboard animation. From that point only the visible viewport rectangle is
+ * updated. This prevents the old sequence: browser pan -> threshold crossed ->
+ * switch to fixed positioning -> visible jump back.
  *
- * We intentionally avoid user-agent sniffing and phone model/width assumptions.
- * The active chat editor and actual viewport/keyboard geometry are the source of truth.
+ * Geometry is driven by standards/capabilities rather than phone models or user
+ * agents: VisualViewport when available, VirtualKeyboard geometry when exposed,
+ * and window/document viewport metrics as fallbacks.
  */
 export function installMobileChatKeyboardLayout() {
   if (typeof window === 'undefined' || typeof document === 'undefined') return;
@@ -93,19 +78,40 @@ export function installMobileChatKeyboardLayout() {
 
   const visualViewport = window.visualViewport;
   const virtualKeyboard = (navigator as NavigatorWithVirtualKeyboard).virtualKeyboard;
+  const root = document.documentElement;
 
-  let activeShell: HTMLElement | null = null;
-  let activeFooter: HTMLElement | null = null;
-  let anchorRect: DOMRect | null = null;
-  let shellStyleSnapshot: InlineStyleSnapshot | null = null;
-  let footerStyleSnapshot: InlineStyleSnapshot | null = null;
+  let session: KeyboardSession | null = null;
   let frameId = 0;
+  let releaseTimer = 0;
   let orientationTimer = 0;
 
-  const baselineHeight: Record<OrientationKey, number> = {
-    portrait: 0,
-    landscape: 0,
+  const ensureStyle = () => {
+    if (document.getElementById(STYLE_ID)) return;
+
+    const style = document.createElement('style');
+    style.id = STYLE_ID;
+    style.textContent = `
+html[${VIEWPORT_LOCK_ATTR}="true"] [${ACTIVE_SHELL_ATTR}="true"] {
+  position: fixed !important;
+  top: var(--alsamos-chat-vv-top) !important;
+  left: var(--alsamos-chat-vv-left) !important;
+  right: auto !important;
+  bottom: auto !important;
+  width: var(--alsamos-chat-vv-width) !important;
+  height: var(--alsamos-chat-vv-height) !important;
+  max-height: var(--alsamos-chat-vv-height) !important;
+}
+
+html[${KEYBOARD_OPEN_ATTR}="true"] [${ACTIVE_SHELL_ATTR}="true"] [data-chat-composer-dock],
+html[${KEYBOARD_OPEN_ATTR}="true"] [${ACTIVE_SHELL_ATTR}="true"] .pb-safe.mb-16 {
+  margin-bottom: 0 !important;
+  padding-bottom: 0 !important;
+}
+`;
+    document.head.appendChild(style);
   };
+
+  ensureStyle();
 
   const getViewport = (): ViewportSnapshot => {
     if (visualViewport) {
@@ -127,24 +133,10 @@ export function installMobileChatKeyboardLayout() {
     return { top: 0, left: 0, width, height, bottom: height };
   };
 
-  const seedBaseline = () => {
-    const viewport = getViewport();
-    const orientation = getOrientationKey();
-    baselineHeight[orientation] = Math.max(baselineHeight[orientation], viewport.height);
-  };
-
-  seedBaseline();
-
-  const removeKeyboardLayout = () => {
-    if (activeShell) restoreInlineStyles(activeShell, shellStyleSnapshot);
-    if (activeFooter) restoreInlineStyles(activeFooter, footerStyleSnapshot);
-
-    activeShell = null;
-    activeFooter = null;
-    anchorRect = null;
-    shellStyleSnapshot = null;
-    footerStyleSnapshot = null;
-    document.documentElement.removeAttribute('data-chat-keyboard-open');
+  const getVirtualKeyboardRect = () => {
+    const rect = virtualKeyboard?.boundingRect;
+    if (!rect || !Number.isFinite(rect.height) || rect.height <= 0) return null;
+    return rect;
   };
 
   const getFocusedChatShell = () => {
@@ -159,45 +151,70 @@ export function installMobileChatKeyboardLayout() {
     return editable.closest<HTMLElement>('.chat-shell');
   };
 
-  const prepareShell = (shell: HTMLElement) => {
-    if (activeShell === shell && anchorRect) return;
-    if (activeShell && activeShell !== shell) removeKeyboardLayout();
-
-    activeShell = shell;
-    activeFooter = shell.querySelector<HTMLElement>(
-      '[data-chat-composer-dock], .pb-safe.mb-16'
-    );
-    anchorRect = shell.getBoundingClientRect();
-    shellStyleSnapshot = captureInlineStyles(shell, SHELL_STYLE_PROPERTIES);
-    footerStyleSnapshot = activeFooter
-      ? captureInlineStyles(activeFooter, FOOTER_STYLE_PROPERTIES)
-      : null;
+  const isLikelyTouchKeyboardDevice = () => {
+    if ((navigator.maxTouchPoints || 0) > 0) return true;
+    if (typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches) {
+      return true;
+    }
+    return 'ontouchstart' in window;
   };
 
-  const getVirtualKeyboardRect = () => {
-    const rect = virtualKeyboard?.boundingRect;
-    if (!rect || !Number.isFinite(rect.height) || rect.height <= 0) return null;
-    return rect;
+  const setRootPx = (property: string, value: number) => {
+    const next = `${roundCssPixel(value)}px`;
+    if (root.style.getPropertyValue(property) !== next) {
+      root.style.setProperty(property, next);
+    }
   };
 
-  const applyKeyboardLayout = (
-    shell: HTMLElement,
+  const setRootFlag = (attribute: string, enabled: boolean) => {
+    if (enabled) {
+      if (root.getAttribute(attribute) !== 'true') root.setAttribute(attribute, 'true');
+    } else if (root.hasAttribute(attribute)) {
+      root.removeAttribute(attribute);
+    }
+  };
+
+  const clearRootGeometry = () => {
+    root.style.removeProperty('--alsamos-chat-vv-top');
+    root.style.removeProperty('--alsamos-chat-vv-left');
+    root.style.removeProperty('--alsamos-chat-vv-width');
+    root.style.removeProperty('--alsamos-chat-vv-height');
+  };
+
+  const endSession = () => {
+    if (releaseTimer) {
+      window.clearTimeout(releaseTimer);
+      releaseTimer = 0;
+    }
+
+    if (session?.shell) session.shell.removeAttribute(ACTIVE_SHELL_ATTR);
+    session = null;
+    setRootFlag(KEYBOARD_OPEN_ATTR, false);
+    setRootFlag(VIEWPORT_LOCK_ATTR, false);
+    clearRootGeometry();
+  };
+
+  const applyLockedGeometry = (
+    currentSession: KeyboardSession,
     viewport: ViewportSnapshot,
     virtualKeyboardRect: DOMRectReadOnly | null
   ) => {
-    prepareShell(shell);
-    if (!anchorRect) return;
+    const { anchorRect, baselineViewport } = currentSession;
 
-    // Preserve the chat's original horizontal footprint. This works both for the
-    // phone full-screen chat and for split/tablet layouts with an on-screen keyboard.
-    const shellTop = viewport.top + Math.max(0, anchorRect.top);
-    const shellLeft = viewport.left + Math.max(0, anchorRect.left);
+    // Preserve the shell's original offset inside the visible viewport. Full-screen
+    // phone chat therefore stays at visual top=0, while split/tablet layouts retain
+    // their own panel rectangle instead of being expanded to the whole screen.
+    const anchorTopInViewport = Math.max(0, anchorRect.top - baselineViewport.top);
+    const anchorLeftInViewport = Math.max(0, anchorRect.left - baselineViewport.left);
+    const shellTop = viewport.top + anchorTopInViewport;
+    const shellLeft = viewport.left + anchorLeftInViewport;
+
     const viewportRight = viewport.left + viewport.width;
     const availableWidth = Math.max(1, viewportRight - shellLeft);
     const shellWidth = Math.max(1, Math.min(anchorRect.width, availableWidth));
 
-    // In overlay-content mode the keyboard can cover the bottom without shrinking
-    // VisualViewport. VirtualKeyboard geometry closes that gap when available.
+    // Overlay-mode keyboards may not shrink VisualViewport. If the browser exposes
+    // VirtualKeyboard geometry, use its top edge as the real usable bottom.
     const keyboardTop = virtualKeyboardRect
       ? Math.max(viewport.top, virtualKeyboardRect.top)
       : viewport.bottom;
@@ -205,125 +222,192 @@ export function installMobileChatKeyboardLayout() {
     const availableHeight = Math.max(1, usableBottom - shellTop);
     const shellHeight = Math.max(1, Math.min(anchorRect.height, availableHeight));
 
-    shell.style.setProperty('position', 'fixed', 'important');
-    shell.style.setProperty('top', `${shellTop}px`, 'important');
-    shell.style.setProperty('left', `${shellLeft}px`, 'important');
-    shell.style.setProperty('right', 'auto', 'important');
-    shell.style.setProperty('bottom', 'auto', 'important');
-    shell.style.setProperty('width', `${shellWidth}px`, 'important');
-    shell.style.setProperty('height', `${shellHeight}px`, 'important');
-    shell.style.setProperty('max-height', `${shellHeight}px`, 'important');
+    setRootPx('--alsamos-chat-vv-top', shellTop);
+    setRootPx('--alsamos-chat-vv-left', shellLeft);
+    setRootPx('--alsamos-chat-vv-width', shellWidth);
+    setRootPx('--alsamos-chat-vv-height', shellHeight);
+    setRootFlag(VIEWPORT_LOCK_ATTR, true);
+    currentSession.locked = true;
+  };
 
-    // The normal mobile chat leaves room for the bottom navigation. While a virtual
-    // keyboard is visible, the usable viewport already ends directly above it.
-    if (activeFooter) {
-      activeFooter.style.setProperty('margin-bottom', '0px', 'important');
-      activeFooter.style.setProperty('padding-bottom', '0px', 'important');
+  const beginSession = (shell: HTMLElement) => {
+    if (session?.shell === shell) return session;
+    if (session) endSession();
+
+    const viewport = getViewport();
+    session = {
+      shell,
+      anchorRect: shell.getBoundingClientRect(),
+      baselineViewport: viewport,
+      baselineInnerHeight: Math.max(1, window.innerHeight || viewport.height),
+      baselineClientHeight: Math.max(
+        1,
+        document.documentElement.clientHeight || window.innerHeight || viewport.height
+      ),
+      orientation: getOrientationKey(),
+      locked: false,
+      keyboardSeen: false,
+      focusLostAt: null,
+    };
+
+    shell.setAttribute(ACTIVE_SHELL_ATTR, 'true');
+
+    // On phones/tablets focusin fires before the OS keyboard animation. Locking the
+    // exact current rectangle here is visually neutral, but prevents the browser's
+    // intermediate pan from ever becoming a painted frame.
+    if (isLikelyTouchKeyboardDevice()) {
+      applyLockedGeometry(session, viewport, getVirtualKeyboardRect());
     }
 
-    document.documentElement.setAttribute('data-chat-keyboard-open', 'true');
+    return session;
+  };
+
+  const keyboardGeometryChanged = (
+    currentSession: KeyboardSession,
+    viewport: ViewportSnapshot,
+    virtualKeyboardRect: DOMRectReadOnly | null
+  ) => {
+    const visualHeightLoss = Math.max(
+      0,
+      currentSession.baselineViewport.height - viewport.height
+    );
+    const visualTopShift = Math.abs(viewport.top - currentSession.baselineViewport.top);
+    const visualLeftShift = Math.abs(viewport.left - currentSession.baselineViewport.left);
+    const innerHeightLoss = Math.max(
+      0,
+      currentSession.baselineInnerHeight - Math.max(1, window.innerHeight || viewport.height)
+    );
+    const clientHeightLoss = Math.max(
+      0,
+      currentSession.baselineClientHeight -
+        Math.max(1, document.documentElement.clientHeight || window.innerHeight || viewport.height)
+    );
+    const virtualKeyboardHeight = virtualKeyboardRect?.height || 0;
+
+    return (
+      Math.max(
+        visualHeightLoss,
+        visualTopShift,
+        visualLeftShift,
+        innerHeightLoss,
+        clientHeightLoss,
+        virtualKeyboardHeight
+      ) > GEOMETRY_EPSILON_PX
+    );
+  };
+
+  const scheduleReleaseCheck = () => {
+    if (releaseTimer) window.clearTimeout(releaseTimer);
+    releaseTimer = window.setTimeout(() => {
+      releaseTimer = 0;
+      scheduleSync();
+    }, RELEASE_SETTLE_MS);
   };
 
   const sync = () => {
     frameId = 0;
 
-    const viewport = getViewport();
-    const orientation = getOrientationKey();
     const focusedShell = getFocusedChatShell();
+
+    if (session && !session.shell.isConnected) endSession();
+
+    if (focusedShell && (!session || session.shell !== focusedShell)) {
+      beginSession(focusedShell);
+    }
+
+    if (!session) return;
+
+    // Orientation is a genuine layout change, not a keyboard animation. Re-anchor
+    // after the browser has applied the new orientation instead of stretching the
+    // old portrait/landscape rectangle.
+    if (session.orientation !== getOrientationKey()) {
+      const shell = focusedShell || session.shell;
+      endSession();
+      window.requestAnimationFrame(() => {
+        if (shell.isConnected && getFocusedChatShell() === shell) beginSession(shell);
+        scheduleSync();
+      });
+      return;
+    }
+
+    const viewport = getViewport();
     const virtualKeyboardRect = getVirtualKeyboardRect();
+    const keyboardOpen = keyboardGeometryChanged(session, viewport, virtualKeyboardRect);
 
-    if (activeShell && !activeShell.isConnected) removeKeyboardLayout();
+    if (keyboardOpen) session.keyboardSeen = true;
+    setRootFlag(KEYBOARD_OPEN_ATTR, keyboardOpen);
 
-    // With no active chat editor, the current viewport is a safe full-height baseline.
-    if (!focusedShell) {
-      removeKeyboardLayout();
-      baselineHeight[orientation] = Math.max(baselineHeight[orientation], viewport.height);
+    // Non-touch environments are left completely alone until real keyboard/viewport
+    // geometry changes. Touch devices were already pre-locked synchronously at focus.
+    if (session.locked || keyboardOpen) {
+      applyLockedGeometry(session, viewport, virtualKeyboardRect);
+    }
+
+    if (focusedShell === session.shell) {
+      session.focusLostAt = null;
       return;
     }
 
-    prepareShell(focusedShell);
+    // Focus can leave the editor before the OS keyboard finishes closing. Keep the
+    // same locked shell through the close animation, then release only after the
+    // viewport has returned to its pre-focus geometry for a short settled window.
+    if (session.focusLostAt == null) session.focusLostAt = performance.now();
 
-    const baseline = Math.max(baselineHeight[orientation], viewport.height);
-    const threshold = keyboardThreshold(baseline);
-    const viewportLoss = Math.max(0, baseline - viewport.height);
-
-    const layoutHeight = Math.max(
-      baseline,
-      window.innerHeight || 0,
-      document.documentElement.clientHeight || 0
-    );
-    const coveredLayout = Math.max(0, layoutHeight - viewport.bottom);
-    const virtualKeyboardHeight = virtualKeyboardRect?.height || 0;
-
-    const keyboardOpen =
-      Math.max(viewportLoss, coveredLayout, virtualKeyboardHeight) >= threshold;
-
-    if (!keyboardOpen) {
-      // Focus can happen one or more frames before the keyboard animation starts.
-      // Keep refreshing the anchor/baseline while the viewport is still unobstructed.
-      if (activeShell) restoreInlineStyles(activeShell, shellStyleSnapshot);
-      if (activeFooter) restoreInlineStyles(activeFooter, footerStyleSnapshot);
-      anchorRect = focusedShell.getBoundingClientRect();
-      shellStyleSnapshot = captureInlineStyles(focusedShell, SHELL_STYLE_PROPERTIES);
-      activeFooter = focusedShell.querySelector<HTMLElement>(
-        '[data-chat-composer-dock], .pb-safe.mb-16'
-      );
-      footerStyleSnapshot = activeFooter
-        ? captureInlineStyles(activeFooter, FOOTER_STYLE_PROPERTIES)
-        : null;
-      baselineHeight[orientation] = Math.max(baselineHeight[orientation], viewport.height);
-      document.documentElement.removeAttribute('data-chat-keyboard-open');
+    if (keyboardOpen) {
+      scheduleReleaseCheck();
       return;
     }
 
-    applyKeyboardLayout(focusedShell, viewport, virtualKeyboardRect);
+    const elapsed = performance.now() - session.focusLostAt;
+    if (elapsed < RELEASE_SETTLE_MS) {
+      scheduleReleaseCheck();
+      return;
+    }
+
+    endSession();
   };
 
-  const scheduleSync = () => {
+  function scheduleSync() {
     if (frameId) cancelAnimationFrame(frameId);
     frameId = requestAnimationFrame(sync);
-  };
+  }
 
   const handleFocusIn = () => {
     const shell = getFocusedChatShell();
-    if (shell) {
-      const viewport = getViewport();
-      const orientation = getOrientationKey();
-      baselineHeight[orientation] = Math.max(baselineHeight[orientation], viewport.height);
-      prepareShell(shell);
-    }
+    if (shell) beginSession(shell);
     scheduleSync();
   };
 
   const handleFocusOut = () => {
-    // Give focus a frame to move between controls inside the same composer.
+    if (session && session.focusLostAt == null) session.focusLostAt = performance.now();
+
+    // Different engines emit keyboard-close geometry events at different moments.
+    // These checks cover browsers that send only one resize event or no final one.
     scheduleSync();
-    window.setTimeout(scheduleSync, 80);
+    scheduleReleaseCheck();
+    window.setTimeout(scheduleSync, 180);
+    window.setTimeout(scheduleSync, 360);
   };
 
-  const resetOrientationBaseline = () => {
+  const handleOrientationChange = () => {
     if (orientationTimer) window.clearTimeout(orientationTimer);
-    removeKeyboardLayout();
+    const focusedShell = getFocusedChatShell();
+    endSession();
 
-    const orientation = getOrientationKey();
-    baselineHeight[orientation] = getViewport().height;
-
-    // Mobile browsers settle orientation + browser chrome + keyboard in stages.
     orientationTimer = window.setTimeout(() => {
-      const focusedShell = getFocusedChatShell();
-      if (!focusedShell) seedBaseline();
+      if (focusedShell?.isConnected && getFocusedChatShell() === focusedShell) {
+        beginSession(focusedShell);
+      }
       scheduleSync();
-    }, 350);
+    }, 250);
   };
 
   visualViewport?.addEventListener('resize', scheduleSync, { passive: true });
   visualViewport?.addEventListener('scroll', scheduleSync, { passive: true });
   virtualKeyboard?.addEventListener('geometrychange', scheduleSync);
   window.addEventListener('resize', scheduleSync, { passive: true });
-  window.addEventListener('orientationchange', resetOrientationBaseline, { passive: true });
-  window.screen.orientation?.addEventListener?.('change', resetOrientationBaseline);
+  window.addEventListener('orientationchange', handleOrientationChange, { passive: true });
+  window.screen.orientation?.addEventListener?.('change', handleOrientationChange);
   document.addEventListener('focusin', handleFocusIn, true);
   document.addEventListener('focusout', handleFocusOut, true);
-
-  scheduleSync();
 }
