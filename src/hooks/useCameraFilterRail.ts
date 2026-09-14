@@ -75,6 +75,82 @@ function centerActiveFilter(rail: HTMLElement) {
   active.scrollIntoView({ behavior: 'auto', block: 'nearest', inline: 'center' });
 }
 
+function attachShutterDragBridge(rail: HTMLElement) {
+  const shell = rail.parentElement;
+  const shutter = shell?.querySelector<HTMLButtonElement>(
+    `button:not([aria-label$=" filtri"])`,
+  );
+  if (!shutter) return () => undefined;
+
+  let pointerId: number | null = null;
+  let startX = 0;
+  let startScrollLeft = 0;
+  let dragged = false;
+  let suppressNextClick = false;
+  const previousTouchAction = shutter.style.touchAction;
+  shutter.style.touchAction = 'none';
+
+  const onPointerDown = (event: PointerEvent) => {
+    if (event.button !== 0 || shutter.disabled) return;
+    pointerId = event.pointerId;
+    startX = event.clientX;
+    startScrollLeft = rail.scrollLeft;
+    dragged = false;
+    suppressNextClick = false;
+    try {
+      shutter.setPointerCapture(event.pointerId);
+    } catch {
+      // Some embedded browsers do not expose pointer capture for buttons.
+    }
+  };
+
+  const onPointerMove = (event: PointerEvent) => {
+    if (pointerId !== event.pointerId) return;
+    const deltaX = event.clientX - startX;
+    if (!dragged && Math.abs(deltaX) < 5) return;
+    dragged = true;
+    suppressNextClick = true;
+    event.preventDefault();
+    rail.scrollLeft = startScrollLeft - deltaX;
+  };
+
+  const finishPointer = (event: PointerEvent) => {
+    if (pointerId !== event.pointerId) return;
+    if (dragged) event.preventDefault();
+    try {
+      if (shutter.hasPointerCapture(event.pointerId)) {
+        shutter.releasePointerCapture(event.pointerId);
+      }
+    } catch {
+      // Pointer capture is optional on older WebViews.
+    }
+    pointerId = null;
+    dragged = false;
+  };
+
+  const onClickCapture = (event: MouseEvent) => {
+    if (!suppressNextClick) return;
+    suppressNextClick = false;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  };
+
+  shutter.addEventListener('pointerdown', onPointerDown);
+  shutter.addEventListener('pointermove', onPointerMove);
+  shutter.addEventListener('pointerup', finishPointer);
+  shutter.addEventListener('pointercancel', finishPointer);
+  shutter.addEventListener('click', onClickCapture, true);
+
+  return () => {
+    shutter.style.touchAction = previousTouchAction;
+    shutter.removeEventListener('pointerdown', onPointerDown);
+    shutter.removeEventListener('pointermove', onPointerMove);
+    shutter.removeEventListener('pointerup', finishPointer);
+    shutter.removeEventListener('pointercancel', finishPointer);
+    shutter.removeEventListener('click', onClickCapture, true);
+  };
+}
+
 export function useCameraFilterRail(rootRef: RefObject<HTMLElement>) {
   useEffect(() => {
     const root = rootRef.current;
@@ -87,6 +163,7 @@ export function useCameraFilterRail(rootRef: RefObject<HTMLElement>) {
 
       let commitTimer = 0;
       let frame = 0;
+      const detachShutterDragBridge = attachShutterDragBridge(rail);
 
       const updateNearest = () => {
         window.cancelAnimationFrame(frame);
@@ -117,6 +194,7 @@ export function useCameraFilterRail(rootRef: RefObject<HTMLElement>) {
       cleanups.set(rail, () => {
         window.clearTimeout(commitTimer);
         window.cancelAnimationFrame(frame);
+        detachShutterDragBridge();
         rail.removeEventListener('scroll', onScroll);
       });
     };
