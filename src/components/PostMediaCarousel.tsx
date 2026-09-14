@@ -2,9 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import type { PostMusicInput } from '@/lib/postMeta';
 import { VideoPlayer } from '@/components/VideoPlayer';
 import { MediaFrame } from '@/components/media/MediaFrame';
 import { ImageLightbox } from '@/components/media/ImageLightbox';
+import { CreateMusicPreview } from '@/components/create/CreateMusicPreview';
 import { resolveTouchAxis, type TouchAxis } from '@/lib/touchGesture';
 import { uniqueMediaCandidates } from '@/lib/mediaRecovery';
 
@@ -18,6 +20,8 @@ interface PostMediaCarouselProps {
   posters?: Array<string | null | undefined>;
   altTexts?: Array<string | null | undefined>;
   overlays?: Array<ReactNode>;
+  /** Instagram-style soundtrack applied to visual post media. */
+  backgroundMusic?: PostMusicInput | null;
   onRetry?: () => void;
 }
 
@@ -29,6 +33,7 @@ export function PostMediaCarousel({
   posters,
   altTexts,
   overlays,
+  backgroundMusic,
   onRetry,
 }: PostMediaCarouselProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -37,6 +42,8 @@ export function PostMediaCarousel({
   const [failedIndexes, setFailedIndexes] = useState<Set<number>>(() => new Set());
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
+  const [videoPlaying, setVideoPlaying] = useState(false);
+  const [videoTimeSeconds, setVideoTimeSeconds] = useState(0);
   const swipeStartRef = useRef<{ x: number; y: number; at: number } | null>(null);
   const swipeAxisRef = useRef<TouchAxis>('unknown');
   const didSwipeRef = useRef(false);
@@ -157,6 +164,8 @@ export function PostMediaCarousel({
     setCandidateIndexes({});
     setFailedIndexes(new Set());
     setRatios({});
+    setVideoPlaying(false);
+    setVideoTimeSeconds(0);
     // A refreshed signed URL must not move the viewer to another album item.
     setCurrentIndex((previous) => Math.min(previous, Math.max(0, mediaUrls.length - 1)));
   }, [mediaUrls.length]);
@@ -174,6 +183,54 @@ export function PostMediaCarousel({
     });
     onRetry?.();
   };
+
+  // VideoPlayer ichidagi native <video> holatini soundtrack bilan sinxronlaymiz.
+  // VideoPlayer public API sini murakkablashtirmasdan play/pause/seek birga ishlaydi.
+  useEffect(() => {
+    setVideoPlaying(false);
+    setVideoTimeSeconds(0);
+    if (!isCurrentVideo || currentFailed) return;
+
+    let video: HTMLVideoElement | null = null;
+    let frame = 0;
+
+    const bindVideo = () => {
+      video = mediaFrameRef.current?.querySelector('video') ?? null;
+      if (!video) {
+        frame = window.requestAnimationFrame(bindVideo);
+        return;
+      }
+
+      const sync = () => {
+        if (!video) return;
+        setVideoPlaying(!video.paused && !video.ended);
+        setVideoTimeSeconds(Number.isFinite(video.currentTime) ? video.currentTime : 0);
+      };
+
+      video.addEventListener('play', sync);
+      video.addEventListener('pause', sync);
+      video.addEventListener('ended', sync);
+      video.addEventListener('timeupdate', sync);
+      video.addEventListener('seeked', sync);
+      sync();
+
+      cleanup = () => {
+        video?.removeEventListener('play', sync);
+        video?.removeEventListener('pause', sync);
+        video?.removeEventListener('ended', sync);
+        video?.removeEventListener('timeupdate', sync);
+        video?.removeEventListener('seeked', sync);
+      };
+    };
+
+    let cleanup = () => {};
+    frame = window.requestAnimationFrame(bindVideo);
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      cleanup();
+    };
+  }, [currentCandidateIndex, currentFailed, currentIndex, currentMedia, isCurrentVideo]);
 
   // Chrome/Edge touchpad pinch is exposed as Ctrl+wheel. On a post image that
   // gesture should open the media viewer instead of zooming the whole website.
@@ -272,6 +329,7 @@ export function PostMediaCarousel({
 
   const previousAvailable = adjacentIndex(currentIndex, -1);
   const nextAvailable = adjacentIndex(currentIndex, 1);
+  const hasBackgroundMusic = Boolean(backgroundMusic?.track?.audioUrl);
 
   return (
     <div className="relative group w-full">
@@ -311,6 +369,7 @@ export function PostMediaCarousel({
             poster={posters?.[currentIndex] ?? undefined}
             aspectMode="auto"
             autoPlay={false}
+            muted={Boolean(backgroundMusic?.mutedOriginal)}
             className="rounded-none w-full h-full"
             onPlaybackError={advanceCurrentCandidate}
             onAspectRatio={(ratio) => {
@@ -355,6 +414,19 @@ export function PostMediaCarousel({
         )}
 
         {overlays?.[currentIndex]}
+
+        {hasBackgroundMusic && !currentFailed && (
+          <CreateMusicPreview
+            key={`music:${currentIndex}:${backgroundMusic?.trackId ?? backgroundMusic?.track?.audioUrl ?? ''}`}
+            music={backgroundMusic}
+            enabled
+            visibilityManaged
+            mediaPlaying={isCurrentVideo ? videoPlaying : undefined}
+            mediaTimeSeconds={isCurrentVideo ? videoTimeSeconds : null}
+            autoPlay={!isCurrentVideo}
+            className="absolute bottom-3 left-3 max-w-[62%]"
+          />
+        )}
 
         {mediaUrls.length > 1 && (
           <>
