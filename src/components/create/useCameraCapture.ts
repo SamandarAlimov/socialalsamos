@@ -136,6 +136,17 @@ export function useCameraCapture(options: UseCameraCaptureOptions) {
     if (recordedUrl) URL.revokeObjectURL(recordedUrl);
   }, [recordedUrl]);
 
+  // Use the individual CSS `scale` transform so the existing front-camera
+  // mirror transform keeps working. This makes pinch zoom visible immediately
+  // while the canvas path below applies the exact same crop to saved media.
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    video.style.setProperty('scale', String(zoom));
+    video.style.setProperty('transform-origin', 'center center');
+    video.style.setProperty('will-change', 'scale');
+  }, [cameraReady, zoom]);
+
   const prepareCanvas = useCallback(() => {
     const video = videoRef.current;
     const canvas = canvasRef.current;
