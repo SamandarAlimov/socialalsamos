@@ -1,0 +1,42 @@
+/*
+ * Desktop/tablet Create must remain inside AppLayout so the canonical sidebar
+ * stays visible exactly like Post/Live. Mobile keeps the immersive camera page.
+ */
+@media (min-width: 768px) {
+  .create-page.create-page--immersive {
+    position: relative !important;
+    inset: auto !important;
+    z-index: auto !important;
+    width: 100% !important;
+    height: 100% !important;
+    min-height: 0 !important;
+    background: hsl(var(--background)) !important;
+    color: hsl(var(--foreground)) !important;
+  }
+
+  .create-page--immersive .create-page-main {
+    background: hsl(var(--background)) !important;
+  }
+
+  .create-page--immersive .create-mode-stage--immersive {
+    min-height: 0 !important;
+    height: 100% !important;
+  }
+
+  /* Desktop/tablet exits through the normal application shell/sidebar. */
+  .create-page--immersive .create-page-close {
+    display: none !important;
+  }
+}
+
+/* Camera filter rails are real horizontal scrollers on touch and desktop. */
+.alsamos-camera-filter-scroll {
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  touch-action: pan-x;
+}
+
+.alsamos-camera-filter-scroll::-webkit-scrollbar {
+  display: none;
+}
