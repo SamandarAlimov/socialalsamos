@@ -6,6 +6,7 @@ import {
   hasTurnRelay,
   isIceServerCacheFresh,
   mergeIceServerSources,
+  normalizeRemoteIceServers,
   REMOTE_ICE_CACHE_TTL_MS,
   urlsOfIceServer,
 } from './iceServers';
@@ -69,6 +70,36 @@ describe('native WebRTC ICE policy', () => {
 
     expect(urls).toContain('turn:env-turn.example.com:3478?transport=udp');
     expect(urls).toContain('turn:remote-turn.example.com:3478?transport=tcp');
+  });
+
+  it('loads the RTCConfiguration-shaped remote payload used in production', () => {
+    const result = normalizeRemoteIceServers({
+      iceServers: [
+        { urls: 'stun:stun.example.com:3478' },
+        {
+          urls: ['turn:turn.example.com:3478?transport=udp', 'turns:turn.example.com:5349'],
+          username: 'user',
+          credential: 'secret',
+        },
+      ],
+    });
+
+    expect(result).toHaveLength(2);
+    expect(hasTurnRelay(result)).toBe(true);
+  });
+
+  it('keeps backward compatibility with a top-level ICE server array', () => {
+    const result = normalizeRemoteIceServers([
+      { urls: 'turn:legacy-turn.example.com:3478', username: 'user', credential: 'secret' },
+    ]);
+
+    expect(result).toHaveLength(1);
+    expect(hasTurnRelay(result)).toBe(true);
+  });
+
+  it('rejects malformed remote ICE config instead of passing it to RTCPeerConnection', () => {
+    expect(normalizeRemoteIceServers({ iceServers: { urls: 'turn:bad.example.com' } })).toEqual([]);
+    expect(normalizeRemoteIceServers(null)).toEqual([]);
   });
 
   it('keeps rotated credentials for the same TURN endpoint as independent fallbacks', () => {
