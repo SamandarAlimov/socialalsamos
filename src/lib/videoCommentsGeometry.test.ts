@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 
 import {
   VIDEO_COMMENTS_REFERENCE,
+  VIDEO_COMMENTS_REFERENCE_ASPECT,
   VIDEO_COMMENTS_REFERENCE_VIEWPORT_HEIGHT,
+  fitVideoCommentsPreview,
   scaleVideoCommentsReference,
 } from './videoCommentsGeometry';
 
@@ -22,6 +24,7 @@ describe('video comments measured geometry', () => {
     expect(Math.round(scaled.sheetCornerRadius)).toBe(81);
     expect(Math.round(scaled.handleWidth)).toBe(84);
     expect(Math.round(scaled.handleHeight)).toBe(6);
+    expect(Math.round(scaled.previewGap)).toBe(20);
     expect(
       Math.round(
         VIDEO_COMMENTS_REFERENCE.sheet.initialTop + scaled.handleTopWithinSheet,
@@ -29,15 +32,59 @@ describe('video comments measured geometry', () => {
     ).toBe(856);
   });
 
-  it('keeps the initial comments sheet below the visible video preview', () => {
+  it('fits the reference 3:4 Reel exactly above the initial sheet', () => {
+    const fit = fitVideoCommentsPreview(
+      VIDEO_COMMENTS_REFERENCE.screenWidth,
+      VIDEO_COMMENTS_REFERENCE_VIEWPORT_HEIGHT,
+      VIDEO_COMMENTS_REFERENCE_ASPECT,
+    );
+
+    expect(Math.round(fit.stageHeight)).toBe(688);
+    expect(Math.round(fit.mediaWidth)).toBe(516);
+    expect(Math.round(fit.mediaHeight)).toBe(688);
+    expect(Math.round(fit.mediaTop)).toBe(0);
+    expect(Math.round(fit.gap)).toBe(20);
+  });
+
+  it('preserves a 9:16 Reel instead of stretching it into the 3:4 reference box', () => {
+    const fit = fitVideoCommentsPreview(
+      VIDEO_COMMENTS_REFERENCE.screenWidth,
+      VIDEO_COMMENTS_REFERENCE_VIEWPORT_HEIGHT,
+      9 / 16,
+    );
+
+    expect(Math.round(fit.mediaHeight)).toBe(688);
+    expect(Math.round(fit.mediaWidth)).toBe(387);
+    expect(fit.mediaWidth / fit.mediaHeight).toBeCloseTo(9 / 16, 4);
+  });
+
+  it('centers landscape video inside the available preview stage', () => {
+    const fit = fitVideoCommentsPreview(
+      VIDEO_COMMENTS_REFERENCE.screenWidth,
+      VIDEO_COMMENTS_REFERENCE_VIEWPORT_HEIGHT,
+      16 / 9,
+    );
+
+    expect(Math.round(fit.mediaWidth)).toBe(945);
+    expect(Math.round(fit.mediaHeight)).toBe(532);
+    expect(Math.round(fit.mediaTop)).toBe(78);
+  });
+
+  it('shrinks the preview away when the sheet reaches the expanded detent', () => {
     const scaled = scaleVideoCommentsReference(
       VIDEO_COMMENTS_REFERENCE.screenWidth,
       VIDEO_COMMENTS_REFERENCE_VIEWPORT_HEIGHT,
     );
-    const previewBottom = scaled.previewTop + scaled.previewHeight;
+    const fit = fitVideoCommentsPreview(
+      VIDEO_COMMENTS_REFERENCE.screenWidth,
+      VIDEO_COMMENTS_REFERENCE_VIEWPORT_HEIGHT,
+      VIDEO_COMMENTS_REFERENCE_ASPECT,
+      scaled.expandedSheetTop,
+    );
 
-    expect(previewBottom).toBeLessThan(scaled.initialSheetTop);
-    expect(Math.round(scaled.initialSheetTop - previewBottom)).toBe(20);
+    expect(fit.stageHeight).toBe(0);
+    expect(fit.mediaWidth).toBe(0);
+    expect(fit.mediaHeight).toBe(0);
   });
 
   it('uses the app viewport height instead of the full screenshot height', () => {
