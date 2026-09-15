@@ -3,7 +3,7 @@ import {
   fitVideoCommentsPreview,
 } from './videoCommentsGeometry';
 
-const OPEN_SHEET_SELECTOR = '[data-video-comments-sheet="true"][data-state="open"]';
+const SHEET_SELECTOR = '[data-video-comments-sheet="true"]';
 const PREVIEW_SELECTOR = '.video-comments-preview-frame';
 const LIVE_SYNC_CLASS = 'video-comments-preview-live-sync';
 const POSITION_EPSILON_PX = 0.5;
@@ -114,7 +114,7 @@ function applyVisualGeometry(
 export function syncVideoCommentsPreviewToVisualSheet() {
   if (typeof document === 'undefined' || typeof window === 'undefined') return false;
 
-  const sheet = document.querySelector<HTMLElement>(OPEN_SHEET_SELECTOR);
+  const sheet = document.querySelector<HTMLElement>(SHEET_SELECTOR);
   const frame = document.querySelector<HTMLElement>(PREVIEW_SELECTOR);
   const video = frame ? directVideoChild(frame) : null;
 
