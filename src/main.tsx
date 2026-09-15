@@ -15,7 +15,10 @@ import "./styles/video-comments-preview-tap-dismiss.css";
 import "./styles/video-comments-preview-sheet-sync.css";
 import "./styles/video-comments-compact-density.css";
 import "./i18n";
-import { recoverAuthSessionBeforeMount } from "./lib/bootstrapAuthSession";
+import {
+  installAuthSessionResumeRecovery,
+  recoverAuthSessionBeforeMount,
+} from "./lib/bootstrapAuthSession";
 import { installMediaUploadFetchFallback } from "./lib/mediaUploadFetchFallback";
 import { installNativeInteractionPolicy } from "./lib/nativeInteractionPolicy";
 import { installMobileChatKeyboardLayout } from "./lib/mobileChatKeyboardLayout";
@@ -61,6 +64,10 @@ async function mountApp() {
   // authenticated hooks mount, otherwise every initial PostgREST request races
   // with token refresh and the app can appear completely empty.
   await recoverAuthSessionBeforeMount();
+
+  // Keep recovering on focus/pageshow/online after mount as well. This is not
+  // tied to any OS: mobile and desktop browsers can all suspend refresh timers.
+  installAuthSessionResumeRecovery();
 
   root.render(
     <HelmetProvider>

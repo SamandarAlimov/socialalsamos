@@ -2,6 +2,47 @@ import { supabase } from '@/integrations/supabase/client';
 import { isTerminalRefreshTokenError } from '@/lib/supabaseJwtRecovery';
 
 const REFRESH_EARLY_MS = 60_000;
+let recoveryInFlight: Promise<void> | null = null;
+
+async function recoverAuthSession() {
+  if (recoveryInFlight) return recoveryInFlight;
+
+  recoveryInFlight = (async () => {
+    try {
+      const { data, error } = await supabase.auth.getSession();
+      if (error) {
+        console.warn('[alsamos/auth] Session recovery read failed:', error.message);
+        return;
+      }
+
+      const session = data.session;
+      if (!session) return;
+
+      const expiresAtMs = (session.expires_at ?? 0) * 1000;
+      if (expiresAtMs > Date.now() + REFRESH_EARLY_MS) return;
+
+      const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession();
+      if (!refreshError && refreshed.session?.access_token) return;
+
+      const message = refreshError?.message ?? 'Session refresh returned no session';
+      console.warn('[alsamos/auth] Session refresh failed:', message);
+
+      // Only an invalid refresh token is terminal. Offline/network failures must
+      // not sign the user out because they can recover when connectivity returns.
+      if (refreshError && isTerminalRefreshTokenError(message)) {
+        await supabase.auth.signOut({ scope: 'local' }).catch(() => undefined);
+      }
+    } catch (error) {
+      console.warn('[alsamos/auth] Session recovery failed:', error);
+    }
+  })();
+
+  try {
+    await recoveryInFlight;
+  } finally {
+    recoveryInFlight = null;
+  }
+}
 
 /**
  * Do not mount authenticated screens with an already-expired access token.
@@ -11,33 +52,34 @@ const REFRESH_EARLY_MS = 60_000;
  * desktop/mobile browsers alike.
  */
 export async function recoverAuthSessionBeforeMount() {
-  try {
-    const { data, error } = await supabase.auth.getSession();
-    if (error) {
-      console.warn('[alsamos/auth] Session bootstrap read failed:', error.message);
-      return;
-    }
+  await recoverAuthSession();
+}
 
-    const session = data.session;
-    if (!session) return;
+/**
+ * Keep the same guarantee after the app has mounted. A sleeping phone, laptop,
+ * background tab or restored browser can miss Supabase's timer, so re-check the
+ * session whenever the page becomes active or connectivity returns.
+ */
+export function installAuthSessionResumeRecovery() {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return () => undefined;
 
-    const expiresAtMs = (session.expires_at ?? 0) * 1000;
-    if (expiresAtMs > Date.now() + REFRESH_EARLY_MS) return;
+  const recoverWhenActive = () => {
+    if (document.visibilityState === 'hidden') return;
+    void recoverAuthSession();
+  };
+  const handleVisibility = () => {
+    if (document.visibilityState === 'visible') recoverWhenActive();
+  };
 
-    const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession();
-    if (!refreshError && refreshed.session?.access_token) return;
+  window.addEventListener('focus', recoverWhenActive, { passive: true });
+  window.addEventListener('pageshow', recoverWhenActive, { passive: true });
+  window.addEventListener('online', recoverWhenActive, { passive: true });
+  document.addEventListener('visibilitychange', handleVisibility, { passive: true });
 
-    const message = refreshError?.message ?? 'Session refresh returned no session';
-    console.warn('[alsamos/auth] Session bootstrap refresh failed:', message);
-
-    // If the refresh token itself is no longer valid, keeping the stale access
-    // token mounted causes every protected query to 401 and leaves the UI empty.
-    // Clear only terminal token failures; transient network errors keep the
-    // remembered session so Supabase can retry when connectivity returns.
-    if (refreshError && isTerminalRefreshTokenError(message)) {
-      await supabase.auth.signOut({ scope: 'local' }).catch(() => undefined);
-    }
-  } catch (error) {
-    console.warn('[alsamos/auth] Session bootstrap recovery failed:', error);
-  }
+  return () => {
+    window.removeEventListener('focus', recoverWhenActive);
+    window.removeEventListener('pageshow', recoverWhenActive);
+    window.removeEventListener('online', recoverWhenActive);
+    document.removeEventListener('visibilitychange', handleVisibility);
+  };
 }
