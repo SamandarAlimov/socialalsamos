@@ -1,4 +1,5 @@
 import type { Notification } from '@/hooks/useNotifications';
+import { withNotificationReturnBridge } from '@/lib/notificationNavigation';
 
 export type NotificationMentionContext = 'post' | 'comment' | 'reply' | 'unknown';
 
@@ -146,7 +147,9 @@ export function notificationTarget(
   if (postId) {
     const params = new URLSearchParams({ post: postId });
     if (commentId) params.set('comment', commentId);
-    if (returnTo && returnTo.startsWith('/')) params.set('returnTo', returnTo);
+    if (returnTo && returnTo.startsWith('/') && !returnTo.startsWith('//')) {
+      params.set('returnTo', withNotificationReturnBridge(returnTo));
+    }
     return '/home?' + params.toString();
   }
 
