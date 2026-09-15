@@ -28,10 +28,10 @@ html.alsamos-ios-camera-canvas-preview
   mix-blend-mode: normal !important;
 }
 
+/* Do not force a GPU promotion here. A plain Canvas2D layer is intentional: the
+ * broken path we are escaping is WebKit's filtered/blended video compositor. */
 html.alsamos-ios-camera-canvas-preview
   [data-camera-recorder-root='true'][data-camera-state='live']
   canvas[data-camera-processed-preview='true'] {
-  contain: strict;
-  isolation: isolate;
-  transform: translateZ(0);
+  contain: paint;
 }
