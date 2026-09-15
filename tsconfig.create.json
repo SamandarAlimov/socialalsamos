@@ -8,6 +8,7 @@
   "include": [
     "src/pages/ComposePage.tsx",
     "src/hooks/usePostMedia.ts",
-    "src/components/PostExtras.tsx"
+    "src/components/PostExtras.tsx",
+    "src/lib/iosCameraCanvasPreview.ts"
   ]
 }
