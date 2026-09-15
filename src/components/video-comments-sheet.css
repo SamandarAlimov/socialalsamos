@@ -235,6 +235,30 @@
   z-index: 10;
 }
 
+/*
+ * Additional Instagram samples show one invariant even when the compact Reel
+ * size/detent changes: the whole area above the comments sheet stays black.
+ * Paint that black stage from the sheet itself so a light application shell can
+ * never bleed through the media/sheet gap or rounded top corners.
+ */
+.video-comments-premium[data-video-comments-sheet='true'] {
+  box-shadow: 0 -100dvh 0 100dvh #000 !important;
+}
+
+/*
+ * The sheet follows the finger with transition:none while a drag is active.
+ * The compact video used to keep its 240ms easing during the same gesture,
+ * which made it visibly trail behind the sheet and exposed the page background.
+ * Disable the preview easing only while the handle is physically pressed; on
+ * release both surfaces regain the same 240ms snap animation.
+ */
+@supports selector(body:has(*)) {
+  body:has([data-video-comments-drag-handle='true']:active) .video-comments-preview-frame,
+  body:has([data-video-comments-drag-handle='true']:active) .video-comments-preview-frame > video {
+    transition: none !important;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .video-comments-preview-frame,
   .video-comments-preview-frame > video {
