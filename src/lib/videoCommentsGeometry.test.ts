@@ -7,6 +7,7 @@ import {
   fitVideoCommentsPreview,
   scaleVideoCommentsReference,
 } from './videoCommentsGeometry';
+import { resolveVideoCommentsVisualSheetTop } from './videoCommentsPreviewSheetSync';
 
 describe('video comments measured geometry', () => {
   it('reproduces the supplied Instagram screenshot coordinates exactly', () => {
@@ -85,6 +86,19 @@ describe('video comments measured geometry', () => {
     expect(fit.stageHeight).toBe(0);
     expect(fit.mediaWidth).toBe(0);
     expect(fit.mediaHeight).toBe(0);
+  });
+
+  it('uses the translated sheet edge while dismissing so the Reel does not freeze', () => {
+    const compactTop = 308;
+    const dismissOffset = 220;
+    const visualTop = resolveVideoCommentsVisualSheetTop(compactTop, dismissOffset);
+
+    expect(visualTop).toBe(528);
+
+    const compactFit = fitVideoCommentsPreview(390, 844, 9 / 16, compactTop);
+    const movingFit = fitVideoCommentsPreview(390, 844, 9 / 16, visualTop);
+    expect(movingFit.stageHeight).toBeGreaterThan(compactFit.stageHeight);
+    expect(movingFit.mediaHeight).toBeGreaterThan(compactFit.mediaHeight);
   });
 
   it('uses the app viewport height instead of the full screenshot height', () => {
