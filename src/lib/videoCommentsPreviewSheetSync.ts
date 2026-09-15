@@ -51,10 +51,54 @@ export function resolveVideoCommentsVisualSheetTop(
   return Math.max(0, sheetTop + Math.max(0, dismissOffset));
 }
 
+/**
+ * Mobile VideoCommentsSheet uses an inline translate3d while moving from the
+ * compact detent toward dismissal. During an active touch/pointer gesture this
+ * inline transform is the most immediate source of truth: getBoundingClientRect
+ * can lag a compositor frame on iOS Safari, which made the Reel follow upward
+ * `top` changes but appear frozen while the sheet moved downward by transform.
+ */
+export function parseInlineVideoCommentsDismissOffset(transform: string) {
+  if (!transform || transform === 'none') return 0;
+
+  const translate3d = transform.match(
+    /translate3d\(\s*[^,]+,\s*(-?\d+(?:\.\d+)?)px\s*,[^)]+\)/i,
+  );
+  if (translate3d) return Math.max(0, Number.parseFloat(translate3d[1]));
+
+  const translateY = transform.match(/translateY\(\s*(-?\d+(?:\.\d+)?)px\s*\)/i);
+  if (translateY) return Math.max(0, Number.parseFloat(translateY[1]));
+
+  return 0;
+}
+
 function sheetLogicalTop(sheet: HTMLElement) {
   const inlineTop = Number.parseFloat(sheet.style.top);
   if (Number.isFinite(inlineTop)) return inlineTop;
   return sheet.offsetTop;
+}
+
+function sheetVisualTop(sheet: HTMLElement) {
+  const logicalTop = sheetLogicalTop(sheet);
+
+  // While the finger owns the gesture, derive the downward edge directly from
+  // the same inline translate3d React writes to the sheet. This keeps the Reel
+  // and sheet in the exact same gesture frame instead of waiting on WebKit's
+  // composited rectangle to catch up.
+  if (sheet.dataset.videoCommentsDragging === 'true') {
+    const inlineDismissOffset = parseInlineVideoCommentsDismissOffset(sheet.style.transform);
+    if (inlineDismissOffset > 0) {
+      return resolveVideoCommentsVisualSheetTop(logicalTop, inlineDismissOffset);
+    }
+  }
+
+  // Once the finger is released, CSS transitions own the motion. The visual
+  // rectangle reflects the current interpolated position and keeps spring-back
+  // / tap-close animations synchronized rather than jumping to their final
+  // inline transform target.
+  const rectTop = sheet.getBoundingClientRect().top;
+  if (Number.isFinite(rectTop)) return Math.max(0, rectTop);
+  return logicalTop;
 }
 
 function shouldLiveSync(sheet: HTMLElement, visualTop: number) {
@@ -107,9 +151,8 @@ function applyVisualGeometry(
  * During the compact -> dismiss phase the comments panel moves with CSS
  * transform while its logical `top` stays at the compact detent. React's normal
  * preview geometry therefore sees a stationary sheet and the Reel appears
- * frozen. Read the sheet's actual composited rectangle and drive the preview
- * from that visual edge so Reel + comments remain one continuous gesture, like
- * Instagram. The same path also covers the tap-to-dismiss closing animation.
+ * frozen. Drive the preview from the sheet's real visual edge so Reel + comments
+ * remain one continuous gesture in both directions, like Instagram.
  */
 export function syncVideoCommentsPreviewToVisualSheet() {
   if (typeof document === 'undefined' || typeof window === 'undefined') return false;
@@ -123,12 +166,17 @@ export function syncVideoCommentsPreviewToVisualSheet() {
     return false;
   }
 
-  const visualTop = Math.max(0, sheet.getBoundingClientRect().top);
+  const visualTop = sheetVisualTop(sheet);
   const live = shouldLiveSync(sheet, visualTop);
   frame.classList.toggle(LIVE_SYNC_CLASS, live);
 
-  if (!live) return false;
-  applyVisualGeometry(sheet, frame, video, visualTop);
+  if (live) applyVisualGeometry(sheet, frame, video, visualTop);
+
+  // Keep the RAF alive for as long as the mobile comments surface exists. The
+  // previous implementation stopped as soon as one frame looked idle, so a
+  // later compact -> dismiss transform could start between observer callbacks
+  // and leave the video frozen. Continuous polling is scoped to the open sheet
+  // only and guarantees the next gesture frame is observed on iOS/Android.
   return true;
 }
 
@@ -141,8 +189,8 @@ export function installVideoCommentsPreviewSheetSync() {
   const tick = () => {
     rafId = null;
     if (stopped) return;
-    const active = syncVideoCommentsPreviewToVisualSheet();
-    if (active) rafId = window.requestAnimationFrame(tick);
+    const surfaceExists = syncVideoCommentsPreviewToVisualSheet();
+    if (surfaceExists) rafId = window.requestAnimationFrame(tick);
   };
 
   const ensureTick = () => {
