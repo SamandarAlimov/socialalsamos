@@ -89,14 +89,14 @@
 }
 
 /*
- * Critical gesture rule: the sheet itself intentionally has no top transition
- * while the handle is held. The preview previously kept its 240ms easing, so
- * it chased the finger and visibly lagged behind the sheet. Safari/Chrome both
- * support :has(); disabling preview interpolation only for the active handle
- * makes sheet + stage consume the same pointer progress frame-for-frame.
+ * Critical gesture rule: both handle drags and nested comment-list handoffs
+ * move the sheet directly with the finger. Disable preview interpolation for
+ * either source so Reel + sheet consume the same gesture frame-for-frame.
  */
 body:has([data-video-comments-drag-handle='true']:active) .video-comments-preview-frame,
-body:has([data-video-comments-drag-handle='true']:active) .video-comments-preview-frame > video {
+body:has([data-video-comments-drag-handle='true']:active) .video-comments-preview-frame > video,
+body:has([data-video-comments-sheet='true'][data-video-comments-dragging='true']) .video-comments-preview-frame,
+body:has([data-video-comments-sheet='true'][data-video-comments-dragging='true']) .video-comments-preview-frame > video {
   transition: none !important;
 }
 
