@@ -290,54 +290,45 @@ export function VideoCommentsSheet({
     } as React.CSSProperties;
 
     return (
-      <>
-        {isOpen && (
+      <Sheet modal={false} open={isOpen} onOpenChange={(open) => !open && onClose()}>
+        <SheetContent
+          side="bottom"
+          hideDefaultClose
+          data-video-comments-sheet="true"
+          overlayClassName="pointer-events-none bg-transparent"
+          aria-describedby="video-comments-mobile-description"
+          onOpenAutoFocus={(event) => event.preventDefault()}
+          onInteractOutside={(event) => event.preventDefault()}
+          style={mobileStyle}
+          className="video-comments-premium dark inset-x-0 flex h-auto min-h-0 max-h-none flex-col gap-0 overflow-hidden border-x-0 border-b-0 border-t border-white/[0.08] bg-[#181c1f] p-0 text-white shadow-none data-[state=open]:duration-200 data-[state=closed]:duration-200"
+        >
           <div
-            aria-hidden="true"
-            data-video-comments-stage="true"
-            className="pointer-events-none fixed inset-0 z-[5980] bg-black"
-          />
-        )}
-        <Sheet modal={false} open={isOpen} onOpenChange={(open) => !open && onClose()}>
-          <SheetContent
-            side="bottom"
-            hideDefaultClose
-            data-video-comments-sheet="true"
-            overlayClassName="pointer-events-none bg-transparent"
-            aria-describedby="video-comments-mobile-description"
-            onOpenAutoFocus={(event) => event.preventDefault()}
-            onInteractOutside={(event) => event.preventDefault()}
-            style={mobileStyle}
-            className="video-comments-premium dark inset-x-0 flex h-auto min-h-0 max-h-none flex-col gap-0 overflow-hidden border-x-0 border-b-0 border-t border-white/[0.08] bg-[#181c1f] p-0 text-white shadow-none data-[state=open]:duration-200 data-[state=closed]:duration-200"
+            data-video-comments-drag-handle="true"
+            className="relative h-[4.3dvh] shrink-0 cursor-grab select-none touch-none active:cursor-grabbing"
+            onPointerDown={handleDragStart}
+            onPointerMove={handleDragMove}
+            onPointerUp={(event) => finishDrag(event)}
+            onPointerCancel={(event) => finishDrag(event, true)}
           >
-            <div
-              data-video-comments-drag-handle="true"
-              className="relative h-[4.3dvh] shrink-0 cursor-grab select-none touch-none active:cursor-grabbing"
-              onPointerDown={handleDragStart}
-              onPointerMove={handleDragMove}
-              onPointerUp={(event) => finishDrag(event)}
-              onPointerCancel={(event) => finishDrag(event, true)}
-            >
-              <div className="video-comments-measured-handle absolute left-1/2 -translate-x-1/2 rounded-full bg-[#a0a9b5]" />
-              <SheetHeader className="sr-only">
-                <SheetTitle>{commentsCount > 0 ? `Izohlar · ${commentsCount}` : 'Izohlar'}</SheetTitle>
-                <SheetDescription id="video-comments-mobile-description">
-                  Video izohlari. Yuqoridagi tutqich orqali panel balandligini o‘zgartirish mumkin.
-                </SheetDescription>
-              </SheetHeader>
-            </div>
+            <div className="video-comments-measured-handle absolute left-1/2 -translate-x-1/2 rounded-full bg-[#a0a9b5]" />
+            <SheetHeader className="sr-only">
+              <SheetTitle>{commentsCount > 0 ? `Izohlar · ${commentsCount}` : 'Izohlar'}</SheetTitle>
+              <SheetDescription id="video-comments-mobile-description">
+                Video izohlari. Yuqoridagi tutqich orqali panel balandligini o‘zgartirish mumkin.
+              </SheetDescription>
+            </SheetHeader>
+          </div>
 
-            <div className="dark min-h-0 flex-1 overflow-hidden bg-[#181c1f] text-white [color-scheme:dark]">
-              <CommentsSection
-                postId={postId}
-                layout="panel"
-                appearance="immersive"
-                quickReactions
-              />
-            </div>
-          </SheetContent>
-        </Sheet>
-      </>
+          <div className="dark min-h-0 flex-1 overflow-hidden bg-[#181c1f] text-white [color-scheme:dark]">
+            <CommentsSection
+              postId={postId}
+              layout="panel"
+              appearance="immersive"
+              quickReactions
+            />
+          </div>
+        </SheetContent>
+      </Sheet>
     );
   }
 

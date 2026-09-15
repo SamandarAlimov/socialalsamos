@@ -29,6 +29,17 @@ describe('video comments measured geometry', () => {
     ).toBe(856);
   });
 
+  it('keeps the initial comments sheet below the visible video preview', () => {
+    const scaled = scaleVideoCommentsReference(
+      VIDEO_COMMENTS_REFERENCE.screenWidth,
+      VIDEO_COMMENTS_REFERENCE_VIEWPORT_HEIGHT,
+    );
+    const previewBottom = scaled.previewTop + scaled.previewHeight;
+
+    expect(previewBottom).toBeLessThan(scaled.initialSheetTop);
+    expect(Math.round(scaled.initialSheetTop - previewBottom)).toBe(20);
+  });
+
   it('uses the app viewport height instead of the full screenshot height', () => {
     expect(VIDEO_COMMENTS_REFERENCE_VIEWPORT_HEIGHT).toBe(1937);
   });
