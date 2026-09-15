@@ -10,11 +10,13 @@ import "./styles/marketplace-create-product.css";
 import "./styles/create-camera-zoom.css";
 import "./styles/create-camera-mobile-polish.css";
 import "./styles/create-camera-shutter-safe.css";
+import "./styles/create-camera-ios-canvas.css";
 import "./i18n";
 import { installMediaUploadFetchFallback } from "./lib/mediaUploadFetchFallback";
 import { installNativeInteractionPolicy } from "./lib/nativeInteractionPolicy";
 import { installMobileChatKeyboardLayout } from "./lib/mobileChatKeyboardLayout";
 import { installCreateCameraZoom } from "./lib/createCameraZoom";
+import { installIosCameraCanvasPreview } from "./lib/iosCameraCanvasPreview";
 
 // Install before React mounts so every presigned media PUT (including chat video
 // notes recorded immediately after page load) gets the production CORS fallback.
@@ -31,6 +33,11 @@ installMobileChatKeyboardLayout();
 // Create Live can move its active camera into a document-level fullscreen portal.
 // Keep pinch/wheel zoom working there as well as inside the normal Create stage.
 installCreateCameraZoom();
+
+// iOS/WebKit must not combine hardware-backed camera video, CSS filters and
+// mix-blend overlays. Reuse the capture Canvas2D lens renderer for live filtered
+// previews so Story/Reel stay WYSIWYG without Safari compositor artifacts.
+installIosCameraCanvasPreview();
 
 createRoot(document.getElementById("root")!).render(
   <HelmetProvider>
