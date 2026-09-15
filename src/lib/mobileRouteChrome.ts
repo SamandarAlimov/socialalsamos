@@ -1,7 +1,7 @@
 export type MobileChromeMode = 'primary' | 'secondary' | 'immersive';
 
 const PRIMARY_ROUTES = new Set(['/home', '/messages', '/videos', '/profile']);
-const IMMERSIVE_ROUTES = new Set(['/create', '/compose']);
+const IMMERSIVE_ROUTES = new Set(['/create', '/compose', '/search']);
 
 function normalizePath(pathname: string): string {
   if (!pathname) return '/';
