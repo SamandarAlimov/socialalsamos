@@ -15,6 +15,7 @@ import "./styles/video-comments-preview-tap-dismiss.css";
 import "./styles/video-comments-preview-sheet-sync.css";
 import "./styles/video-comments-compact-density.css";
 import "./i18n";
+import { recoverAuthSessionBeforeMount } from "./lib/bootstrapAuthSession";
 import { installMediaUploadFetchFallback } from "./lib/mediaUploadFetchFallback";
 import { installNativeInteractionPolicy } from "./lib/nativeInteractionPolicy";
 import { installMobileChatKeyboardLayout } from "./lib/mobileChatKeyboardLayout";
@@ -53,11 +54,22 @@ installVideoCommentsPreviewTapDismiss();
 // the finger instead of freezing above a moving panel.
 installVideoCommentsPreviewSheetSync();
 
-createRoot(document.getElementById("root")!).render(
-  <HelmetProvider>
-    <App />
-  </HelmetProvider>
-);
+const root = createRoot(document.getElementById("root")!);
+
+async function mountApp() {
+  // A suspended browser can resume with an expired access JWT. Recover it before
+  // authenticated hooks mount, otherwise every initial PostgREST request races
+  // with token refresh and the app can appear completely empty.
+  await recoverAuthSessionBeforeMount();
+
+  root.render(
+    <HelmetProvider>
+      <App />
+    </HelmetProvider>
+  );
+}
+
+void mountApp();
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
