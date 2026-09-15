@@ -12,6 +12,7 @@ import "./styles/create-camera-mobile-polish.css";
 import "./styles/create-camera-shutter-safe.css";
 import "./styles/create-camera-ios-canvas.css";
 import "./styles/video-comments-preview-tap-dismiss.css";
+import "./styles/video-comments-preview-sheet-sync.css";
 import "./i18n";
 import { installMediaUploadFetchFallback } from "./lib/mediaUploadFetchFallback";
 import { installNativeInteractionPolicy } from "./lib/nativeInteractionPolicy";
@@ -19,6 +20,7 @@ import { installMobileChatKeyboardLayout } from "./lib/mobileChatKeyboardLayout"
 import { installCreateCameraZoom } from "./lib/createCameraZoom";
 import { installIosCameraCanvasPreview } from "./lib/iosCameraCanvasPreview";
 import { installVideoCommentsPreviewTapDismiss } from "./lib/videoCommentsPreviewTapDismiss";
+import { installVideoCommentsPreviewSheetSync } from "./lib/videoCommentsPreviewSheetSync";
 
 // Install before React mounts so every presigned media PUT (including chat video
 // notes recorded immediately after page load) gets the production CORS fallback.
@@ -44,6 +46,11 @@ installIosCameraCanvasPreview();
 // Instagram-style Reel comments use the compact video as an exit target. Capture
 // that tap before the underlying player can interpret it as play/pause or hold.
 installVideoCommentsPreviewTapDismiss();
+
+// A compact comments sheet dismisses with transform while its logical top stays
+// fixed. Follow the sheet's actual composited edge so the Reel grows/moves with
+// the finger instead of freezing above a moving panel.
+installVideoCommentsPreviewSheetSync();
 
 createRoot(document.getElementById("root")!).render(
   <HelmetProvider>
