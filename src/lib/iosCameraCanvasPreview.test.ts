@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -60,7 +61,7 @@ describe('iOS camera Canvas2D preview compatibility', () => {
 
   it('neutralizes hardware video filters and blend overlays before the observer activates Canvas2D', () => {
     const css = readFileSync(
-      new URL('../styles/create-camera-ios-canvas.css', import.meta.url),
+      resolve(process.cwd(), 'src/styles/create-camera-ios-canvas.css'),
       'utf8',
     );
 
