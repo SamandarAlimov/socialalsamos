@@ -2,16 +2,25 @@
    comments rendered under normal posts. */
 
 /*
- * Instagram mobile reference (945 x 2048 screenshot):
+ * Instagram mobile references (945 x 2048 screenshots) show several different
+ * Reel aspect ratios and sheet positions. The invariant is more important than
+ * any one rectangle:
+ * - the entire stage behind the compact Reel stays black,
+ * - there is never a white page/background seam between Reel and sheet,
+ * - the sheet edge and the video stage move as one gesture,
+ * - the media keeps its own aspect ratio inside that stage.
+ *
+ * Original measured 3:4 reference:
  * - app viewport starts at screenshot y=111
- * - 3:4 media content x=215..730, y=111..798 => 516 x 688
+ * - media content x=215..730, y=111..798 => 516 x 688
  * - initial sheet top y=819 (20px gap after the media)
  * - footer divider y=1714
  * - handle x=431..514, y=856..861 => 84 x 6
  *
- * The reference media is 3:4. We therefore treat 688px as the available
- * preview-stage height, not as a universal video box. JS fits each real video
- * into that stage using its own intrinsic aspect ratio.
+ * Other supplied Instagram samples confirm that taller Reels can grow much
+ * farther toward the sheet while still preserving the same black stage and
+ * continuous sheet/video motion. JS therefore owns aspect-aware geometry; CSS
+ * owns compositor continuity and drag-time synchronization.
  */
 .video-comments-preview-frame {
   position: fixed !important;
@@ -24,7 +33,14 @@
   transform: none !important;
   border-radius: 0 !important;
   background: #000 !important;
-  box-shadow: none !important;
+  /*
+   * The real app shell underneath the Reel can be light. During a gesture the
+   * sheet can move a frame before React's preview geometry effect runs. Paint a
+   * black continuation below the stage so that transient compositor timing can
+   * never reveal the white shell between the video and comments sheet.
+   * The comments sheet lives at z=6010, so it naturally paints over this stage.
+   */
+  box-shadow: 0 100dvh 0 100dvh #000 !important;
   z-index: 5990 !important;
   pointer-events: auto !important;
   touch-action: none !important;
@@ -69,6 +85,18 @@
 }
 
 .video-comments-preview-frame.video-comments-preview-no-transition > video {
+  transition: none !important;
+}
+
+/*
+ * Critical gesture rule: the sheet itself intentionally has no top transition
+ * while the handle is held. The preview previously kept its 240ms easing, so
+ * it chased the finger and visibly lagged behind the sheet. Safari/Chrome both
+ * support :has(); disabling preview interpolation only for the active handle
+ * makes sheet + stage consume the same pointer progress frame-for-frame.
+ */
+body:has([data-video-comments-drag-handle='true']:active) .video-comments-preview-frame,
+body:has([data-video-comments-drag-handle='true']:active) .video-comments-preview-frame > video {
   transition: none !important;
 }
 
