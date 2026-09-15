@@ -1,0 +1,14 @@
+/* Mobile Reel comments: tapping the compact video preview exits comments.
+   Keep the whole sheet, including the composer, moving down as one surface
+   while Radix closes the controlled sheet and restores the full Reel. */
+[data-video-comments-sheet='true'].video-comments-preview-tap-closing {
+  transform: translate3d(0, calc(100dvh + 48px), 0) !important;
+  transition: transform 240ms cubic-bezier(0.22, 0.61, 0.36, 1) !important;
+  will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-video-comments-sheet='true'].video-comments-preview-tap-closing {
+    transition-duration: 1ms !important;
+  }
+}
