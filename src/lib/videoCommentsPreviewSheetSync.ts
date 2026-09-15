@@ -4,8 +4,16 @@ import {
 } from './videoCommentsGeometry';
 
 const SHEET_SELECTOR = '[data-video-comments-sheet="true"]';
+const COMMENT_LIST_SELECTOR = '[data-comment-list="true"]';
 const PREVIEW_SELECTOR = '.video-comments-preview-frame';
 const LIVE_SYNC_CLASS = 'video-comments-preview-live-sync';
+const COMMENT_SCROLL_EPSILON_PX = 1;
+
+type CommentScrollTouch = {
+  identifier: number;
+  lastY: number;
+  list: HTMLElement;
+};
 
 function getViewportWidth() {
   return Math.max(
@@ -82,6 +90,29 @@ export function parseComputedVideoCommentsTranslateY(transform: string) {
   }
 
   return parseInlineVideoCommentsDismissOffset(transform);
+}
+
+/**
+ * Native touch scrolling updates scrollTop after the touchmove event dispatch.
+ * The sheet's own bubble-phase listener therefore used to see the old positive
+ * scrollTop on the exact frame the comments list hit its top edge, and iOS could
+ * stop delivering a useful follow-up move because overscroll containment had
+ * already consumed the gesture. Prime scrollTop to zero in capture phase when
+ * the current finger travel is enough to consume the remaining scroll distance.
+ * The existing VideoCommentsSheet listener then receives the same touchmove and
+ * can take ownership without requiring the user to lift and start a new drag.
+ */
+export function shouldPrimeVideoCommentsScrollHandoff(
+  scrollTop: number,
+  downwardDeltaY: number,
+) {
+  const remaining = Math.max(0, scrollTop);
+  const travel = Math.max(0, downwardDeltaY);
+  return (
+    travel > 0 &&
+    remaining > COMMENT_SCROLL_EPSILON_PX &&
+    remaining <= travel + COMMENT_SCROLL_EPSILON_PX
+  );
 }
 
 function sheetLogicalTop(sheet: HTMLElement) {
@@ -167,6 +198,7 @@ export function installVideoCommentsPreviewSheetSync() {
 
   let rafId: number | null = null;
   let stopped = false;
+  let commentScrollTouch: CommentScrollTouch | null = null;
 
   const tick = () => {
     rafId = null;
@@ -178,6 +210,57 @@ export function installVideoCommentsPreviewSheetSync() {
   const ensureTick = () => {
     if (stopped || rafId !== null) return;
     rafId = window.requestAnimationFrame(tick);
+  };
+
+  const findTouch = (touches: TouchList, identifier: number) => {
+    for (let index = 0; index < touches.length; index += 1) {
+      const touch = touches.item(index);
+      if (touch?.identifier === identifier) return touch;
+    }
+    return null;
+  };
+
+  const handleCommentTouchStartCapture = (event: TouchEvent) => {
+    if (event.touches.length !== 1 || !(event.target instanceof Element)) {
+      commentScrollTouch = null;
+      return;
+    }
+
+    const list = event.target.closest<HTMLElement>(COMMENT_LIST_SELECTOR);
+    const sheet = list?.closest<HTMLElement>(SHEET_SELECTOR);
+    const touch = event.touches.item(0);
+    if (!list || !sheet || !touch) {
+      commentScrollTouch = null;
+      return;
+    }
+
+    commentScrollTouch = {
+      identifier: touch.identifier,
+      lastY: touch.clientY,
+      list,
+    };
+  };
+
+  const handleCommentTouchMoveCapture = (event: TouchEvent) => {
+    const state = commentScrollTouch;
+    if (!state || !state.list.isConnected) return;
+
+    const touch = findTouch(event.touches, state.identifier);
+    if (!touch) return;
+
+    const downwardDeltaY = touch.clientY - state.lastY;
+    state.lastY = touch.clientY;
+
+    if (shouldPrimeVideoCommentsScrollHandoff(state.list.scrollTop, downwardDeltaY)) {
+      // This runs before VideoCommentsSheet's bubble-phase touchmove listener.
+      // Setting the edge now lets that listener transfer the *same gesture* to
+      // the sheet instead of waiting for a second gesture after native scrolling.
+      state.list.scrollTop = 0;
+    }
+  };
+
+  const clearCommentTouch = () => {
+    commentScrollTouch = null;
   };
 
   const observer = new MutationObserver(ensureTick);
@@ -198,13 +281,18 @@ export function installVideoCommentsPreviewSheetSync() {
   window.visualViewport?.addEventListener('resize', ensureTick, { passive: true });
   document.addEventListener('pointermove', ensureTick, true);
   document.addEventListener('pointerup', ensureTick, true);
+  document.addEventListener('touchstart', handleCommentTouchStartCapture, { capture: true, passive: true });
+  document.addEventListener('touchmove', handleCommentTouchMoveCapture, { capture: true, passive: true });
   document.addEventListener('touchmove', ensureTick, { capture: true, passive: true });
+  document.addEventListener('touchend', clearCommentTouch, true);
+  document.addEventListener('touchcancel', clearCommentTouch, true);
   document.addEventListener('touchend', ensureTick, true);
 
   ensureTick();
 
   return () => {
     stopped = true;
+    commentScrollTouch = null;
     observer.disconnect();
     if (rafId !== null) window.cancelAnimationFrame(rafId);
     document.querySelector<HTMLElement>(PREVIEW_SELECTOR)?.classList.remove(LIVE_SYNC_CLASS);
@@ -212,7 +300,11 @@ export function installVideoCommentsPreviewSheetSync() {
     window.visualViewport?.removeEventListener('resize', ensureTick);
     document.removeEventListener('pointermove', ensureTick, true);
     document.removeEventListener('pointerup', ensureTick, true);
+    document.removeEventListener('touchstart', handleCommentTouchStartCapture, true);
+    document.removeEventListener('touchmove', handleCommentTouchMoveCapture, true);
     document.removeEventListener('touchmove', ensureTick, true);
+    document.removeEventListener('touchend', clearCommentTouch, true);
+    document.removeEventListener('touchcancel', clearCommentTouch, true);
     document.removeEventListener('touchend', ensureTick, true);
   };
 }
