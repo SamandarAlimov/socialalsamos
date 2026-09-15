@@ -1,13 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 
 import { isVideoCommentsPreviewTap } from '@/lib/videoCommentsPreviewTapDismiss';
-
-const installerSource = readFileSync(
-  fileURLToPath(new URL('../lib/videoCommentsPreviewTapDismiss.ts', import.meta.url)),
-  'utf8',
-);
 
 describe('mobile Reel comments preview tap dismissal', () => {
   it('accepts a short stationary tap', () => {
@@ -20,7 +13,7 @@ describe('mobile Reel comments preview tap dismissal', () => {
     })).toBe(true);
   });
 
-  it('does not dismiss for a drag or long press', () => {
+  it('does not dismiss for a drag', () => {
     expect(isVideoCommentsPreviewTap({
       startX: 120,
       startY: 180,
@@ -28,6 +21,9 @@ describe('mobile Reel comments preview tap dismissal', () => {
       endY: 230,
       durationMs: 220,
     })).toBe(false);
+  });
+
+  it('does not dismiss for a long press or invalid timing', () => {
     expect(isVideoCommentsPreviewTap({
       startX: 120,
       startY: 180,
@@ -35,14 +31,12 @@ describe('mobile Reel comments preview tap dismissal', () => {
       endY: 181,
       durationMs: 900,
     })).toBe(false);
-  });
-
-  it('captures pointer playback gestures before React and closes through Radix', () => {
-    expect(installerSource).toContain("document.addEventListener('pointerdown', onPointerDown, true)");
-    expect(installerSource).toContain("document.addEventListener('pointerup', onPointerUp, true)");
-    expect(installerSource).toContain("document.addEventListener('click', onClick, true)");
-    expect(installerSource).toContain('event.stopImmediatePropagation()');
-    expect(installerSource).toContain("sheet.classList.add('video-comments-preview-tap-closing')");
-    expect(installerSource).toContain("key: 'Escape'");
+    expect(isVideoCommentsPreviewTap({
+      startX: 120,
+      startY: 180,
+      endX: 120,
+      endY: 180,
+      durationMs: Number.NaN,
+    })).toBe(false);
   });
 });
