@@ -1,0 +1,94 @@
+/* Instagram-like density for the mobile Reel comments sheet.
+ * Keep this override mobile-only so regular post/desktop comments remain unchanged. */
+@media (max-width: 767px) {
+  .video-comments-premium [data-comment-list='true'] {
+    scroll-padding-top: 6px;
+    scroll-padding-bottom: 12px;
+    padding-top: 4px;
+    padding-bottom: 12px;
+  }
+
+  .video-comments-premium [data-comment-id] > div:first-child {
+    gap: 8px;
+    padding-top: 6px;
+    padding-bottom: 6px;
+  }
+
+  /* The immersive CommentItem avatar is 36px by default. Instagram's compact
+     rows read closer to 32px while retaining a comfortable touch target via the row. */
+  .video-comments-premium [data-comment-id] > div:first-child > a:first-child > div {
+    width: 32px;
+    height: 32px;
+  }
+
+  .video-comments-premium [data-comment-id] > div:first-child > div:last-child {
+    padding-right: 36px;
+  }
+
+  .video-comments-premium [data-comment-id] > div:first-child > div:last-child > div:first-child {
+    column-gap: 4px;
+    row-gap: 0;
+    line-height: 1.15;
+  }
+
+  .video-comments-premium [data-comment-id] > div:first-child > div:last-child > div:first-child > a:first-child {
+    font-size: 13px;
+    line-height: 17px;
+  }
+
+  .video-comments-premium [data-comment-id] > div:first-child > div:last-child > div:first-child > a:not(:first-child),
+  .video-comments-premium [data-comment-id] > div:first-child > div:last-child > div:first-child > span {
+    font-size: 11px;
+    line-height: 15px;
+  }
+
+  /* RichTextContent is the second direct block after the metadata row. */
+  .video-comments-premium [data-comment-id] > div:first-child > div:last-child > div:nth-child(2) {
+    margin-top: 2px;
+    font-size: 13px;
+    line-height: 18px;
+  }
+
+  .video-comments-premium [data-comment-id] > div:first-child > div:last-child > div:last-child {
+    min-height: 16px;
+    margin-top: 4px;
+    gap: 12px;
+  }
+
+  .video-comments-premium [data-comment-id] > div:first-child > div:last-child > div:last-child > button {
+    font-size: 11px;
+    line-height: 15px;
+  }
+
+  .video-comments-premium [data-comment-id] > div:first-child > div:last-child > div:last-child > button:first-child {
+    top: 21px;
+    min-width: 28px;
+    gap: 1px;
+    font-size: 9px;
+  }
+
+  .video-comments-premium [data-comment-id] > div:first-child > div:last-child > div:last-child > button:first-child svg {
+    width: 17px;
+    height: 17px;
+  }
+
+  .video-comments-premium [data-comment-id] > div:first-child > div:last-child > div:last-child > button:not(:first-child) svg {
+    width: 13px;
+    height: 13px;
+  }
+
+  .video-comments-premium [data-comment-id] [data-comment-id] {
+    margin-left: 32px;
+  }
+
+  .video-comments-premium [data-comment-quick-reactions='true'] {
+    margin-bottom: 5px;
+  }
+
+  .video-comments-premium [data-comment-quick-reactions='true'] button {
+    width: 34px;
+    min-width: 34px;
+    height: 32px;
+    font-size: 22px;
+  }
+}
