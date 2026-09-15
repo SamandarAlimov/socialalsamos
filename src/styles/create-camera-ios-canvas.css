@@ -1,31 +1,91 @@
 /*
  * iOS/WebKit filtered-camera compatibility.
  *
- * CameraVideoRecorder historically painted the live lens with CSS `filter` on
- * the hardware-backed <video> plus full-frame `mix-blend-mode` overlays. Safari
- * can promote that combination into a corrupt compositor layer (a huge dark
- * ellipse/capsule covering the camera). iosCameraCanvasPreview renders the lens
- * through the same Canvas2D pipeline used by capture; while it is active the
- * raw video remains only a source and must not create filtered/blended layers.
+ * IMPORTANT: this stylesheet is loaded before React mounts and the compatibility
+ * class is installed before createRoot().  Therefore the dangerous WebKit layers
+ * must be neutralized unconditionally on the live camera, not only after the
+ * Canvas2D observer notices an active lens.  Waiting for data-camera-canvas-filter
+ * creates a one-frame race: React first paints hardware <video> + CSS filter +
+ * mix-blend-mode, WebKit can promote that surface incorrectly, and the corrupt
+ * giant rounded/capsule layer can survive even after the CSS is later cleared.
+ *
+ * The real lens is rendered by iosCameraCanvasPreview through the same Canvas2D
+ * drawCameraFrame pipeline used by capture.  The raw video is only a source.
  */
+
+/* Never allow a CSS filter onto the hardware-backed live camera on iOS.  This
+ * applies from the very first React paint, including the frame before the
+ * MutationObserver marks the processed canvas active.  Keep the mirror transform
+ * for Normal; the active-canvas rule below removes it while Canvas2D owns output. */
 html.alsamos-ios-camera-canvas-preview
-  [data-camera-recorder-root='true'][data-camera-state='live'][data-camera-canvas-filter='active']
+  [data-camera-recorder-root='true'][data-camera-state='live']
   video {
   filter: none !important;
-  transform: none !important;
   will-change: auto !important;
   backface-visibility: visible !important;
   -webkit-backface-visibility: visible !important;
 }
 
-/* React lens overlays are still mounted because desktop/Android use them.
- * iOS must not composite them: the dedicated processed canvas already paints
- * the same CameraLensData overlays with Canvas2D globalCompositeOperation. */
 html.alsamos-ios-camera-canvas-preview
   [data-camera-recorder-root='true'][data-camera-state='live'][data-camera-canvas-filter='active']
+  video {
+  transform: none !important;
+}
+
+/* Never mount a composited blend surface over the camera on iOS.  Canvas2D paints
+ * the same lens overlay once a processed lens is active.  This intentionally does
+ * not wait for data-camera-canvas-filter so there is no pre-observer compositor
+ * frame capable of poisoning WebKit's video layer. */
+html.alsamos-ios-camera-canvas-preview
+  [data-camera-recorder-root='true'][data-camera-state='live']
   [style*='mix-blend-mode'] {
   display: none !important;
   mix-blend-mode: normal !important;
+}
+
+/* The filter carousel previously remained a second CSS-filter/mix-blend pipeline
+ * inside the same camera stacking context.  On iOS those tiny rounded surfaces
+ * can also be promoted into a wrongly-sized compositor texture.  Keep thumbnails
+ * as static gradients; the selected lens itself is still visible on the Canvas2D
+ * camera preview and in the captured media. */
+html.alsamos-ios-camera-canvas-preview
+  [data-camera-recorder-root='true']
+  .alsamos-camera-filter-scroll
+  button,
+html.alsamos-ios-camera-canvas-preview
+  [data-camera-recorder-root='true']
+  .alsamos-camera-filter-scroll
+  button > span,
+html.alsamos-ios-camera-canvas-preview
+  [data-camera-recorder-root='true']
+  .alsamos-camera-filter-scroll
+  button > span > span {
+  filter: none !important;
+  transform: none !important;
+  will-change: auto !important;
+  mix-blend-mode: normal !important;
+  backface-visibility: visible !important;
+  -webkit-backface-visibility: visible !important;
+}
+
+html.alsamos-ios-camera-canvas-preview
+  [data-camera-recorder-root='true']
+  .alsamos-camera-filter-scroll
+  button > span > span[style*='mix-blend-mode'] {
+  display: none !important;
+}
+
+/* Remove compositor hints from the rounded filter-rail group itself.  Its layout
+ * remains unchanged; only GPU/compositing triggers are removed. */
+html.alsamos-ios-camera-canvas-preview
+  [data-camera-recorder-root='true']
+  .alsamos-camera-filter-scroll {
+  filter: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  transform: none !important;
+  will-change: auto !important;
+  isolation: auto !important;
 }
 
 /* Do not force a GPU promotion here. A plain Canvas2D layer is intentional: the
