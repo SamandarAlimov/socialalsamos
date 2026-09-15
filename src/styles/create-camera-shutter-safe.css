@@ -1,0 +1,55 @@
+/* Camera shutter compositor safety.
+ *
+ * The filter rail previously painted the selected lens onto the shutter by
+ * applying CSS filter + mix-blend-mode to the shutter's circular span. On
+ * WebKit/iOS (and some GPU/WebView combinations) that tiny composited circle can
+ * be promoted with the recorder viewport's backing surface, producing the huge
+ * rounded grey/black panel seen over the camera. The actual lens remains on the
+ * camera video/capture pipeline; the shutter must stay a plain, non-composited
+ * control surface.
+ */
+
+[data-camera-recorder-root='true']
+  .alsamos-camera-filter-scroll
+  + div
+  button
+  > span {
+  filter: none !important;
+  isolation: auto !important;
+  mix-blend-mode: normal !important;
+  background-image: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  will-change: auto !important;
+}
+
+[data-camera-recorder-root='true']
+  .alsamos-camera-filter-scroll
+  + div
+  button
+  > span::after {
+  display: none !important;
+  content: none !important;
+  background: none !important;
+  mix-blend-mode: normal !important;
+  opacity: 0 !important;
+}
+
+/* Keep the shutter semantically correct after removing the lens thumbnail.
+ * The filter itself is still visible on the live camera and on the filter rail.
+ */
+[data-camera-recorder-root='true']
+  .alsamos-camera-filter-scroll
+  + div
+  button[aria-label='Rasmga olish']
+  > span {
+  background-color: #fff !important;
+}
+
+[data-camera-recorder-root='true']
+  .alsamos-camera-filter-scroll
+  + div
+  button[aria-label='Yozishni boshlash']
+  > span {
+  background-color: rgb(239 68 68) !important;
+}
