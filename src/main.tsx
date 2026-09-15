@@ -11,12 +11,14 @@ import "./styles/create-camera-zoom.css";
 import "./styles/create-camera-mobile-polish.css";
 import "./styles/create-camera-shutter-safe.css";
 import "./styles/create-camera-ios-canvas.css";
+import "./styles/video-comments-preview-tap-dismiss.css";
 import "./i18n";
 import { installMediaUploadFetchFallback } from "./lib/mediaUploadFetchFallback";
 import { installNativeInteractionPolicy } from "./lib/nativeInteractionPolicy";
 import { installMobileChatKeyboardLayout } from "./lib/mobileChatKeyboardLayout";
 import { installCreateCameraZoom } from "./lib/createCameraZoom";
 import { installIosCameraCanvasPreview } from "./lib/iosCameraCanvasPreview";
+import { installVideoCommentsPreviewTapDismiss } from "./lib/videoCommentsPreviewTapDismiss";
 
 // Install before React mounts so every presigned media PUT (including chat video
 // notes recorded immediately after page load) gets the production CORS fallback.
@@ -38,6 +40,10 @@ installCreateCameraZoom();
 // mix-blend overlays. Reuse the capture Canvas2D lens renderer for live filtered
 // previews so Story/Reel stay WYSIWYG without Safari compositor artifacts.
 installIosCameraCanvasPreview();
+
+// Instagram-style Reel comments use the compact video as an exit target. Capture
+// that tap before the underlying player can interpret it as play/pause or hold.
+installVideoCommentsPreviewTapDismiss();
 
 createRoot(document.getElementById("root")!).render(
   <HelmetProvider>
