@@ -1,14 +1,52 @@
-/* Mobile Create camera polish.
+/* Cross-device Create camera polish.
  *
- * The camera surface should read as one full-bleed canvas, not as a rounded
- * 9:16 card floating above the Create navigation. Keep clipping on the camera
- * viewport so digital zoom never exposes/scales the surrounding UI. */
+ * Keep the camera surface clipped and predictable on iOS/Android phones,
+ * Chromium/Firefox WebViews, landscape devices and coarse-pointer tablets.
+ * Desktop keeps the normal AppLayout presentation. */
+
+[data-camera-recorder-root='true'] {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+[data-camera-recorder-root='true'] video,
+[data-camera-recorder-root='true'] img {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+}
+
+/* Phones in portrait and narrow browser windows. */
 @media (max-width: 767.98px) {
   .create-page--immersive,
   .create-page--immersive .create-page-main,
   .create-page--immersive .create-mode-stage--immersive,
   [data-camera-recorder-root='true'] {
     background: #000 !important;
+  }
+
+  .create-page--immersive,
+  [data-camera-recorder-root='true'] {
+    height: 100vh !important;
+    min-height: 100vh !important;
+  }
+
+  @supports (height: 100svh) {
+    .create-page--immersive,
+    [data-camera-recorder-root='true'] {
+      height: 100svh !important;
+      min-height: 100svh !important;
+    }
+  }
+
+  @supports (height: 100dvh) {
+    .create-page--immersive,
+    [data-camera-recorder-root='true'] {
+      height: 100dvh !important;
+      min-height: 100dvh !important;
+    }
   }
 
   .create-mode-stage[data-create-mode='story'] > div > section,
@@ -53,5 +91,124 @@
   [data-camera-recorder-root='true'] .alsamos-camera-filter-scroll + div {
     background: transparent !important;
     box-shadow: none !important;
+  }
+}
+
+/* Landscape phones frequently cross the 768px width breakpoint even though
+ * they are still touch-first camera devices. Keep them in the immersive camera
+ * treatment instead of falling into the desktop/card layout. */
+@media (pointer: coarse) and (max-height: 600px) {
+  .create-page.create-page--immersive {
+    position: fixed !important;
+    inset: 0 !important;
+    z-index: 80 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    min-height: 100vh !important;
+    background: #000 !important;
+    color: #fff !important;
+  }
+
+  @supports (height: 100dvh) {
+    .create-page.create-page--immersive {
+      height: 100dvh !important;
+      min-height: 100dvh !important;
+    }
+  }
+
+  .create-page--immersive .create-page-main,
+  .create-page--immersive .create-mode-stage--immersive {
+    width: 100% !important;
+    height: 100% !important;
+    min-height: 0 !important;
+    max-width: none !important;
+    overflow: hidden !important;
+    background: #000 !important;
+    padding: 0 !important;
+  }
+
+  .create-page--immersive .create-page-close {
+    display: flex !important;
+    top: max(env(safe-area-inset-top), 8px) !important;
+    left: max(env(safe-area-inset-left), 10px) !important;
+  }
+
+  [data-camera-recorder-root='true'] {
+    position: fixed !important;
+    inset: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    min-height: 100vh !important;
+    max-height: none !important;
+    background: #000 !important;
+  }
+
+  @supports (height: 100dvh) {
+    [data-camera-recorder-root='true'] {
+      height: 100dvh !important;
+      min-height: 100dvh !important;
+    }
+  }
+
+  [data-camera-recorder-root='true'] > div,
+  [data-camera-recorder-root='true'] > div > div:first-child,
+  [data-camera-recorder-root='true'] > div > div:first-child > div,
+  [data-camera-recorder-root='true'] .aspect-\[9\/16\] {
+    width: 100% !important;
+    height: 100% !important;
+    min-height: 0 !important;
+    max-width: none !important;
+    max-height: none !important;
+  }
+
+  [data-camera-recorder-root='true'] .aspect-\[9\/16\] {
+    aspect-ratio: auto !important;
+    border-radius: 0 !important;
+    overflow: hidden !important;
+  }
+
+  [data-camera-recorder-root='true'] video,
+  [data-camera-recorder-root='true'] img {
+    width: 100% !important;
+    height: 100% !important;
+    max-width: none !important;
+    max-height: none !important;
+    object-fit: cover !important;
+  }
+
+  [data-camera-recorder-root='true'] div:has(> .alsamos-camera-filter-scroll),
+  [data-camera-recorder-root='true'] .alsamos-camera-filter-scroll,
+  [data-camera-recorder-root='true'] .alsamos-camera-filter-scroll + div {
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+
+  /* Give short landscape screens more room: camera controls stay above the
+     mode dock and respect left/right safe areas/notches. */
+  [data-camera-recorder-root='true'] .absolute.inset-x-0.bottom-0.z-30 {
+    right: max(env(safe-area-inset-right), 0px) !important;
+    bottom: calc(68px + env(safe-area-inset-bottom)) !important;
+    left: max(env(safe-area-inset-left), 0px) !important;
+    padding-top: 28px !important;
+  }
+
+  .create-page .create-mode-footer,
+  .create-page--immersive .create-mode-footer {
+    bottom: max(6px, env(safe-area-inset-bottom)) !important;
+  }
+}
+
+/* Touch-first tablets/foldables keep their own desktop/tablet layout, but the
+ * camera layer still clips zoom and ignores browser-level pinch/callout. */
+@media (pointer: coarse) {
+  [data-camera-recorder-root='true'][data-camera-state='live'] {
+    overflow: hidden !important;
+    -webkit-touch-callout: none;
+    user-select: none;
+  }
+
+  [data-camera-recorder-root='true'][data-camera-state='live'] video {
+    touch-action: none;
   }
 }
