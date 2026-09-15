@@ -2,47 +2,74 @@
    comments rendered under normal posts. */
 
 /*
- * Measured Instagram mobile reference (945 x 2048 screenshot):
+ * Instagram mobile reference (945 x 2048 screenshot):
  * - app viewport starts at screenshot y=111
- * - frame x=215..730, y=111..798 => 516 x 688
- * - initial sheet top y=819
+ * - 3:4 media content x=215..730, y=111..798 => 516 x 688
+ * - initial sheet top y=819 (20px gap after the media)
  * - footer divider y=1714
  * - handle x=431..514, y=856..861 => 84 x 6
  *
- * Width/height variables are converted from those screenshot pixels using the
- * viewport-local geometry in videoCommentsGeometry.ts.
+ * The reference media is 3:4. We therefore treat 688px as the available
+ * preview-stage height, not as a universal video box. JS fits each real video
+ * into that stage using its own intrinsic aspect ratio.
  */
 .video-comments-preview-frame {
   position: fixed !important;
-  top: var(--video-comments-preview-top) !important;
-  left: 50% !important;
-  width: var(--video-comments-preview-width) !important;
-  height: var(--video-comments-preview-height) !important;
+  top: var(--video-comments-preview-stage-top, 0px) !important;
+  left: 0 !important;
+  width: 100vw !important;
+  height: var(--video-comments-preview-stage-height, 100dvh) !important;
   max-width: none !important;
   max-height: none !important;
-  transform: translateX(-50%) !important;
-  border-radius: 5% !important;
+  transform: none !important;
+  border-radius: 0 !important;
   background: #000 !important;
   box-shadow: none !important;
   z-index: 5990 !important;
   pointer-events: auto !important;
-  touch-action: manipulation !important;
+  touch-action: none !important;
   overflow: hidden !important;
+  transition: height 240ms cubic-bezier(0.22, 0.61, 0.36, 1) !important;
+  will-change: height;
 }
 
+.video-comments-preview-frame.video-comments-preview-no-transition {
+  transition: none !important;
+}
+
+/* The compact Instagram state keeps the playing media but removes Reel chrome,
+   captions, stickers and action rails. Mute/unmute is rendered by the sheet in
+   its own root-level portal so it can sit beside the preview. */
 .video-comments-preview-frame > :not(video) {
   display: none !important;
 }
 
 .video-comments-preview-frame > video {
-  inset: 0 !important;
-  width: 100% !important;
-  height: 100% !important;
+  position: absolute !important;
+  top: var(--video-comments-preview-media-top, 0px) !important;
+  left: 50% !important;
+  inset-inline-end: auto !important;
+  bottom: auto !important;
+  width: var(--video-comments-preview-media-width, 100%) !important;
+  height: var(--video-comments-preview-media-height, 100%) !important;
+  max-width: none !important;
+  max-height: none !important;
   object-fit: contain !important;
-  transform: none !important;
+  transform: translateX(-50%) !important;
   transform-origin: center center !important;
-  border-radius: inherit !important;
+  border-radius: clamp(12px, 4.2vw, 18px) !important;
+  background: #000 !important;
   pointer-events: none !important;
+  transition:
+    top 240ms cubic-bezier(0.22, 0.61, 0.36, 1),
+    width 240ms cubic-bezier(0.22, 0.61, 0.36, 1),
+    height 240ms cubic-bezier(0.22, 0.61, 0.36, 1),
+    border-radius 240ms cubic-bezier(0.22, 0.61, 0.36, 1) !important;
+  will-change: top, width, height;
+}
+
+.video-comments-preview-frame.video-comments-preview-no-transition > video {
+  transition: none !important;
 }
 
 .video-comments-measured-handle {
@@ -206,6 +233,13 @@
 
 .video-comments-premium [data-comment-composer='true'] [role='listbox'] {
   z-index: 10;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .video-comments-preview-frame,
+  .video-comments-preview-frame > video {
+    transition: none !important;
+  }
 }
 
 @media (min-width: 768px) {
