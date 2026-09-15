@@ -1,0 +1,8 @@
+/* While the mobile comments sheet is physically translating, its composited
+   top edge is the source of truth. Disable the preview's own interpolation so
+   the same playing Reel follows that edge frame-for-frame instead of lagging or
+   appearing frozen during compact -> dismiss and tap-to-close motion. */
+.video-comments-preview-frame.video-comments-preview-live-sync,
+.video-comments-preview-frame.video-comments-preview-live-sync > video {
+  transition: none !important;
+}
