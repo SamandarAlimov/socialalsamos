@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -55,5 +56,23 @@ describe('iOS camera Canvas2D preview compatibility', () => {
     `;
 
     expect(cameraLensFromRecorder(root).id).toBe('clarendon');
+  });
+
+  it('neutralizes hardware video filters and blend overlays before the observer activates Canvas2D', () => {
+    const css = readFileSync(
+      new URL('../styles/create-camera-ios-canvas.css', import.meta.url),
+      'utf8',
+    );
+
+    // The first-paint rules must not depend on data-camera-canvas-filter=active.
+    // Otherwise React can expose one hazardous filtered hardware-video frame to
+    // WebKit before the MutationObserver installs the Canvas2D preview.
+    expect(css).toMatch(
+      /\[data-camera-state='live'\]\s+video\s*\{[\s\S]*?filter:\s*none\s*!important;/,
+    );
+    expect(css).toMatch(
+      /\[data-camera-state='live'\]\s+\[style\*='mix-blend-mode'\]\s*\{[\s\S]*?display:\s*none\s*!important;/,
+    );
+    expect(css).toContain('.alsamos-camera-filter-scroll');
   });
 });
