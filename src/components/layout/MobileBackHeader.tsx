@@ -1,3 +1,4 @@
+import { useLayoutEffect, useRef } from 'react';
 import { ArrowLeft, Settings } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
@@ -6,6 +7,11 @@ import {
   getMobileBackFallback,
   isSafeInternalPath,
 } from '@/lib/mobileRouteChrome';
+import {
+  isNotificationReturnBridge,
+  notificationReturnHistoryDelta,
+  stripNotificationReturnBridge,
+} from '@/lib/notificationNavigation';
 
 interface MobileBackState {
   mobileBackTarget?: unknown;
@@ -20,8 +26,70 @@ export function MobileBackHeader() {
   const location = useLocation();
   const normalizedPath = location.pathname.replace(/\/+$/, '') || '/';
   const isNotifications = normalizedPath === '/notifications';
+  const isNotificationReturn = isNotificationReturnBridge(
+    location.pathname,
+    location.search,
+  );
+  const collapsedBridgeRef = useRef<string | null>(null);
+
+  // Notification post preview currently returns through an explicit `returnTo`
+  // navigation. That creates a temporary history shape like:
+  //   Notifications -> Post preview -> Notifications(return bridge)
+  // Collapse the two transient entries before paint so the user lands on the
+  // original Notifications entry. The next Back therefore exits Notifications
+  // instead of reopening the post preview.
+  useLayoutEffect(() => {
+    if (!isNotificationReturn) {
+      collapsedBridgeRef.current = null;
+      return;
+    }
+
+    const bridgeKey = `${location.pathname}${location.search}${location.hash}`;
+    if (collapsedBridgeRef.current === bridgeKey) return;
+    collapsedBridgeRef.current = bridgeKey;
+
+    const delta = notificationReturnHistoryDelta(window.history.state?.idx);
+    if (delta !== null) {
+      navigate(delta);
+      return;
+    }
+
+    navigate(
+      stripNotificationReturnBridge(
+        location.pathname,
+        location.search,
+        location.hash,
+      ),
+      { replace: true },
+    );
+  }, [
+    isNotificationReturn,
+    location.hash,
+    location.pathname,
+    location.search,
+    navigate,
+  ]);
 
   const handleBack = () => {
+    // If the user taps Back before the layout effect has collapsed the bridge,
+    // perform the same cleanup instead of exposing the transient post entry.
+    if (isNotificationReturn) {
+      const delta = notificationReturnHistoryDelta(window.history.state?.idx);
+      if (delta !== null) {
+        navigate(delta);
+      } else {
+        navigate(
+          stripNotificationReturnBridge(
+            location.pathname,
+            location.search,
+            location.hash,
+          ),
+          { replace: true },
+        );
+      }
+      return;
+    }
+
     const state = (location.state ?? {}) as MobileBackState;
     const explicitTarget = state.mobileBackTarget;
     const current = `${location.pathname}${location.search}`;
