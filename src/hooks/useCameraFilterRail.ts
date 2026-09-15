@@ -23,12 +23,17 @@ interface ZoomCapabilities {
   } | number;
 }
 
+interface ClientPoint {
+  clientX: number;
+  clientY: number;
+}
+
 function clampZoom(value: number) {
   if (!Number.isFinite(value)) return ZOOM_MIN;
   return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, value));
 }
 
-function touchDistance(first: Touch, second: Touch) {
+function pointDistance(first: ClientPoint, second: ClientPoint) {
   return Math.hypot(first.clientX - second.clientX, first.clientY - second.clientY);
 }
 
@@ -61,6 +66,7 @@ function showZoomBadge(host: HTMLElement, zoom: number) {
       opacity: '0',
       transition: 'opacity 120ms ease',
     });
+    badge.style.setProperty('-webkit-backdrop-filter', 'blur(14px)');
     host.appendChild(badge);
   }
 
@@ -139,11 +145,20 @@ function setCameraZoom(
 function resolveZoomTarget(
   root: HTMLElement,
   target: EventTarget | null,
-  touches?: TouchList,
+  points?: readonly ClientPoint[],
 ): Omit<ActiveZoomGesture, 'startDistance' | 'startZoom'> | null {
   const element = target instanceof Element ? target : null;
   const recorder = element?.closest<HTMLElement>(RECORDER_SELECTOR) ?? null;
   if (recorder) {
+    if (points && points.length >= 2) {
+      const rect = recorder.getBoundingClientRect();
+      if (
+        !pointInside(rect, points[0].clientX, points[0].clientY) ||
+        !pointInside(rect, points[1].clientX, points[1].clientY)
+      ) {
+        return null;
+      }
+    }
     return {
       host: recorder,
       video: recorder.querySelector<HTMLVideoElement>('video'),
@@ -155,11 +170,11 @@ function resolveZoomTarget(
   const liveVideo = liveStage?.querySelector<HTMLVideoElement>('video') ?? null;
   if (!liveStage || !liveVideo) return null;
 
-  if (touches && touches.length >= 2) {
+  if (points && points.length >= 2) {
     const rect = liveVideo.getBoundingClientRect();
     if (
-      !pointInside(rect, touches[0].clientX, touches[0].clientY) ||
-      !pointInside(rect, touches[1].clientX, touches[1].clientY)
+      !pointInside(rect, points[0].clientX, points[0].clientY) ||
+      !pointInside(rect, points[1].clientX, points[1].clientY)
     ) {
       return null;
     }
@@ -247,7 +262,9 @@ function centerActiveFilter(rail: HTMLElement) {
 function polishFilterRail(rail: HTMLElement) {
   const shell = rail.parentElement;
   const captureTray = rail.closest<HTMLElement>('.bg-gradient-to-t');
-  const isPhone = window.matchMedia('(max-width: 767.98px)').matches;
+  const compactViewport = window.matchMedia(
+    '(max-width: 767.98px), (pointer: coarse) and (max-height: 600px)',
+  ).matches;
 
   if (shell) {
     shell.style.setProperty('background', 'transparent', 'important');
@@ -261,11 +278,14 @@ function polishFilterRail(rail: HTMLElement) {
     captureTray.style.setProperty('background-image', 'none', 'important');
   }
 
-  // Instagram leaves noticeably more breathing room between effect bubbles.
-  rail.style.setProperty('column-gap', isPhone ? '22px' : '18px', 'important');
+  rail.style.setProperty(
+    'column-gap',
+    compactViewport ? '22px' : '18px',
+    'important',
+  );
   rail.style.setProperty(
     'padding-inline',
-    isPhone ? '112px' : '100px',
+    compactViewport ? '112px' : '100px',
     'important',
   );
 }
@@ -297,7 +317,7 @@ function attachShutterDragBridge(rail: HTMLElement) {
     try {
       shutter.setPointerCapture(event.pointerId);
     } catch {
-      // Some embedded browsers do not expose pointer capture for buttons.
+      // Pointer capture is optional on older WebViews.
     }
   };
 
@@ -364,6 +384,10 @@ export function useCameraFilterRail(rootRef: RefObject<HTMLElement>) {
     if (!root) return;
 
     const cleanups = new Map<HTMLElement, () => void>();
+    const pointerTouches = new Map<
+      number,
+      { point: ClientPoint; target: EventTarget | null }
+    >();
     let activeZoom: ActiveZoomGesture | null = null;
     let zoomFrame = 0;
 
@@ -409,11 +433,22 @@ export function useCameraFilterRail(rootRef: RefObject<HTMLElement>) {
       });
     };
 
+    const updateZoom = (distance: number) => {
+      if (!activeZoom || distance <= 0 || activeZoom.startDistance <= 0) return;
+      const nextZoom = activeZoom.startZoom * (distance / activeZoom.startDistance);
+      window.cancelAnimationFrame(zoomFrame);
+      zoomFrame = window.requestAnimationFrame(() => {
+        if (!activeZoom) return;
+        setCameraZoom(activeZoom.host, activeZoom.video, activeZoom.kind, nextZoom);
+      });
+    };
+
     const handleTouchStart = (event: TouchEvent) => {
       if (event.touches.length !== 2) return;
-      const resolved = resolveZoomTarget(root, event.target, event.touches);
+      const points = [event.touches[0], event.touches[1]];
+      const resolved = resolveZoomTarget(root, event.target, points);
       if (!resolved) return;
-      const distance = touchDistance(event.touches[0], event.touches[1]);
+      const distance = pointDistance(points[0], points[1]);
       if (distance <= 0) return;
 
       activeZoom = {
@@ -426,20 +461,56 @@ export function useCameraFilterRail(rootRef: RefObject<HTMLElement>) {
 
     const handleTouchMove = (event: TouchEvent) => {
       if (!activeZoom || event.touches.length !== 2) return;
-      const distance = touchDistance(event.touches[0], event.touches[1]);
-      if (distance <= 0 || activeZoom.startDistance <= 0) return;
       event.preventDefault();
-
-      const nextZoom = activeZoom.startZoom * (distance / activeZoom.startDistance);
-      window.cancelAnimationFrame(zoomFrame);
-      zoomFrame = window.requestAnimationFrame(() => {
-        if (!activeZoom) return;
-        setCameraZoom(activeZoom.host, activeZoom.video, activeZoom.kind, nextZoom);
-      });
+      updateZoom(pointDistance(event.touches[0], event.touches[1]));
     };
 
     const handleTouchEnd = (event: TouchEvent) => {
       if (event.touches.length < 2) activeZoom = null;
+    };
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (event.pointerType !== 'touch') return;
+      pointerTouches.set(event.pointerId, {
+        point: { clientX: event.clientX, clientY: event.clientY },
+        target: event.target,
+      });
+      if (pointerTouches.size !== 2) return;
+
+      const entries = Array.from(pointerTouches.values()).slice(0, 2);
+      const points = entries.map((entry) => entry.point);
+      const resolved = resolveZoomTarget(root, entries[0].target, points);
+      if (!resolved) return;
+      const distance = pointDistance(points[0], points[1]);
+      if (distance <= 0) return;
+
+      activeZoom = {
+        ...resolved,
+        startDistance: distance,
+        startZoom: getCurrentZoom(resolved.host),
+      };
+      event.preventDefault();
+    };
+
+    const handlePointerMove = (event: PointerEvent) => {
+      if (event.pointerType !== 'touch' || !pointerTouches.has(event.pointerId)) return;
+      const current = pointerTouches.get(event.pointerId);
+      pointerTouches.set(event.pointerId, {
+        point: { clientX: event.clientX, clientY: event.clientY },
+        target: current?.target ?? event.target,
+      });
+      if (!activeZoom || pointerTouches.size < 2) return;
+      const points = Array.from(pointerTouches.values())
+        .slice(0, 2)
+        .map((entry) => entry.point);
+      event.preventDefault();
+      updateZoom(pointDistance(points[0], points[1]));
+    };
+
+    const handlePointerEnd = (event: PointerEvent) => {
+      if (event.pointerType !== 'touch') return;
+      pointerTouches.delete(event.pointerId);
+      if (pointerTouches.size < 2) activeZoom = null;
     };
 
     const handleWheel = (event: WheelEvent) => {
@@ -449,9 +520,31 @@ export function useCameraFilterRail(rootRef: RefObject<HTMLElement>) {
 
       event.preventDefault();
       const current = getCurrentZoom(resolved.host);
-      const magnitude = Math.min(0.35, Math.max(0.08, Math.abs(event.deltaY) / 450));
-      const nextZoom = current + (event.deltaY < 0 ? magnitude : -magnitude);
+      const normalizedDelta =
+        event.deltaY *
+        (event.deltaMode === WheelEvent.DOM_DELTA_LINE
+          ? 16
+          : event.deltaMode === WheelEvent.DOM_DELTA_PAGE
+            ? window.innerHeight
+            : 1);
+      const magnitude = Math.min(
+        0.35,
+        Math.max(0.08, Math.abs(normalizedDelta) / 450),
+      );
+      const nextZoom = current + (normalizedDelta < 0 ? magnitude : -magnitude);
       setCameraZoom(resolved.host, resolved.video, resolved.kind, nextZoom);
+    };
+
+    // Safari exposes native gesture events in addition to pointer/touch events.
+    // Prevent browser/page magnification only when the gesture starts on camera.
+    const handleNativeGesture = (event: Event) => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (
+        target?.closest(RECORDER_SELECTOR) ||
+        target?.closest('.create-mode-stage[data-create-mode="live"]')
+      ) {
+        event.preventDefault();
+      }
     };
 
     const scan = () => {
@@ -468,22 +561,47 @@ export function useCameraFilterRail(rootRef: RefObject<HTMLElement>) {
     const observer = new MutationObserver(scan);
     observer.observe(root, { childList: true, subtree: true });
 
-    root.addEventListener('touchstart', handleTouchStart, { passive: false });
-    root.addEventListener('touchmove', handleTouchMove, { passive: false });
-    root.addEventListener('touchend', handleTouchEnd, { passive: true });
-    root.addEventListener('touchcancel', handleTouchEnd, { passive: true });
+    // Pointer Events cover current Android, iOS, Windows touchscreens and
+    // Chromium WebViews. Keep Touch Events as a fallback for older WebKit.
+    if (typeof window.PointerEvent === 'function') {
+      root.addEventListener('pointerdown', handlePointerDown, { passive: false });
+      root.addEventListener('pointermove', handlePointerMove, { passive: false });
+      root.addEventListener('pointerup', handlePointerEnd, { passive: true });
+      root.addEventListener('pointercancel', handlePointerEnd, { passive: true });
+    } else {
+      root.addEventListener('touchstart', handleTouchStart, { passive: false });
+      root.addEventListener('touchmove', handleTouchMove, { passive: false });
+      root.addEventListener('touchend', handleTouchEnd, { passive: true });
+      root.addEventListener('touchcancel', handleTouchEnd, { passive: true });
+    }
     root.addEventListener('wheel', handleWheel, { passive: false });
+    root.addEventListener('gesturestart', handleNativeGesture as EventListener, {
+      passive: false,
+    });
+    root.addEventListener('gesturechange', handleNativeGesture as EventListener, {
+      passive: false,
+    });
 
     return () => {
       observer.disconnect();
       window.cancelAnimationFrame(zoomFrame);
       cleanups.forEach((cleanup) => cleanup());
       cleanups.clear();
-      root.removeEventListener('touchstart', handleTouchStart);
-      root.removeEventListener('touchmove', handleTouchMove);
-      root.removeEventListener('touchend', handleTouchEnd);
-      root.removeEventListener('touchcancel', handleTouchEnd);
+      pointerTouches.clear();
+      if (typeof window.PointerEvent === 'function') {
+        root.removeEventListener('pointerdown', handlePointerDown);
+        root.removeEventListener('pointermove', handlePointerMove);
+        root.removeEventListener('pointerup', handlePointerEnd);
+        root.removeEventListener('pointercancel', handlePointerEnd);
+      } else {
+        root.removeEventListener('touchstart', handleTouchStart);
+        root.removeEventListener('touchmove', handleTouchMove);
+        root.removeEventListener('touchend', handleTouchEnd);
+        root.removeEventListener('touchcancel', handleTouchEnd);
+      }
       root.removeEventListener('wheel', handleWheel);
+      root.removeEventListener('gesturestart', handleNativeGesture as EventListener);
+      root.removeEventListener('gesturechange', handleNativeGesture as EventListener);
     };
   }, [rootRef]);
 }
