@@ -112,11 +112,15 @@ async function applyZoom(video: HTMLVideoElement, requested: number) {
     }
   }
 
-  // Native track zoom is broadcast to viewers. CSS scale is only a graceful
-  // preview fallback for browsers that do not expose the constrainable zoom.
-  video.style.setProperty('scale', nativeApplied ? '1' : String(zoom));
-  video.style.setProperty('transform-origin', 'center center');
-  video.style.setProperty('will-change', 'scale');
+  // Native track zoom is broadcast to viewers. CSS transform is only a
+  // graceful preview fallback. Avoid the individual `scale` property here:
+  // Mobile Safari can turn a scaled camera video into a huge compositor layer.
+  const previewZoom = nativeApplied ? 1 : zoom;
+  video.style.setProperty('transform', `scale(${previewZoom})`);
+  video.style.setProperty('transform-origin', '50% 50%');
+  video.style.setProperty('will-change', previewZoom === 1 ? 'auto' : 'transform');
+  video.style.setProperty('backface-visibility', 'hidden');
+  video.style.setProperty('-webkit-backface-visibility', 'hidden');
 }
 
 export function installCreateCameraZoom() {
