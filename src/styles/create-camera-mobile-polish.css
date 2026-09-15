@@ -1,0 +1,57 @@
+/* Mobile Create camera polish.
+ *
+ * The camera surface should read as one full-bleed canvas, not as a rounded
+ * 9:16 card floating above the Create navigation. Keep clipping on the camera
+ * viewport so digital zoom never exposes/scales the surrounding UI. */
+@media (max-width: 767.98px) {
+  .create-page--immersive,
+  .create-page--immersive .create-page-main,
+  .create-page--immersive .create-mode-stage--immersive,
+  [data-camera-recorder-root='true'] {
+    background: #000 !important;
+  }
+
+  .create-mode-stage[data-create-mode='story'] > div > section,
+  .create-mode-stage[data-create-mode='reel'] > div > section,
+  .create-mode-stage[data-create-mode='story']
+    > div
+    > section
+    > div:nth-of-type(2)
+    > div:first-child,
+  .create-mode-stage[data-create-mode='reel']
+    > div
+    > section
+    > div:nth-of-type(2)
+    > div:first-child,
+  [data-camera-recorder-root='true'] .aspect-\[9\/16\] {
+    border-radius: 0 !important;
+  }
+
+  [data-camera-recorder-root='true'] .aspect-\[9\/16\] {
+    overflow: hidden !important;
+    isolation: isolate;
+  }
+
+  [data-camera-recorder-root='true'][data-camera-state='live'] video {
+    width: 100% !important;
+    height: 100% !important;
+    max-width: none !important;
+    max-height: none !important;
+    object-fit: cover !important;
+  }
+
+  /* No card/tray chrome around the filter rail or shutter. JavaScript also
+     applies this as a compatibility fallback for browsers with partial :has(). */
+  [data-camera-recorder-root='true'] div:has(> .alsamos-camera-filter-scroll) {
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+
+  [data-camera-recorder-root='true'] .alsamos-camera-filter-scroll,
+  [data-camera-recorder-root='true'] .alsamos-camera-filter-scroll + div {
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+}

@@ -139,16 +139,31 @@ export function useCameraCapture(options: UseCameraCaptureOptions) {
     if (recordedUrl) URL.revokeObjectURL(recordedUrl);
   }, [recordedUrl]);
 
-  // Use the individual CSS `scale` transform so the existing front-camera
-  // mirror transform keeps working. This makes pinch zoom visible immediately
-  // while the canvas path below applies the exact same crop to saved media.
+  // Keep zoom on the video itself, but use the long-supported transform
+  // property instead of the newer individual `scale` property. Mobile Safari
+  // can promote a scaled camera <video> into a broken oversized compositor
+  // surface (the large rounded/grey panel seen during pinch zoom). Combining
+  // mirror + zoom in one transform keeps the preview clipped by its viewport
+  // while the canvas path below applies the same crop to captured media.
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
-    video.style.setProperty('scale', String(zoom));
-    video.style.setProperty('transform-origin', 'center center');
-    video.style.setProperty('will-change', 'scale');
-  }, [cameraReady, zoom]);
+
+    const scaleX = facingMode === 'user' ? -zoom : zoom;
+    video.style.setProperty('transform', `scale(${scaleX}, ${zoom})`);
+    video.style.setProperty('transform-origin', '50% 50%');
+    video.style.setProperty('will-change', zoom === 1 ? 'auto' : 'transform');
+    video.style.setProperty('backface-visibility', 'hidden');
+    video.style.setProperty('-webkit-backface-visibility', 'hidden');
+
+    return () => {
+      video.style.removeProperty('transform');
+      video.style.removeProperty('transform-origin');
+      video.style.removeProperty('will-change');
+      video.style.removeProperty('backface-visibility');
+      video.style.removeProperty('-webkit-backface-visibility');
+    };
+  }, [cameraReady, facingMode, zoom]);
 
   const prepareCanvas = useCallback(() => {
     const video = videoRef.current;

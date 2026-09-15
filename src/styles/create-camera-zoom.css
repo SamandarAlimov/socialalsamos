@@ -1,23 +1,32 @@
 /* Shared Create camera zoom presentation.
  *
- * Story/Reel save the same zoom in useCameraCapture's canvas renderer. Live
- * tries the device's native MediaStreamTrack zoom first; this CSS is the
- * cross-browser preview fallback when the browser does not expose it. */
-[data-camera-recorder-root='true'][data-camera-state='live'] video {
-  scale: var(--alsamos-camera-zoom, 1);
-  transform-origin: center center;
-  will-change: scale;
-}
-
-.create-mode-stage[data-create-mode='live'] video {
-  scale: var(--alsamos-live-camera-zoom, 1);
-  transform-origin: center center;
-  will-change: scale;
-}
-
-/* A two-finger gesture belongs to the camera, not browser/page zoom. Single
- * finger pan/swipe remains available for the surrounding Create navigation. */
-[data-camera-recorder-root='true'],
-.create-mode-stage[data-create-mode='live'] video {
+ * Story/Reel save the same zoom in useCameraCapture's canvas renderer. Their
+ * live preview transform is applied inline so front-camera mirroring and zoom
+ * are composed as one transform. Live broadcast still prefers native track
+ * zoom and uses the CSS variable below only as a fallback. */
+[data-camera-recorder-root='true'][data-camera-state='live'] {
+  overflow: hidden;
+  overscroll-behavior: none;
   touch-action: pan-x pan-y;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+[data-camera-recorder-root='true'][data-camera-state='live'] video {
+  transform-origin: 50% 50%;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  touch-action: none;
+  -webkit-touch-callout: none;
+}
+
+.create-mode-stage[data-create-mode='live'] video {
+  transform: scale(var(--alsamos-live-camera-zoom, 1));
+  transform-origin: 50% 50%;
+  will-change: transform;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  touch-action: none;
+  -webkit-touch-callout: none;
 }
