@@ -30,6 +30,7 @@ import ProfilePage from "./pages/ProfilePage";
 import UserProfilePage from "./pages/UserProfilePage";
 import SettingsLandingPage from "./pages/SettingsLandingPage";
 import SettingsHubPage from "./pages/SettingsHubPage";
+import AccountManagementPage from "./pages/AccountManagementPage";
 import PaymentSettingsPage from "./pages/PaymentSettingsPage";
 import ComposePage from "./pages/ComposePage";
 import CreateEntryPage from "./pages/CreateEntryPage";
@@ -192,6 +193,8 @@ function AppRoutes() {
         <Route path="/user/:username" element={<UserProfileRoute />} />
         <Route path="/settings" element={<SettingsLandingPage />} />
         <Route path="/settings/payment" element={<Navigate to="/payment" replace />} />
+        <Route path="/settings/account-management" element={<AccountManagementPage />} />
+        <Route path="/settings/danger" element={<AccountManagementPage />} />
         <Route path="/settings/:section" element={<SettingsHubPage />} />
         <Route path="/payment" element={<PaymentSettingsPage />} />
         <Route path="/feedback" element={<FeedbackPage />} />
