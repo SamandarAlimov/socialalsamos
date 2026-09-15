@@ -40,6 +40,12 @@ double_confirm_changes = true
 [functions.account-signup]
 verify_jwt = false
 
+# Account deletion is destructive and must cross the service-role boundary.
+# Require the signed-in user's JWT at the platform gateway and verify it again
+# inside the function before deleting only that authenticated identity.
+[functions.account-delete]
+verify_jwt = true
+
 # These endpoints must be reachable before a session exists, so Supabase JWT
 # verification is disabled and authorisation is performed inside the function
 # (password + rate limit, single-use ticket, or manual JWT verification).
