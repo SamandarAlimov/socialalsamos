@@ -9,14 +9,21 @@
  * mix-blend-mode, WebKit can promote that surface incorrectly, and the corrupt
  * giant rounded/capsule layer can survive even after the CSS is later cleared.
  *
- * The real lens is rendered by iosCameraCanvasPreview through the same Canvas2D
- * drawCameraFrame pipeline used by capture.  The raw video is only a source.
+ * Pinch zoom has a second iOS-specific failure mode: while two fingers move,
+ * React updates the hardware video's scale transform every frame. WebKit can
+ * transiently promote that moving rounded video surface at the wrong backing
+ * size, producing the same giant grey capsule only during the gesture. The
+ * compatibility layer marks active pinch gestures so Canvas2D owns moving zoom.
+ *
+ * The real lens/gesture preview is rendered by iosCameraCanvasPreview through the
+ * same Canvas2D drawCameraFrame pipeline used by capture. The raw video is only a
+ * source whenever Canvas2D is active.
  */
 
 /* Never allow a CSS filter onto the hardware-backed live camera on iOS.  This
  * applies from the very first React paint, including the frame before the
  * MutationObserver marks the processed canvas active.  Keep the mirror transform
- * for Normal; the active-canvas rule below removes it while Canvas2D owns output. */
+ * for Normal; active Canvas2D rules below remove it while Canvas2D owns output. */
 html.alsamos-ios-camera-canvas-preview
   [data-camera-recorder-root='true'][data-camera-state='live']
   video {
@@ -28,6 +35,16 @@ html.alsamos-ios-camera-canvas-preview
 
 html.alsamos-ios-camera-canvas-preview
   [data-camera-recorder-root='true'][data-camera-state='live'][data-camera-canvas-filter='active']
+  video {
+  transform: none !important;
+}
+
+/* The zoom hook writes inline scale(...) on every pinch frame. Neutralize that
+ * hardware-video transform synchronously from the second touch onward. Canvas2D
+ * renders the moving zoom, then the final stable video transform can take over
+ * again after release when the Normal lens does not otherwise need Canvas2D. */
+html.alsamos-ios-camera-canvas-preview
+  [data-camera-recorder-root='true'][data-camera-state='live'][data-camera-zoom-gesture='active']
   video {
   transform: none !important;
 }
@@ -89,7 +106,7 @@ html.alsamos-ios-camera-canvas-preview
 }
 
 /* Do not force a GPU promotion here. A plain Canvas2D layer is intentional: the
- * broken path we are escaping is WebKit's filtered/blended video compositor. */
+ * broken path we are escaping is WebKit's filtered/transformed video compositor. */
 html.alsamos-ios-camera-canvas-preview
   [data-camera-recorder-root='true'][data-camera-state='live']
   canvas[data-camera-processed-preview='true'] {
