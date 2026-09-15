@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 import {
   cameraLensFromRecorder,
   cameraPreviewBackingSize,
+  cameraPreviewNeedsCanvas,
   shouldUseIosCameraCanvasPreview,
 } from './iosCameraCanvasPreview';
 
@@ -59,20 +60,40 @@ describe('iOS camera Canvas2D preview compatibility', () => {
     expect(cameraLensFromRecorder(root).id).toBe('clarendon');
   });
 
-  it('neutralizes hardware video filters and blend overlays before the observer activates Canvas2D', () => {
+  it('uses Canvas2D for Normal only while an iOS pinch zoom is active', () => {
+    const root = document.createElement('div');
+    root.innerHTML = `
+      <div class="alsamos-camera-filter-scroll">
+        <button aria-label="Normal filtri" aria-pressed="true"></button>
+        <button aria-label="Clarendon filtri" aria-pressed="false"></button>
+      </div>
+    `;
+
+    const normal = cameraLensFromRecorder(root);
+    expect(normal.id).toBe('none');
+    expect(cameraPreviewNeedsCanvas(normal, false)).toBe(false);
+    expect(cameraPreviewNeedsCanvas(normal, true)).toBe(true);
+  });
+
+  it('neutralizes hazardous hardware video compositing before Canvas2D owns output', () => {
     const css = readFileSync(
       resolve(process.cwd(), 'src/styles/create-camera-ios-canvas.css'),
       'utf8',
     );
 
-    // The first-paint rules must not depend on data-camera-canvas-filter=active.
-    // Otherwise React can expose one hazardous filtered hardware-video frame to
-    // WebKit before the MutationObserver installs the Canvas2D preview.
+    // First-paint filter safety must not depend on data-camera-canvas-filter.
     expect(css).toMatch(
       /\[data-camera-state='live'\]\s+video\s*\{[\s\S]*?filter:\s*none\s*!important;/,
     );
     expect(css).toMatch(
       /\[data-camera-state='live'\]\s+\[style\*='mix-blend-mode'\]\s*\{[\s\S]*?display:\s*none\s*!important;/,
+    );
+
+    // The user's remaining artifact exists only while pinch is moving. The raw
+    // iOS hardware video therefore must stop receiving its changing scale during
+    // that exact gesture window; Canvas2D renders the moving zoom instead.
+    expect(css).toMatch(
+      /\[data-camera-zoom-gesture='active'\][\s\S]*?video\s*\{[\s\S]*?transform:\s*none\s*!important;/,
     );
     expect(css).toContain('.alsamos-camera-filter-scroll');
   });
