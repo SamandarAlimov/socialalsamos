@@ -17,6 +17,12 @@ import {
   fitVideoCommentsPreview,
   scaleVideoCommentsReference,
 } from '@/lib/videoCommentsGeometry';
+import {
+  resolveVideoCommentsSheetDrag,
+  settleVideoCommentsSheetDetent,
+  shouldDismissVideoCommentsSheet,
+  type VideoCommentsSheetDetent,
+} from '@/lib/videoCommentsSheetGesture';
 import './video-comments-sheet.css';
 
 interface VideoCommentsSheetProps {
@@ -26,17 +32,29 @@ interface VideoCommentsSheetProps {
   commentsCount: number;
 }
 
+type MobileDragSource = 'handle' | 'comments';
+
 type MobileDragState = {
   pointerId: number;
+  source: MobileDragSource;
   startY: number;
   startTop: number;
+  startDismissOffset: number;
   currentTop: number;
+  currentDismissOffset: number;
   lastY: number;
   lastAt: number;
   velocityY: number;
 };
 
-type MobileDetent = 'initial' | 'expanded';
+type CommentTouchState = {
+  identifier: number;
+  startX: number;
+  startY: number;
+  lastY: number;
+  startedAtTop: boolean;
+  transferredToSheet: boolean;
+};
 
 type PreviewSurface = {
   frame: HTMLElement;
@@ -49,11 +67,9 @@ type ScrollLockSnapshot = {
   overscrollBehaviorY: string;
 };
 
-const MOBILE_MAX_TOP_RATIO = 0.78;
-const MOBILE_DISMISS_TOP_RATIO = 0.72;
-const MOBILE_DISMISS_VELOCITY = 0.85;
-const MOBILE_SNAP_VELOCITY = 0.45;
 const PREVIEW_TRANSITION_MS = 240;
+const COMMENT_SCROLL_EPSILON = 1;
+const COMMENT_PULL_ACTIVATION_PX = 3;
 
 function getViewportHeight() {
   if (typeof window === 'undefined') return 844;
@@ -86,14 +102,8 @@ function mobileSheetBounds() {
   return {
     height,
     minTop: height * VIDEO_COMMENTS_GEOMETRY.expandedSheetTopRatio,
-    maxTop: height * MOBILE_MAX_TOP_RATIO,
     initialTop: height * VIDEO_COMMENTS_GEOMETRY.initialSheetTopRatio,
   };
-}
-
-function clampMobileTop(value: number) {
-  const { minTop, maxTop } = mobileSheetBounds();
-  return Math.min(maxTop, Math.max(minTop, value));
 }
 
 function visibleViewportArea(element: Element) {
@@ -242,7 +252,11 @@ function DesktopHeader({ commentsCount }: { commentsCount: number }) {
  * - the same playing <video> remains mounted (no clone, reload or time reset),
  * - only the video is kept in the compact preview stage; Reel chrome disappears,
  * - the intrinsic media aspect ratio is preserved,
- * - the sheet has initial + expanded detents and velocity-aware dismissal,
+ * - comments scroll normally until their scrollTop reaches zero, then a further
+ *   downward pull is handed to the sheet,
+ * - expanded -> compact resizes the sheet, while compact -> dismiss translates
+ *   the whole sheet so the composer exits with it instead of leaving a tiny
+ *   compressed panel,
  * - dragging the sheet continuously changes the available preview stage,
  * - the underlying Reel feed is locked while comments are open,
  * - mute/unmute remains available beside the compact preview.
@@ -255,16 +269,21 @@ export function VideoCommentsSheet({
 }: VideoCommentsSheetProps) {
   const isMobile = useIsMobile();
   const dragRef = useRef<MobileDragState | null>(null);
+  const commentTouchRef = useRef<CommentTouchState | null>(null);
   const mobileTopRef = useRef(mobileSheetBounds().initialTop);
-  const detentRef = useRef<MobileDetent>('initial');
+  const dismissOffsetRef = useRef(0);
+  const detentRef = useRef<VideoCommentsSheetDetent>('initial');
   const previewFrameRef = useRef<HTMLElement | null>(null);
   const previewVideoRef = useRef<HTMLVideoElement | null>(null);
+  const sheetContentRef = useRef<HTMLDivElement | null>(null);
   const scrollLockRef = useRef<ScrollLockSnapshot | null>(null);
   const previewListenerCleanupRef = useRef<(() => void) | null>(null);
   const previewRafRef = useRef<number | null>(null);
   const previewCloseTimerRef = useRef<number | null>(null);
+  const dismissTimerRef = useRef<number | null>(null);
 
   const [mobileTop, setMobileTop] = useState(() => mobileSheetBounds().initialTop);
+  const [dismissOffset, setDismissOffset] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const [hasPreview, setHasPreview] = useState(false);
   const [previewMuted, setPreviewMuted] = useState(true);
@@ -295,6 +314,13 @@ export function VideoCommentsSheet({
     previewListenerCleanupRef.current = null;
   }, []);
 
+  const cancelDismissTimer = useCallback(() => {
+    if (dismissTimerRef.current !== null) {
+      window.clearTimeout(dismissTimerRef.current);
+      dismissTimerRef.current = null;
+    }
+  }, []);
+
   const cancelPreviewTimers = useCallback(() => {
     if (previewRafRef.current !== null) {
       cancelAnimationFrame(previewRafRef.current);
@@ -316,6 +342,125 @@ export function VideoCommentsSheet({
     unlockFeed();
     setHasPreview(false);
   }, [cancelPreviewTimers, detachPreviewListeners, unlockFeed]);
+
+  const setSheetTopImmediately = useCallback((nextTop: number) => {
+    mobileTopRef.current = nextTop;
+    const frame = previewFrameRef.current;
+    const video = previewVideoRef.current;
+    if (frame && video) applyPreviewGeometry(frame, video, nextTop);
+    setMobileTop(nextTop);
+  }, []);
+
+  const setSheetDismissOffset = useCallback((nextOffset: number) => {
+    const safeOffset = Math.max(0, nextOffset);
+    dismissOffsetRef.current = safeOffset;
+    setDismissOffset(safeOffset);
+  }, []);
+
+  const beginMobileDrag = useCallback((
+    clientY: number,
+    pointerId: number,
+    source: MobileDragSource,
+  ) => {
+    cancelDismissTimer();
+    const now = performance.now();
+    dragRef.current = {
+      pointerId,
+      source,
+      startY: clientY,
+      startTop: mobileTopRef.current,
+      startDismissOffset: dismissOffsetRef.current,
+      currentTop: mobileTopRef.current,
+      currentDismissOffset: dismissOffsetRef.current,
+      lastY: clientY,
+      lastAt: now,
+      velocityY: 0,
+    };
+    setIsDragging(true);
+  }, [cancelDismissTimer]);
+
+  const updateMobileDrag = useCallback((clientY: number) => {
+    const drag = dragRef.current;
+    if (!drag) return;
+
+    const now = performance.now();
+    const elapsed = Math.max(1, now - drag.lastAt);
+    drag.velocityY = (clientY - drag.lastY) / elapsed;
+    drag.lastY = clientY;
+    drag.lastAt = now;
+
+    const bounds = mobileSheetBounds();
+    const next = resolveVideoCommentsSheetDrag(
+      drag.startTop,
+      drag.startDismissOffset,
+      clientY - drag.startY,
+      bounds,
+    );
+
+    drag.currentTop = next.top;
+    drag.currentDismissOffset = next.dismissOffset;
+    setSheetTopImmediately(next.top);
+    setSheetDismissOffset(next.dismissOffset);
+  }, [setSheetDismissOffset, setSheetTopImmediately]);
+
+  const animateDismissAndClose = useCallback((fromOffset: number) => {
+    const bounds = mobileSheetBounds();
+    detentRef.current = 'initial';
+    setSheetTopImmediately(bounds.initialTop);
+    const offscreenOffset = Math.max(
+      fromOffset,
+      bounds.height - bounds.initialTop + 48,
+    );
+    setSheetDismissOffset(offscreenOffset);
+    cancelDismissTimer();
+    dismissTimerRef.current = window.setTimeout(() => {
+      dismissTimerRef.current = null;
+      onClose();
+    }, PREVIEW_TRANSITION_MS);
+  }, [cancelDismissTimer, onClose, setSheetDismissOffset, setSheetTopImmediately]);
+
+  const settleMobileDrag = useCallback((cancelled = false) => {
+    const drag = dragRef.current;
+    if (!drag) return;
+
+    dragRef.current = null;
+    setIsDragging(false);
+    const bounds = mobileSheetBounds();
+
+    if (cancelled) {
+      setSheetDismissOffset(0);
+      const fallback = detentRef.current === 'expanded' ? bounds.minTop : bounds.initialTop;
+      setSheetTopImmediately(fallback);
+      return;
+    }
+
+    if (shouldDismissVideoCommentsSheet(
+      drag.currentDismissOffset,
+      drag.velocityY,
+      bounds.height,
+    )) {
+      animateDismissAndClose(drag.currentDismissOffset);
+      return;
+    }
+
+    // Once the compact Instagram detent is reached, a short downward pull must
+    // spring back to that detent; it must never settle as a tiny compressed sheet.
+    if (drag.currentDismissOffset > 0) {
+      detentRef.current = 'initial';
+      setSheetTopImmediately(bounds.initialTop);
+      setSheetDismissOffset(0);
+      return;
+    }
+
+    const nextDetent = settleVideoCommentsSheetDetent(
+      drag.currentTop,
+      drag.velocityY,
+      bounds,
+    );
+    detentRef.current = nextDetent;
+    setSheetDismissOffset(0);
+    setSheetTopImmediately(nextDetent === 'expanded' ? bounds.minTop : bounds.initialTop);
+  }, [animateDismissAndClose, setSheetDismissOffset, setSheetTopImmediately]);
 
   useEffect(() => {
     if (!isOpen || typeof document === 'undefined') return;
@@ -341,13 +486,17 @@ export function VideoCommentsSheet({
 
   useEffect(() => {
     if (!isOpen || !isMobile) return;
+    cancelDismissTimer();
     dragRef.current = null;
+    commentTouchRef.current = null;
     detentRef.current = 'initial';
     setIsDragging(false);
     const nextTop = mobileSheetBounds().initialTop;
     mobileTopRef.current = nextTop;
+    dismissOffsetRef.current = 0;
     setMobileTop(nextTop);
-  }, [isMobile, isOpen, postId]);
+    setDismissOffset(0);
+  }, [cancelDismissTimer, isMobile, isOpen, postId]);
 
   useEffect(() => {
     if (!isMobile || typeof document === 'undefined') return;
@@ -451,12 +600,9 @@ export function VideoCommentsSheet({
 
       const bounds = mobileSheetBounds();
       const nextTop = detentRef.current === 'expanded' ? bounds.minTop : bounds.initialTop;
-      mobileTopRef.current = nextTop;
-      setMobileTop(nextTop);
-
-      const frame = previewFrameRef.current;
-      const video = previewVideoRef.current;
-      if (frame && video) applyPreviewGeometry(frame, video, nextTop);
+      dismissOffsetRef.current = 0;
+      setDismissOffset(0);
+      setSheetTopImmediately(nextTop);
     };
 
     window.addEventListener('resize', handleResize);
@@ -465,9 +611,108 @@ export function VideoCommentsSheet({
       window.removeEventListener('resize', handleResize);
       window.visualViewport?.removeEventListener('resize', handleResize);
     };
-  }, [isMobile, isOpen]);
+  }, [isMobile, isOpen, setSheetTopImmediately]);
+
+  /**
+   * Nested Instagram-style scroll handoff:
+   * - while comments still have scrollTop, the browser owns the gesture;
+   * - after scrollTop reaches zero, continuing the same downward pull transfers
+   *   the gesture to the sheet without requiring the small top handle;
+   * - once transferred, the sheet remains the owner until that touch ends.
+   */
+  useEffect(() => {
+    if (!isOpen || !isMobile) return;
+    const sheet = sheetContentRef.current;
+    const commentList = sheet?.querySelector<HTMLElement>('[data-comment-list="true"]');
+    if (!commentList) return;
+
+    const findTouch = (touches: TouchList, identifier: number) => {
+      for (let index = 0; index < touches.length; index += 1) {
+        const touch = touches.item(index);
+        if (touch?.identifier === identifier) return touch;
+      }
+      return null;
+    };
+
+    const handleTouchStart = (event: TouchEvent) => {
+      if (event.touches.length !== 1) {
+        commentTouchRef.current = null;
+        return;
+      }
+      const touch = event.touches.item(0);
+      if (!touch) return;
+      commentTouchRef.current = {
+        identifier: touch.identifier,
+        startX: touch.clientX,
+        startY: touch.clientY,
+        lastY: touch.clientY,
+        startedAtTop: commentList.scrollTop <= COMMENT_SCROLL_EPSILON,
+        transferredToSheet: false,
+      };
+    };
+
+    const handleTouchMove = (event: TouchEvent) => {
+      const state = commentTouchRef.current;
+      if (!state) return;
+      const touch = findTouch(event.touches, state.identifier);
+      if (!touch) return;
+
+      const deltaSinceLast = touch.clientY - state.lastY;
+      state.lastY = touch.clientY;
+
+      if (!state.transferredToSheet) {
+        const totalY = touch.clientY - state.startY;
+        const totalX = touch.clientX - state.startX;
+        const verticalIntent = Math.abs(totalY) >= Math.abs(totalX);
+        const pullingDown = deltaSinceLast > 0 && totalY > COMMENT_PULL_ACTIVATION_PX;
+
+        if (!verticalIntent || !pullingDown || commentList.scrollTop > COMMENT_SCROLL_EPSILON) {
+          if (commentList.scrollTop > COMMENT_SCROLL_EPSILON) state.startedAtTop = false;
+          return;
+        }
+
+        // If this touch began while the list was already at the top, preserve
+        // the whole pull distance. If it reached the top mid-gesture, begin the
+        // sheet phase at the handoff point to avoid a visual jump.
+        const activationY = state.startedAtTop ? state.startY : touch.clientY;
+        beginMobileDrag(activationY, -1, 'comments');
+        state.transferredToSheet = true;
+      }
+
+      if (event.cancelable) event.preventDefault();
+      commentList.scrollTop = 0;
+      updateMobileDrag(touch.clientY);
+    };
+
+    const finishTouch = (event: TouchEvent, cancelled: boolean) => {
+      const state = commentTouchRef.current;
+      if (!state) return;
+      if (state.transferredToSheet) {
+        if (event.cancelable) event.preventDefault();
+        settleMobileDrag(cancelled);
+      }
+      commentTouchRef.current = null;
+    };
+
+    const handleTouchEnd = (event: TouchEvent) => finishTouch(event, false);
+    const handleTouchCancel = (event: TouchEvent) => finishTouch(event, true);
+
+    commentList.addEventListener('touchstart', handleTouchStart, { passive: true });
+    commentList.addEventListener('touchmove', handleTouchMove, { passive: false });
+    commentList.addEventListener('touchend', handleTouchEnd, { passive: false });
+    commentList.addEventListener('touchcancel', handleTouchCancel, { passive: false });
+
+    return () => {
+      commentList.removeEventListener('touchstart', handleTouchStart);
+      commentList.removeEventListener('touchmove', handleTouchMove);
+      commentList.removeEventListener('touchend', handleTouchEnd);
+      commentList.removeEventListener('touchcancel', handleTouchCancel);
+      commentTouchRef.current = null;
+    };
+  }, [beginMobileDrag, isMobile, isOpen, settleMobileDrag, updateMobileDrag]);
 
   useEffect(() => () => {
+    cancelDismissTimer();
     cancelPreviewTimers();
     detachPreviewListeners();
     const frame = previewFrameRef.current;
@@ -475,81 +720,32 @@ export function VideoCommentsSheet({
     previewFrameRef.current = null;
     previewVideoRef.current = null;
     unlockFeed();
-  }, [cancelPreviewTimers, detachPreviewListeners, unlockFeed]);
+  }, [cancelDismissTimer, cancelPreviewTimers, detachPreviewListeners, unlockFeed]);
 
   const handleDragStart = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     if (!event.isPrimary || (event.pointerType === 'mouse' && event.button !== 0)) return;
 
-    const now = performance.now();
-    dragRef.current = {
-      pointerId: event.pointerId,
-      startY: event.clientY,
-      startTop: mobileTop,
-      currentTop: mobileTop,
-      lastY: event.clientY,
-      lastAt: now,
-      velocityY: 0,
-    };
-    setIsDragging(true);
+    beginMobileDrag(event.clientY, event.pointerId, 'handle');
     event.currentTarget.setPointerCapture?.(event.pointerId);
     event.preventDefault();
-  }, [mobileTop]);
+  }, [beginMobileDrag]);
 
   const handleDragMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     const drag = dragRef.current;
-    if (!drag || drag.pointerId !== event.pointerId) return;
-
-    const now = performance.now();
-    const elapsed = Math.max(1, now - drag.lastAt);
-    drag.velocityY = (event.clientY - drag.lastY) / elapsed;
-    drag.lastY = event.clientY;
-    drag.lastAt = now;
-
-    const nextTop = clampMobileTop(drag.startTop + event.clientY - drag.startY);
-    drag.currentTop = nextTop;
-    mobileTopRef.current = nextTop;
-    setMobileTop(nextTop);
+    if (!drag || drag.source !== 'handle' || drag.pointerId !== event.pointerId) return;
+    updateMobileDrag(event.clientY);
     event.preventDefault();
-  }, []);
+  }, [updateMobileDrag]);
 
   const finishDrag = useCallback((event: React.PointerEvent<HTMLDivElement>, cancelled = false) => {
     const drag = dragRef.current;
-    if (!drag || drag.pointerId !== event.pointerId) return;
+    if (!drag || drag.source !== 'handle' || drag.pointerId !== event.pointerId) return;
 
-    dragRef.current = null;
-    setIsDragging(false);
     if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
-
-    const bounds = mobileSheetBounds();
-    if (cancelled) {
-      const fallback = detentRef.current === 'expanded' ? bounds.minTop : bounds.initialTop;
-      mobileTopRef.current = fallback;
-      setMobileTop(fallback);
-      return;
-    }
-
-    const shouldDismiss =
-      drag.currentTop >= bounds.height * MOBILE_DISMISS_TOP_RATIO ||
-      (drag.velocityY >= MOBILE_DISMISS_VELOCITY && drag.currentTop >= bounds.height * 0.54);
-
-    if (shouldDismiss) {
-      onClose();
-      return;
-    }
-
-    const midpoint = (bounds.minTop + bounds.initialTop) / 2;
-    let nextDetent: MobileDetent;
-    if (drag.velocityY <= -MOBILE_SNAP_VELOCITY) nextDetent = 'expanded';
-    else if (drag.velocityY >= MOBILE_SNAP_VELOCITY) nextDetent = 'initial';
-    else nextDetent = drag.currentTop < midpoint ? 'expanded' : 'initial';
-
-    detentRef.current = nextDetent;
-    const nextTop = nextDetent === 'expanded' ? bounds.minTop : bounds.initialTop;
-    mobileTopRef.current = nextTop;
-    setMobileTop(nextTop);
-  }, [onClose]);
+    settleMobileDrag(cancelled);
+  }, [settleMobileDrag]);
 
   const togglePreviewMute = useCallback(() => {
     const video = previewVideoRef.current;
@@ -584,11 +780,13 @@ export function VideoCommentsSheet({
     const mobileStyle = {
       top: `${Math.round(mobileTop)}px`,
       bottom: 0,
+      transform: dismissOffset > 0 ? `translate3d(0, ${Math.round(dismissOffset)}px, 0)` : undefined,
       borderTopLeftRadius: `${geometry.sheetCornerRadius}px`,
       borderTopRightRadius: `${geometry.sheetCornerRadius}px`,
       transition: isDragging
         ? 'none'
-        : `top ${PREVIEW_TRANSITION_MS}ms cubic-bezier(0.22, 0.61, 0.36, 1)`,
+        : `top ${PREVIEW_TRANSITION_MS}ms cubic-bezier(0.22, 0.61, 0.36, 1), transform ${PREVIEW_TRANSITION_MS}ms cubic-bezier(0.22, 0.61, 0.36, 1)`,
+      willChange: 'top, transform',
       '--video-comments-footer-height': `${geometry.footerHeight}px`,
       '--video-comments-handle-top': `${geometry.handleTopWithinSheet}px`,
       '--video-comments-handle-width': `${geometry.handleWidth}px`,
@@ -615,9 +813,12 @@ export function VideoCommentsSheet({
 
         <Sheet modal={false} open={isOpen} onOpenChange={(open) => !open && onClose()}>
           <SheetContent
+            ref={sheetContentRef}
             side="bottom"
             hideDefaultClose
             data-video-comments-sheet="true"
+            data-video-comments-dragging={isDragging ? 'true' : 'false'}
+            data-video-comments-dismiss-phase={dismissOffset > 0 ? 'true' : 'false'}
             overlayClassName="pointer-events-none bg-transparent"
             aria-describedby="video-comments-mobile-description"
             onOpenAutoFocus={(event) => event.preventDefault()}
@@ -637,7 +838,7 @@ export function VideoCommentsSheet({
               <SheetHeader className="sr-only">
                 <SheetTitle>{commentsCount > 0 ? `Izohlar · ${commentsCount}` : 'Izohlar'}</SheetTitle>
                 <SheetDescription id="video-comments-mobile-description">
-                  Video izohlari. Yuqoridagi tutqich orqali panel balandligini o‘zgartirish mumkin.
+                  Video izohlari. Panelni tutqichdan yoki izohlar ro‘yxati yuqorisiga yetgach pastga tortish mumkin.
                 </SheetDescription>
               </SheetHeader>
             </div>
