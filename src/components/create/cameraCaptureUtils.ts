@@ -10,16 +10,70 @@ export function clampCameraZoom(value: number): number {
   return Math.min(CAMERA_ZOOM_MAX, Math.max(CAMERA_ZOOM_MIN, value));
 }
 
+const RECORDER_MIME_CANDIDATES = [
+  // H.264/MP4 is the most interoperable path for Safari/iOS/WebViews that
+  // expose MediaRecorder but not WebM recording.
+  'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
+  'video/mp4',
+  // Chromium/Firefox typically prefer WebM. VP8 is intentionally before VP9:
+  // it is available on a wider range of Android and lower-powered devices.
+  'video/webm;codecs=vp8,opus',
+  'video/webm;codecs=vp9,opus',
+  'video/webm',
+] as const;
+
 export function supportedRecorderMime(): string | null {
   if (typeof MediaRecorder === 'undefined') return null;
-  const candidates = [
-    'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
-    'video/mp4',
-    'video/webm;codecs=vp9,opus',
-    'video/webm;codecs=vp8,opus',
-    'video/webm',
-  ];
-  return candidates.find((type) => MediaRecorder.isTypeSupported(type)) ?? null;
+  if (typeof MediaRecorder.isTypeSupported !== 'function') {
+    // Older implementations can still choose their own default format.
+    return '';
+  }
+  return (
+    RECORDER_MIME_CANDIDATES.find((type) => MediaRecorder.isTypeSupported(type)) ??
+    ''
+  );
+}
+
+export interface CompatibleRecorderOptions {
+  videoBitsPerSecond?: number;
+  audioBitsPerSecond?: number;
+}
+
+/**
+ * Construct MediaRecorder defensively. Several mobile/WebView implementations
+ * report a MIME type as supported but still throw when that exact codec/bitrate
+ * combination is passed to the constructor. Try every advertised candidate,
+ * then fall back to the browser's default encoder and finally to a bare
+ * constructor instead of making camera recording fail completely.
+ */
+export function createCompatibleMediaRecorder(
+  stream: MediaStream,
+  options: CompatibleRecorderOptions = {},
+): MediaRecorder | null {
+  if (typeof MediaRecorder === 'undefined') return null;
+
+  const candidates =
+    typeof MediaRecorder.isTypeSupported === 'function'
+      ? RECORDER_MIME_CANDIDATES.filter((type) => MediaRecorder.isTypeSupported(type))
+      : [];
+
+  for (const mimeType of candidates) {
+    try {
+      return new MediaRecorder(stream, { ...options, mimeType });
+    } catch {
+      // Some Android WebViews/older Safari builds over-report codec support.
+    }
+  }
+
+  try {
+    return new MediaRecorder(stream, options);
+  } catch {
+    try {
+      return new MediaRecorder(stream);
+    } catch {
+      return null;
+    }
+  }
 }
 
 export function captureSize(
