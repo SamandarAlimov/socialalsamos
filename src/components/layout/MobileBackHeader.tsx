@@ -1,4 +1,4 @@
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Settings } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
 import { Button } from '@/components/ui/button';
@@ -18,6 +18,8 @@ interface MobileBackState {
 export function MobileBackHeader() {
   const navigate = useNavigate();
   const location = useLocation();
+  const normalizedPath = location.pathname.replace(/\/+$/, '') || '/';
+  const isNotifications = normalizedPath === '/notifications';
 
   const handleBack = () => {
     const state = (location.state ?? {}) as MobileBackState;
@@ -44,20 +46,58 @@ export function MobileBackHeader() {
   };
 
   return (
-    <header className="fixed left-0 right-0 top-0 z-50 border-b border-border/60 bg-background/90 shadow-[0_1px_12px_rgba(0,0,0,0.04)] backdrop-blur-xl md:hidden safe-area-top">
-      <div className="flex h-14 items-center px-3">
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          onClick={handleBack}
-          aria-label="Orqaga"
-          className="h-10 w-10 shrink-0 rounded-full border border-border/60 bg-background/80 shadow-sm transition-transform active:scale-95"
-        >
-          <ArrowLeft className="h-5 w-5" strokeWidth={2.2} />
-        </Button>
-        <span className="ml-2 text-sm font-semibold text-foreground">Orqaga</span>
-      </div>
-    </header>
+    <>
+      <header className="fixed left-0 right-0 top-0 z-50 border-b border-border/60 bg-background/90 shadow-[0_1px_12px_rgba(0,0,0,0.04)] backdrop-blur-xl md:hidden safe-area-top">
+        <div className="flex h-14 items-center px-3">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            onClick={handleBack}
+            aria-label="Orqaga"
+            className="h-10 w-10 shrink-0 rounded-full border border-border/60 bg-background/80 shadow-sm transition-transform active:scale-95"
+          >
+            <ArrowLeft className="h-5 w-5" strokeWidth={2.2} />
+          </Button>
+
+          <span
+            className={
+              isNotifications
+                ? 'ml-3 min-w-0 flex-1 truncate text-base font-semibold text-foreground'
+                : 'ml-2 min-w-0 flex-1 truncate text-sm font-semibold text-foreground'
+            }
+          >
+            {isNotifications ? 'Bildirishnomalar' : 'Orqaga'}
+          </span>
+
+          {isNotifications && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={() => navigate('/settings?tab=notifications')}
+              aria-label="Bildirishnoma sozlamalari"
+              className="h-10 w-10 shrink-0 rounded-full"
+            >
+              <Settings className="h-5 w-5" />
+            </Button>
+          )}
+        </div>
+      </header>
+
+      {isNotifications && (
+        <style>{`
+          @media (max-width: 767.98px) {
+            main header.sticky h1 {
+              display: none !important;
+            }
+
+            main header.sticky button[aria-label='Bildirishnoma sozlamalari'] {
+              display: none !important;
+            }
+          }
+        `}</style>
+      )}
+    </>
   );
 }
