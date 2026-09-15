@@ -3,8 +3,8 @@ import type { CameraLens } from './filters/CameraLensData';
 import {
   captureSize,
   clampCameraZoom,
+  createCompatibleMediaRecorder,
   drawCameraFrame,
-  supportedRecorderMime,
 } from './cameraCaptureUtils';
 
 interface UseCameraCaptureOptions {
@@ -18,6 +18,65 @@ interface UseCameraCaptureOptions {
   ) => void;
 }
 
+function mediaErrorName(error: unknown) {
+  return error instanceof DOMException || error instanceof Error ? error.name : '';
+}
+
+function cameraErrorMessage(error: unknown) {
+  const name = mediaErrorName(error);
+  if (name === 'NotAllowedError' || name === 'SecurityError') {
+    return 'Kameraga ruxsat berilmadi. Brauzer sozlamalaridan kamera ruxsatini yoqing.';
+  }
+  if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
+    return 'Kamera topilmadi. Boshqa kamera ulang yoki qurilmadan media tanlang.';
+  }
+  if (name === 'NotReadableError' || name === 'TrackStartError') {
+    return 'Kamera boshqa ilova tomonidan band yoki hozir ishlamayapti.';
+  }
+  if (name === 'OverconstrainedError' || name === 'ConstraintNotSatisfiedError') {
+    return 'Bu kamera so‘ralgan sifatni qo‘llamaydi. Soddaroq rejimda qayta urinib ko‘ring.';
+  }
+  return 'Kamerani ochib bo‘lmadi. Qayta urinib ko‘ring yoki qurilmadan media tanlang.';
+}
+
+function shouldStopConstraintFallback(error: unknown) {
+  const name = mediaErrorName(error);
+  return name === 'NotAllowedError' || name === 'SecurityError';
+}
+
+async function waitForVideoDimensions(video: HTMLVideoElement, timeoutMs = 2500) {
+  if (video.videoWidth > 0 && video.videoHeight > 0 && video.readyState >= 2) return true;
+
+  return new Promise<boolean>((resolve) => {
+    let settled = false;
+    const finish = (ready: boolean) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timer);
+      video.removeEventListener('loadedmetadata', check);
+      video.removeEventListener('loadeddata', check);
+      video.removeEventListener('canplay', check);
+      video.removeEventListener('resize', check);
+      resolve(ready);
+    };
+    const check = () => {
+      if (video.videoWidth > 0 && video.videoHeight > 0 && video.readyState >= 2) {
+        finish(true);
+      }
+    };
+    const timer = window.setTimeout(
+      () => finish(video.videoWidth > 0 && video.videoHeight > 0),
+      timeoutMs,
+    );
+
+    video.addEventListener('loadedmetadata', check);
+    video.addEventListener('loadeddata', check);
+    video.addEventListener('canplay', check);
+    video.addEventListener('resize', check);
+    check();
+  });
+}
+
 export function useCameraCapture(options: UseCameraCaptureOptions) {
   const { captureMode, facingMode, aspectRatio, lens, drawOverlay } = options;
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -29,6 +88,7 @@ export function useCameraCapture(options: UseCameraCaptureOptions) {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const renderFrameRef = useRef<number | null>(null);
   const zoomRef = useRef(1);
+  const cameraSessionRef = useRef(0);
 
   const [cameraReady, setCameraReady] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
@@ -67,45 +127,94 @@ export function useCameraCapture(options: UseCameraCaptureOptions) {
   }, []);
 
   const stopProcessedStream = useCallback(() => {
-    processedStreamRef.current?.getVideoTracks().forEach((track) => track.stop());
+    processedStreamRef.current?.getTracks().forEach((track) => track.stop());
     processedStreamRef.current = null;
   }, []);
 
   const stopCameraStream = useCallback(() => {
-    streamRef.current?.getTracks().forEach((track) => track.stop());
+    const stream = streamRef.current;
+    if (stream) stream.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
+
+    const video = videoRef.current;
+    if (video && (!stream || video.srcObject === stream)) {
+      video.pause();
+      video.srcObject = null;
+    }
+
+    setCameraReady(false);
     setTorchEnabled(false);
     setTorchSupported(false);
   }, []);
 
   const startCamera = useCallback(async () => {
+    const sessionId = cameraSessionRef.current + 1;
+    cameraSessionRef.current = sessionId;
     setCameraReady(false);
     setCameraError(null);
     stopCameraStream();
+
     if (!navigator.mediaDevices?.getUserMedia) {
-      setCameraError('Bu brauzer kamera ochishni qo‘llab-quvvatlamaydi.');
+      setCameraError(
+        window.isSecureContext
+          ? 'Bu brauzer kamera ochishni qo‘llab-quvvatlamaydi.'
+          : 'Kamera faqat xavfsiz HTTPS ulanishida ishlaydi.',
+      );
       return;
     }
 
     try {
-      const constraints: MediaStreamConstraints = {
-        video: {
-          facingMode,
-          width: { ideal: 1280, max: 1920, min: 320 },
-          height: { ideal: 1280, max: 1920, min: 240 },
-          frameRate: { ideal: 30, max: 30 },
+      const videoCandidates: MediaTrackConstraints[] = [
+        {
+          facingMode: { ideal: facingMode },
+          width: { ideal: 1280 },
+          height: { ideal: 1280 },
+          frameRate: { ideal: 30 },
         },
-        audio: captureMode === 'video',
-      };
-      let stream: MediaStream;
-      try {
-        stream = await navigator.mediaDevices.getUserMedia(constraints);
-      } catch {
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode },
-          audio: captureMode === 'video',
-        });
+        { facingMode: { ideal: facingMode } },
+        {},
+      ];
+
+      let stream: MediaStream | null = null;
+      let lastError: unknown = null;
+      for (const videoConstraints of videoCandidates) {
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: videoConstraints,
+            audio: false,
+          });
+          break;
+        } catch (error) {
+          lastError = error;
+          if (shouldStopConstraintFallback(error)) break;
+        }
       }
+
+      if (!stream) throw lastError ?? new Error('Camera unavailable');
+      if (cameraSessionRef.current !== sessionId) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
+
+      // Request microphone separately. A denied/broken microphone must not make
+      // the camera unusable: video recording gracefully continues without audio.
+      if (captureMode === 'video') {
+        try {
+          const audioStream = await navigator.mediaDevices.getUserMedia({
+            video: false,
+            audio: true,
+          });
+          if (cameraSessionRef.current !== sessionId) {
+            audioStream.getTracks().forEach((track) => track.stop());
+            stream.getTracks().forEach((track) => track.stop());
+            return;
+          }
+          audioStream.getAudioTracks().forEach((track) => stream?.addTrack(track));
+        } catch (audioError) {
+          console.warn('Microphone unavailable; recording video without audio.', audioError);
+        }
+      }
+
       streamRef.current = stream;
       const videoTrack = stream.getVideoTracks()[0];
       if (videoTrack?.getCapabilities) {
@@ -114,20 +223,40 @@ export function useCameraCapture(options: UseCameraCaptureOptions) {
         };
         setTorchSupported(Boolean(capabilities.torch));
       }
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
+
+      const video = videoRef.current;
+      if (video) {
+        video.srcObject = stream;
+        video.muted = true;
+        video.playsInline = true;
+        try {
+          await video.play();
+        } catch (playError) {
+          // Some embedded browsers resolve getUserMedia before autoplay is
+          // ready. loadeddata/canplay below can still recover the preview.
+          console.warn('Camera autoplay was delayed.', playError);
+        }
+        const dimensionsReady = await waitForVideoDimensions(video);
+        if (!dimensionsReady) throw new Error('Camera preview did not become ready');
+      }
+
+      if (cameraSessionRef.current !== sessionId) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
       }
       setCameraReady(true);
     } catch (error) {
+      if (cameraSessionRef.current !== sessionId) return;
       console.error('Camera access error:', error);
-      setCameraError('Kameraga ruxsat berilmadi yoki kamera band.');
+      stopCameraStream();
+      setCameraError(cameraErrorMessage(error));
     }
   }, [captureMode, facingMode, stopCameraStream]);
 
   useEffect(() => {
     void startCamera();
     return () => {
+      cameraSessionRef.current += 1;
       stopRenderLoop();
       stopProcessedStream();
       stopCameraStream();
@@ -139,12 +268,49 @@ export function useCameraCapture(options: UseCameraCaptureOptions) {
     if (recordedUrl) URL.revokeObjectURL(recordedUrl);
   }, [recordedUrl]);
 
-  // Keep zoom on the video itself, but use the long-supported transform
-  // property instead of the newer individual `scale` property. Mobile Safari
-  // can promote a scaled camera <video> into a broken oversized compositor
-  // surface (the large rounded/grey panel seen during pinch zoom). Combining
-  // mirror + zoom in one transform keeps the preview clipped by its viewport
-  // while the canvas path below applies the same crop to captured media.
+  // Mobile browsers frequently suspend camera tracks when the tab/app goes to
+  // the background. Resume the existing live track when possible and reopen it
+  // only if it actually ended. Do not reprompt after a real camera error.
+  useEffect(() => {
+    const recoverCamera = () => {
+      if (
+        document.visibilityState !== 'visible' ||
+        cameraError ||
+        capturedPhoto ||
+        recordedUrl ||
+        isRecording
+      ) {
+        return;
+      }
+
+      const stream = streamRef.current;
+      const track = stream?.getVideoTracks()[0];
+      const video = videoRef.current;
+      if (!stream || !track || track.readyState !== 'live') {
+        void startCamera();
+        return;
+      }
+
+      if (video?.paused) {
+        void video.play().catch(() => {
+          void startCamera();
+        });
+      }
+    };
+
+    document.addEventListener('visibilitychange', recoverCamera);
+    window.addEventListener('pageshow', recoverCamera);
+    window.addEventListener('focus', recoverCamera);
+    return () => {
+      document.removeEventListener('visibilitychange', recoverCamera);
+      window.removeEventListener('pageshow', recoverCamera);
+      window.removeEventListener('focus', recoverCamera);
+    };
+  }, [cameraError, capturedPhoto, isRecording, recordedUrl, startCamera]);
+
+  // Keep zoom on the video itself using the long-supported transform property.
+  // Combining mirror + zoom avoids conflicting transform implementations across
+  // Safari, Chromium, Firefox and embedded WebViews.
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
@@ -197,52 +363,108 @@ export function useCameraCapture(options: UseCameraCaptureOptions) {
 
   const takePhoto = useCallback(() => {
     const prepared = prepareCanvas();
-    if (!prepared) return;
+    if (!prepared) {
+      setCameraError('Kamera hali tayyor emas. Bir lahza kutib qayta urinib ko‘ring.');
+      return;
+    }
     drawPreparedFrame(prepared);
     setCapturedPhoto(prepared.canvas.toDataURL('image/jpeg', 0.92));
     stopCameraStream();
   }, [drawPreparedFrame, prepareCanvas, stopCameraStream]);
 
   const startRecording = useCallback(() => {
-    if (!streamRef.current || isRecording) return;
-    const prepared = prepareCanvas();
-    const mimeType = supportedRecorderMime();
-    if (!prepared || !mimeType || typeof prepared.canvas.captureStream !== 'function') {
-      setCameraError('Bu brauzer filtrlangan video yozishni qo‘llab-quvvatlamaydi.');
+    const sourceStream = streamRef.current;
+    if (!sourceStream || isRecording) return;
+    if (typeof MediaRecorder === 'undefined') {
+      setCameraError('Bu brauzer kamera videosini yozishni qo‘llab-quvvatlamaydi.');
       return;
     }
 
     chunksRef.current = [];
     stopRenderLoop();
     stopProcessedStream();
-    const draw = () => {
-      drawPreparedFrame(prepared);
-      renderFrameRef.current = requestAnimationFrame(draw);
-    };
-    draw();
 
-    const processed = prepared.canvas.captureStream(30);
-    streamRef.current.getAudioTracks().forEach((track) => processed.addTrack(track));
-    processedStreamRef.current = processed;
-    const recorder = new MediaRecorder(processed, {
-      mimeType,
-      videoBitsPerSecond:
-        Math.max(prepared.canvas.width, prepared.canvas.height) >= 1080
-          ? 8_000_000
-          : 5_000_000,
+    const prepared = prepareCanvas();
+    let recordingStream = sourceStream;
+    let usingProcessedStream = false;
+
+    // Prefer the canvas path so zoom, crop and effects are baked into the file.
+    // If captureStream is missing/buggy (older Safari/WebView), record the raw
+    // camera stream rather than failing the whole feature.
+    if (prepared && typeof prepared.canvas.captureStream === 'function') {
+      try {
+        const draw = () => {
+          drawPreparedFrame(prepared);
+          renderFrameRef.current = requestAnimationFrame(draw);
+        };
+        draw();
+
+        const processed = prepared.canvas.captureStream(30);
+        sourceStream.getAudioTracks().forEach((track) => {
+          try {
+            processed.addTrack(track.clone());
+          } catch {
+            processed.addTrack(track);
+          }
+        });
+        processedStreamRef.current = processed;
+        recordingStream = processed;
+        usingProcessedStream = true;
+      } catch (captureStreamError) {
+        console.warn('Canvas recording unavailable; using raw camera stream.', captureStreamError);
+        stopRenderLoop();
+        stopProcessedStream();
+        recordingStream = sourceStream;
+      }
+    }
+
+    const longEdge = prepared
+      ? Math.max(prepared.canvas.width, prepared.canvas.height)
+      : 720;
+    const recorder = createCompatibleMediaRecorder(recordingStream, {
+      videoBitsPerSecond: longEdge >= 1080 ? 8_000_000 : 5_000_000,
       audioBitsPerSecond: 128_000,
     });
+
+    if (!recorder) {
+      stopRenderLoop();
+      stopProcessedStream();
+      setCameraError('Bu brauzer video yozishni ishga tushira olmadi.');
+      return;
+    }
+
     mediaRecorderRef.current = recorder;
     recorder.addEventListener('dataavailable', (event) => {
       if (event.data.size > 0) chunksRef.current.push(event.data);
     });
     recorder.addEventListener(
+      'error',
+      () => {
+        stopRenderLoop();
+        stopProcessedStream();
+        stopCameraStream();
+        setIsRecording(false);
+        setCameraError('Video yozishda xatolik yuz berdi. Qayta urinib ko‘ring.');
+      },
+      { once: true },
+    );
+    recorder.addEventListener(
       'stop',
       () => {
         stopRenderLoop();
         stopProcessedStream();
+        mediaRecorderRef.current = null;
+
+        const firstChunkType = chunksRef.current.find((chunk) => Boolean(chunk.type))?.type;
+        const mimeType = recorder.mimeType || firstChunkType || 'video/webm';
         const blob = new Blob(chunksRef.current, { type: mimeType });
-        if (blob.size === 0) return;
+        stopCameraStream();
+
+        if (blob.size === 0) {
+          setCameraError('Video saqlanmadi. Qayta urinib ko‘ring.');
+          return;
+        }
+
         const url = URL.createObjectURL(blob);
         setRecordedUrl((current) => {
           if (current) URL.revokeObjectURL(current);
@@ -253,17 +475,34 @@ export function useCameraCapture(options: UseCameraCaptureOptions) {
       { once: true },
     );
 
-    recorder.start(500);
-    setIsRecording(true);
-    setRecordingDuration(0);
-    timerRef.current = setInterval(
-      () => setRecordingDuration((value) => value + 1),
-      1000,
-    );
+    try {
+      try {
+        recorder.start(500);
+      } catch {
+        // Some Safari/WebView versions reject the timeslice argument but record
+        // successfully with the default buffering strategy.
+        recorder.start();
+      }
+      setIsRecording(true);
+      setRecordingDuration(0);
+      timerRef.current = setInterval(
+        () => setRecordingDuration((value) => value + 1),
+        1000,
+      );
+    } catch (error) {
+      console.error('MediaRecorder start failed:', error);
+      mediaRecorderRef.current = null;
+      if (usingProcessedStream) {
+        stopRenderLoop();
+        stopProcessedStream();
+      }
+      setCameraError('Video yozishni ishga tushirib bo‘lmadi.');
+    }
   }, [
     drawPreparedFrame,
     isRecording,
     prepareCanvas,
+    stopCameraStream,
     stopProcessedStream,
     stopRenderLoop,
   ]);
@@ -271,14 +510,31 @@ export function useCameraCapture(options: UseCameraCaptureOptions) {
   const stopRecording = useCallback(() => {
     const recorder = mediaRecorderRef.current;
     if (!recorder || !isRecording) return;
-    if (recorder.state !== 'inactive') recorder.stop();
+
     setIsRecording(false);
     if (timerRef.current) {
       clearInterval(timerRef.current);
       timerRef.current = null;
     }
-    stopCameraStream();
-  }, [isRecording, stopCameraStream]);
+
+    if (recorder.state !== 'inactive') {
+      try {
+        recorder.requestData?.();
+      } catch {
+        // requestData is optional in some embedded implementations.
+      }
+      recorder.stop();
+    } else {
+      stopRenderLoop();
+      stopProcessedStream();
+      stopCameraStream();
+    }
+  }, [
+    isRecording,
+    stopCameraStream,
+    stopProcessedStream,
+    stopRenderLoop,
+  ]);
 
   const toggleTorch = useCallback(async () => {
     const track = streamRef.current?.getVideoTracks()[0];
@@ -306,6 +562,7 @@ export function useCameraCapture(options: UseCameraCaptureOptions) {
     setRecordedBlob(null);
     setCapturedPhoto(null);
     setRecordingDuration(0);
+    setCameraError(null);
     void startCamera();
   }, [startCamera]);
 
