@@ -6,7 +6,6 @@ import {
 const SHEET_SELECTOR = '[data-video-comments-sheet="true"]';
 const PREVIEW_SELECTOR = '.video-comments-preview-frame';
 const LIVE_SYNC_CLASS = 'video-comments-preview-live-sync';
-const POSITION_EPSILON_PX = 0.5;
 
 function getViewportWidth() {
   return Math.max(
@@ -51,13 +50,6 @@ export function resolveVideoCommentsVisualSheetTop(
   return Math.max(0, sheetTop + Math.max(0, dismissOffset));
 }
 
-/**
- * Mobile VideoCommentsSheet uses an inline translate3d while moving from the
- * compact detent toward dismissal. During an active touch/pointer gesture this
- * inline transform is the most immediate source of truth: getBoundingClientRect
- * can lag a compositor frame on iOS Safari, which made the Reel follow upward
- * `top` changes but appear frozen while the sheet moved downward by transform.
- */
 export function parseInlineVideoCommentsDismissOffset(transform: string) {
   if (!transform || transform === 'none') return 0;
 
@@ -72,6 +64,26 @@ export function parseInlineVideoCommentsDismissOffset(transform: string) {
   return 0;
 }
 
+export function parseComputedVideoCommentsTranslateY(transform: string) {
+  if (!transform || transform === 'none') return 0;
+
+  const matrix3d = transform.match(/^matrix3d\(([^)]+)\)$/i);
+  if (matrix3d) {
+    const values = matrix3d[1].split(',').map((value) => Number.parseFloat(value.trim()));
+    const y = values[13];
+    return Number.isFinite(y) ? Math.max(0, y) : 0;
+  }
+
+  const matrix = transform.match(/^matrix\(([^)]+)\)$/i);
+  if (matrix) {
+    const values = matrix[1].split(',').map((value) => Number.parseFloat(value.trim()));
+    const y = values[5];
+    return Number.isFinite(y) ? Math.max(0, y) : 0;
+  }
+
+  return parseInlineVideoCommentsDismissOffset(transform);
+}
+
 function sheetLogicalTop(sheet: HTMLElement) {
   const inlineTop = Number.parseFloat(sheet.style.top);
   if (Number.isFinite(inlineTop)) return inlineTop;
@@ -80,34 +92,18 @@ function sheetLogicalTop(sheet: HTMLElement) {
 
 function sheetVisualTop(sheet: HTMLElement) {
   const logicalTop = sheetLogicalTop(sheet);
-
-  // While the finger owns the gesture, derive the downward edge directly from
-  // the same inline translate3d React writes to the sheet. This keeps the Reel
-  // and sheet in the exact same gesture frame instead of waiting on WebKit's
-  // composited rectangle to catch up.
-  if (sheet.dataset.videoCommentsDragging === 'true') {
-    const inlineDismissOffset = parseInlineVideoCommentsDismissOffset(sheet.style.transform);
-    if (inlineDismissOffset > 0) {
-      return resolveVideoCommentsVisualSheetTop(logicalTop, inlineDismissOffset);
-    }
-  }
-
-  // Once the finger is released, CSS transitions own the motion. The visual
-  // rectangle reflects the current interpolated position and keeps spring-back
-  // / tap-close animations synchronized rather than jumping to their final
-  // inline transform target.
+  const inlineOffset = parseInlineVideoCommentsDismissOffset(sheet.style.transform);
+  const computedOffset = parseComputedVideoCommentsTranslateY(
+    window.getComputedStyle(sheet).transform,
+  );
   const rectTop = sheet.getBoundingClientRect().top;
-  if (Number.isFinite(rectTop)) return Math.max(0, rectTop);
-  return logicalTop;
-}
 
-function shouldLiveSync(sheet: HTMLElement, visualTop: number) {
-  const logicalTop = sheetLogicalTop(sheet);
-  return (
-    sheet.dataset.videoCommentsDragging === 'true' ||
-    sheet.dataset.videoCommentsDismissPhase === 'true' ||
-    sheet.classList.contains('video-comments-preview-tap-closing') ||
-    Math.abs(visualTop - logicalTop) > POSITION_EPSILON_PX
+  return Math.max(
+    0,
+    logicalTop,
+    resolveVideoCommentsVisualSheetTop(logicalTop, inlineOffset),
+    resolveVideoCommentsVisualSheetTop(logicalTop, computedOffset),
+    Number.isFinite(rectTop) ? rectTop : 0,
   );
 }
 
@@ -147,13 +143,6 @@ function applyVisualGeometry(
   }
 }
 
-/**
- * During the compact -> dismiss phase the comments panel moves with CSS
- * transform while its logical `top` stays at the compact detent. React's normal
- * preview geometry therefore sees a stationary sheet and the Reel appears
- * frozen. Drive the preview from the sheet's real visual edge so Reel + comments
- * remain one continuous gesture in both directions, like Instagram.
- */
 export function syncVideoCommentsPreviewToVisualSheet() {
   if (typeof document === 'undefined' || typeof window === 'undefined') return false;
 
@@ -167,16 +156,9 @@ export function syncVideoCommentsPreviewToVisualSheet() {
   }
 
   const visualTop = sheetVisualTop(sheet);
-  const live = shouldLiveSync(sheet, visualTop);
-  frame.classList.toggle(LIVE_SYNC_CLASS, live);
+  frame.classList.add(LIVE_SYNC_CLASS);
+  applyVisualGeometry(sheet, frame, video, visualTop);
 
-  if (live) applyVisualGeometry(sheet, frame, video, visualTop);
-
-  // Keep the RAF alive for as long as the mobile comments surface exists. The
-  // previous implementation stopped as soon as one frame looked idle, so a
-  // later compact -> dismiss transform could start between observer callbacks
-  // and leave the video frozen. Continuous polling is scoped to the open sheet
-  // only and guarantees the next gesture frame is observed on iOS/Android.
   return true;
 }
 
