@@ -164,7 +164,6 @@ const ACCOUNT_GROUPS: ControlCenterGroup[] = [
 
 const PLATFORM_TOOLS: ControlCenterGroup = {
   title: 'Platform vositalari',
-  description: 'Global sidebarni band qilmasdan, kamroq ishlatiladigan ish vositalarini shu markazdan oching.',
   items: [
     {
       id: 'ads',
@@ -304,9 +303,6 @@ export default function SettingsLandingPage() {
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Sozlamalar</h1>
-            <p className="mt-1 max-w-2xl text-sm leading-relaxed text-muted-foreground">
-              Hisob, ilova va platforma boshqaruvini bitta tartibli markazdan oching.
-            </p>
           </div>
           <Button variant="outline" onClick={() => navigate('/profile')} className="self-start sm:self-auto">
             Profilni ko‘rish
@@ -354,22 +350,8 @@ export default function SettingsLandingPage() {
 
       <div className="mt-8 grid gap-7 lg:grid-cols-2 lg:items-start">
         <SettingsGroupCard group={PLATFORM_TOOLS} onNavigate={navigate} />
-        {adminGroup ? (
+        {adminGroup && (
           <SettingsGroupCard group={adminGroup} onNavigate={navigate} />
-        ) : (
-          <section className="rounded-2xl border border-dashed border-border bg-muted/20 p-5">
-            <div className="flex items-start gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-muted">
-                <ShieldCheck className="h-5 w-5 text-muted-foreground" />
-              </div>
-              <div>
-                <h2 className="text-sm font-semibold">Boshqaruv vositalari tartibga solindi</h2>
-                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                  Admin funksiyalar global navigatsiyada ko‘rinmaydi. Admin ruxsati bo‘lgan hisoblarda ular shu yerda avtomatik paydo bo‘ladi.
-                </p>
-              </div>
-            </div>
-          </section>
         )}
       </div>
     </div>

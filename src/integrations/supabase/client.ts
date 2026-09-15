@@ -137,6 +137,49 @@ const sameOriginSupabaseFetch: typeof fetch = async (input, init) => {
     return fetch(input, init);
   }
 
+  const inputIsRequest = typeof Request !== 'undefined' && input instanceof Request;
+  const requestMethod = String(init?.method ?? (inputIsRequest ? input.method : 'GET')).toUpperCase();
+  const requestHeaders = new Headers(inputIsRequest ? input.headers : init?.headers);
+
+  // Account deletion must be performed server-side with the service role so the
+  // Auth user and retained/profile data are handled together. Older settings UI
+  // calls DELETE /profiles directly; transparently upgrade only that exact
+  // self-profile deletion path instead of weakening the profiles RLS policy.
+  if (
+    target.origin === supabaseOrigin &&
+    target.pathname === '/rest/v1/profiles' &&
+    requestMethod === 'DELETE' &&
+    (target.searchParams.get('id') ?? '').startsWith('eq.')
+  ) {
+    const authorization = requestHeaders.get('authorization');
+    if (!authorization) {
+      return new Response(
+        JSON.stringify({ message: 'Hisobni o‘chirish uchun qaytadan kiring.' }),
+        { status: 401, headers: { 'Content-Type': 'application/json' } },
+      );
+    }
+
+    const deleteHeaders = new Headers();
+    deleteHeaders.set('Authorization', authorization);
+    deleteHeaders.set('apikey', requestHeaders.get('apikey') || supabaseKey);
+    deleteHeaders.set('Content-Type', 'application/json');
+    deleteHeaders.set('Accept', 'application/json');
+    const clientInfo = requestHeaders.get('x-client-info');
+    if (clientInfo) deleteHeaders.set('x-client-info', clientInfo);
+
+    const response = await fetch(`${supabaseOrigin}/functions/v1/account-delete`, {
+      method: 'POST',
+      headers: deleteHeaders,
+      body: JSON.stringify({ confirm: 'DELETE' }),
+    });
+
+    if (response.ok) {
+      return new Response(null, { status: 204, headers: { 'Cache-Control': 'no-store' } });
+    }
+
+    return response;
+  }
+
   if (target.origin !== supabaseOrigin || !target.pathname.startsWith('/rest/v1/')) {
     return fetch(input, init);
   }
@@ -144,7 +187,7 @@ const sameOriginSupabaseFetch: typeof fetch = async (input, init) => {
   const restSuffix = target.pathname.slice('/rest/v1'.length);
   const proxyUrl = `${window.location.origin}/__supabase-rest${restSuffix}${target.search}`;
 
-  if (typeof Request !== 'undefined' && input instanceof Request) {
+  if (inputIsRequest) {
     return fetch(new Request(proxyUrl, input), init);
   }
 
