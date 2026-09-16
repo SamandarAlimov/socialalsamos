@@ -3,27 +3,29 @@
 // QOIDA: hech qanday AI chaqiruv to'g'ridan-to'g'ri gateway'ga ketmaydi.
 // Hammasi ./geminiPool.ts dagi kalitlar hovuzi orqali o'tadi.
 //
-// Model nomlari tez o'zgaradi (2.5 yopildi, 3.x chiqdi...), shuning uchun bir
-// nechta nomzod ketma-ket sinaladi. Kerak bo'lsa secrets orqali beriladi:
-//   supabase secrets set GEMINI_IMAGE_MODELS="gemini-3-pro-image-preview,imagen-4.0-generate-001"
-//   supabase secrets set GEMINI_VIDEO_MODELS="veo-3.1-generate-preview,veo-3.0-generate-001"
+// Model nomlari tez o'zgaradi, shuning uchun bir nechta amaldagi nomzod
+// ketma-ket sinaladi. Kerak bo'lsa secrets orqali beriladi:
+//   supabase secrets set GEMINI_IMAGE_MODELS="gemini-3.1-flash-image,gemini-3.1-flash-lite-image,gemini-3-pro-image"
+//   supabase secrets set GEMINI_VIDEO_MODELS="veo-3.1-generate-preview,veo-3.1-lite-generate-preview"
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { googleFetch } from "./geminiPool.ts";
 
 const LOVABLE_GATEWAY = "https://" + "ai.gateway.lovable.dev" + "/v1/chat/completions";
 
+// Google'ning 2026-09 hujjatlaridagi amaldagi generative-media modellari.
+// Retired gemini-3-pro-image-preview / Imagen 4 defaultlardan olib tashlandi.
 const DEFAULT_IMAGE_MODELS = [
-  "gemini-3-pro-image-preview",
+  "gemini-3.1-flash-image",
+  "gemini-3.1-flash-lite-image",
+  "gemini-3-pro-image",
   "gemini-2.5-flash-image",
-  "gemini-2.0-flash-preview-image-generation",
-  "imagen-4.0-generate-001",
 ];
 
+// Veo 3.0/2.0 retired; 3.1 oilasi production fallback sifatida qoladi.
 const DEFAULT_VIDEO_MODELS = [
   "veo-3.1-generate-preview",
-  "veo-3.0-generate-001",
-  "veo-2.0-generate-001",
+  "veo-3.1-lite-generate-preview",
 ];
 
 /** Video tayyor bo'lishini kutish oralig'i. */
@@ -120,7 +122,7 @@ async function lovableImage(prompt: string, lovableKey: string): Promise<Generat
 
 /**
  * Matndan (yoki mavjud rasmdan) rasm yaratadi. Model nomzodlari ketma-ket
- * sinaladi: `:generateContent` (Gemini image) va `:predict` (Imagen).
+ * sinaladi: `:generateContent` (Gemini image) va `:predict` (legacy Imagen override).
  */
 export async function generateImageBytes(opts: {
   prompt: string;
@@ -133,7 +135,7 @@ export async function generateImageBytes(opts: {
   for (const model of imageModels()) {
     try {
       if (model.startsWith("imagen")) {
-        // Imagen tahrirlashni bu yo'l bilan qo'llamaydi — faqat toza generatsiya.
+        // Faqat operator env override orqali legacy Imagen berilgan holat uchun.
         if (inline) continue;
         const { response } = await googleFetch(`/v1beta/models/${model}:predict`, {
           body: { instances: [{ prompt: opts.prompt }], parameters: { sampleCount: 1 } },
