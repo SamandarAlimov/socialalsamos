@@ -12,18 +12,18 @@ import { shouldPreferServerAgent } from './agentClient';
 
 const allTools = ['web', 'image', 'video', 'code', 'alsamos', 'connectors'] as const;
 
-describe('Alsamos AI server routing', () => {
-  it('sends coding requests to the server sandbox even when all default tools are enabled', () => {
+describe('Alsamos AI browser routing', () => {
+  it('never sends coding requests directly from the browser to the private agent', () => {
     expect(
       shouldPreferServerAgent({
         model: 'auto',
         toolGroups: [...allTools],
         messages: [{ role: 'user', content: 'Python kodini ishga tushirib natijani tekshir' }],
       }),
-    ).toBe(true);
+    ).toBe(false);
   });
 
-  it('keeps rich non-code requests on the existing full-tool agent', () => {
+  it('keeps rich non-code requests on the Supabase full-tool agent', () => {
     expect(
       shouldPreferServerAgent({
         model: 'auto',
@@ -41,17 +41,17 @@ describe('Alsamos AI server routing', () => {
     ).toBe(false);
   });
 
-  it('always sends the explicit coding model to the server when code tools are enabled', () => {
+  it('keeps the explicit coding model on the browser-to-Edge path', () => {
     expect(
       shouldPreferServerAgent({
         model: 'coding',
         toolGroups: ['code'],
         messages: [{ role: 'user', content: 'Buni yaxshila' }],
       }),
-    ).toBe(true);
+    ).toBe(false);
   });
 
-  it('never routes to the server sandbox when code tools are disabled', () => {
+  it('does not expose a private-server route when code tools are disabled', () => {
     expect(
       shouldPreferServerAgent({
         model: 'coding',
