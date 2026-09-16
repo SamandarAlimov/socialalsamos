@@ -109,7 +109,6 @@ body:has([data-video-comments-sheet='true'][data-video-comments-dragging='true']
 .video-comments-premium [data-comments-section='true'] {
   min-height: 0;
   border-top: 0;
-  background: #181c1f !important;
 }
 
 .video-comments-premium [data-comment-list='true'] {
@@ -120,6 +119,12 @@ body:has([data-video-comments-sheet='true'][data-video-comments-dragging='true']
   scroll-padding-bottom: 18px;
   padding-top: 8px;
   padding-bottom: 18px;
+}
+
+/* Only the mobile immersive sheet is intentionally dark. Desktop comments
+   inherit the active app theme from CommentsSection, including light mode. */
+.video-comments-premium[data-video-comments-sheet='true'] [data-comments-section='true'],
+.video-comments-premium[data-video-comments-sheet='true'] [data-comment-list='true'] {
   background: #181c1f !important;
 }
 
@@ -198,11 +203,14 @@ body:has([data-video-comments-sheet='true'][data-video-comments-dragging='true']
   min-height: var(--video-comments-footer-height);
   box-sizing: border-box;
   flex: 0 0 auto;
-  border-top-color: rgba(255, 255, 255, 0.08);
-  background: rgba(24, 28, 31, 0.985) !important;
   padding: 8px 12px max(10px, env(safe-area-inset-bottom));
   backdrop-filter: blur(22px);
   -webkit-backdrop-filter: blur(22px);
+}
+
+.video-comments-premium[data-video-comments-sheet='true'] [data-comment-composer='true'] {
+  border-top-color: rgba(255, 255, 255, 0.08);
+  background: rgba(24, 28, 31, 0.985) !important;
 }
 
 .video-comments-premium [data-comment-quick-reactions='true'] {
@@ -220,10 +228,13 @@ body:has([data-video-comments-sheet='true'][data-video-comments-dragging='true']
 .video-comments-premium [data-comment-composer='true'] input {
   font-size: 16px;
   line-height: 22px;
+}
+
+.video-comments-premium[data-video-comments-sheet='true'] [data-comment-composer='true'] input {
   caret-color: #fff;
 }
 
-.video-comments-premium [data-comment-composer='true'] input::placeholder {
+.video-comments-premium[data-video-comments-sheet='true'] [data-comment-composer='true'] input::placeholder {
   color: rgba(255, 255, 255, 0.54);
 }
 
