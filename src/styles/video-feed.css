@@ -20,6 +20,20 @@
   backdrop-filter: blur(3px);
 }
 
+/*
+ * The desktop previous/next rail lives outside the centered video card. At
+ * tablet/small-laptop widths there is no guaranteed side gutter, so the rail
+ * can sit on top of landscape video content. Hide only that optional mouse
+ * affordance until the viewport is wide enough to provide a real gutter.
+ * Scroll, touch swipe and ArrowUp/ArrowDown navigation remain available.
+ */
+@media (min-width: 768px) and (max-width: 1439px) {
+  button[aria-label="Oldingi videoga o‘tish"],
+  button[aria-label="Keyingi videoga o‘tish"] {
+    display: none !important;
+  }
+}
+
 @media (prefers-reduced-transparency: reduce) {
   .snap-start.snap-always
     > div:has(> video)
