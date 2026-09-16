@@ -63,7 +63,7 @@ export default async function handler(req: any, res: any) {
   }
 
   const controller = new AbortController();
-  req.on?.('close', () => controller.abort());
+  req.on?.('aborted', () => controller.abort());
 
   try {
     const upstream = await fetch(`${agentServerBase()}/v1/sandbox/run`, {
