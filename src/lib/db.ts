@@ -11,15 +11,14 @@ import {
  *
  * Some optional AI tables are not deployed in production yet. Querying a
  * missing PostgREST relation on every render creates repeated 404s and can
- * break otherwise-working AI features. Until the cloud AI schema is explicitly
- * enabled, those optional relations fail locally (without a network request),
- * allowing their browser-backed fallbacks to work normally.
+ * break otherwise-working AI features. `ai_projects` is no longer optional:
+ * production has the table and project chats depend on its real RLS-backed
+ * project_id relationship, so it must always go to Postgres.
  */
 
 const rawDb = supabase as unknown as SupabaseClient<any, 'public', any>;
 
 const OPTIONAL_LOCAL_AI_TABLES = new Set([
-  'ai_projects',
   'ai_memories',
   'ai_connectors',
   'ai_github_connections',
