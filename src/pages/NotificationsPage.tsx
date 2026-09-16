@@ -286,6 +286,34 @@ function consolidateNotifications(notifications: Notification[]): GroupedNotific
   );
 }
 
+function countDisplayedNotifications(notifications: Notification[]): number {
+  const buckets: Record<keyof TimeGroupedNotifications, Notification[]> = {
+    today: [],
+    yesterday: [],
+    thisWeek: [],
+    thisMonth: [],
+    older: [],
+  };
+
+  notifications.forEach((notification) => {
+    const date = new Date(notification.created_at);
+    if (Number.isNaN(date.getTime())) return buckets.older.push(notification);
+    if (isToday(date)) buckets.today.push(notification);
+    else if (isYesterday(date)) buckets.yesterday.push(notification);
+    else if (isThisWeek(date, { weekStartsOn: 1 })) buckets.thisWeek.push(notification);
+    else if (isThisMonth(date)) buckets.thisMonth.push(notification);
+    else buckets.older.push(notification);
+  });
+
+  return (
+    consolidateNotifications(buckets.today).length +
+    consolidateNotifications(buckets.yesterday).length +
+    consolidateNotifications(buckets.thisWeek).length +
+    consolidateNotifications(buckets.thisMonth).length +
+    consolidateNotifications(buckets.older).length
+  );
+}
+
 function GroupedNotificationItem({
   group,
   onMarkAsRead,
@@ -814,12 +842,22 @@ export default function NotificationsPage() {
 
   const filterCounts = useMemo(
     () => ({
-      all: notifications.length,
-      mentions: notifications.filter((item) => MENTION_TYPES.includes(item.type)).length,
-      comments: notifications.filter((item) => COMMENT_TYPES.includes(item.type)).length,
-      collaborations: notifications.filter((item) => COLLABORATION_TYPES.includes(item.type)).length,
-      likes: notifications.filter((item) => item.type === 'like').length,
-      follows: notifications.filter((item) => item.type === 'follow').length,
+      all: countDisplayedNotifications(notifications),
+      mentions: countDisplayedNotifications(
+        notifications.filter((item) => MENTION_TYPES.includes(item.type)),
+      ),
+      comments: countDisplayedNotifications(
+        notifications.filter((item) => COMMENT_TYPES.includes(item.type)),
+      ),
+      collaborations: countDisplayedNotifications(
+        notifications.filter((item) => COLLABORATION_TYPES.includes(item.type)),
+      ),
+      likes: countDisplayedNotifications(
+        notifications.filter((item) => item.type === 'like'),
+      ),
+      follows: countDisplayedNotifications(
+        notifications.filter((item) => item.type === 'follow'),
+      ),
     }),
     [notifications],
   );
