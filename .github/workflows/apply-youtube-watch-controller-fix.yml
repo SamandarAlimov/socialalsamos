@@ -1,0 +1,185 @@
+name: Apply YouTube Watch controller fix
+
+on:
+  push:
+    branches:
+      - fix/youtube-watch-controller-lifecycle
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: ${{ !contains(github.event.head_commit.message, '[youtube-watch-controls-applied]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Patch Watch controller lifecycle
+        shell: python
+        run: |
+          from pathlib import Path
+
+          panel_path = Path('src/components/video/VideoWatchPanel.tsx')
+          panel = panel_path.read_text()
+
+          replacements = [
+            (
+              "import { resolveVideoDigitSeekTarget } from '@/lib/videoKeyboardControls';",
+              "import { resolveVideoDigitSeekTarget } from '@/lib/videoKeyboardControls';\nimport {\n  resolveWatchSurfaceTapAction,\n  shouldHandleWatchDesktopDoubleClick,\n  shouldRevealWatchControlsOnPointerMove,\n  WATCH_CONTROLS_HIDE_MS,\n} from '@/lib/videoWatchControls';",
+            ),
+            (
+              "  const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);\n  const burstTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);\n  const holdActiveRef = useRef(false);",
+              "  const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);\n  const holdActiveRef = useRef(false);\n  const lastPointerTypeRef = useRef('mouse');",
+            ),
+            (
+              "  const [isPlaying, setIsPlaying] = useState(!(initialPlayback?.paused ?? false));\n  const [isEnded, setIsEnded] = useState(false);",
+              "  const [isPlaying, setIsPlaying] = useState(!(initialPlayback?.paused ?? false));\n  const [isPlayPending, setIsPlayPending] = useState(!(initialPlayback?.paused ?? false));\n  const [isEnded, setIsEnded] = useState(false);",
+            ),
+            (
+              "  const [showControls, setShowControls] = useState(true);\n  const [showLikeBurst, setShowLikeBurst] = useState(false);\n  const [isFullscreen, setIsFullscreen] = useState(false);",
+              "  const [showControls, setShowControls] = useState(true);\n  const [isFullscreen, setIsFullscreen] = useState(false);",
+            ),
+            (
+              "  const { lightTap, mediumTap, successFeedback } = useHapticFeedback();",
+              "  const { lightTap, mediumTap } = useHapticFeedback();",
+            ),
+            (
+              "  const revealControls = useCallback(() => {\n    setShowControls(true);\n    if (hideTimerRef.current) clearTimeout(hideTimerRef.current);\n    hideTimerRef.current = setTimeout(() => setShowControls(false), 3000);\n  }, []);",
+              "  const hideControls = useCallback(() => {\n    if (hideTimerRef.current) {\n      clearTimeout(hideTimerRef.current);\n      hideTimerRef.current = null;\n    }\n    setShowControls(false);\n  }, []);\n\n  const revealControls = useCallback(() => {\n    setShowControls(true);\n    if (hideTimerRef.current) clearTimeout(hideTimerRef.current);\n    hideTimerRef.current = setTimeout(() => {\n      hideTimerRef.current = null;\n      setShowControls(false);\n    }, WATCH_CONTROLS_HIDE_MS);\n  }, []);\n\n  const toggleSurfaceControls = useCallback(() => {\n    if (resolveWatchSurfaceTapAction(showControls) === 'hide-controls') hideControls();\n    else revealControls();\n  }, [hideControls, revealControls, showControls]);",
+            ),
+            (
+              "  const publishPlayback = useCallback((playback = getCurrentPlayback()) => {\n    onPlaybackChange?.(activeVideoId, playback);\n    return playback;\n  }, [activeVideoId, getCurrentPlayback, onPlaybackChange]);\n\n  const applyPendingPlayback = useCallback((el: HTMLVideoElement) => {",
+              "  const publishPlayback = useCallback((playback = getCurrentPlayback()) => {\n    onPlaybackChange?.(activeVideoId, playback);\n    return playback;\n  }, [activeVideoId, getCurrentPlayback, onPlaybackChange]);\n\n  const requestPlay = useCallback((el: HTMLVideoElement) => {\n    desiredPausedRef.current = false;\n    setIsPlayPending(true);\n    void el.play().catch(() => {\n      desiredPausedRef.current = true;\n      setIsPlayPending(false);\n      setIsPlaying(false);\n      const time = Number.isFinite(el.currentTime) ? el.currentTime : currentTime;\n      publishPlayback({ time, paused: true });\n      revealControls();\n    });\n  }, [currentTime, publishPlayback, revealControls]);\n\n  const applyPendingPlayback = useCallback((el: HTMLVideoElement) => {",
+            ),
+            (
+              "    if (desiredPausedRef.current) {\n      el.pause();\n      setIsPlaying(false);\n    } else {\n      void el.play().catch(() => setIsPlaying(false));\n    }\n  }, []);",
+              "    if (desiredPausedRef.current) {\n      setIsPlayPending(false);\n      el.pause();\n      setIsPlaying(false);\n    } else {\n      requestPlay(el);\n    }\n  }, [requestPlay]);",
+            ),
+            (
+              "    setIsEnded(false);\n    // Reflect the real media element state; onPlay is the source of truth.\n    setIsPlaying(false);",
+              "    setIsEnded(false);\n    // Keep the real media event as source-of-truth while separately tracking\n    // the pending play intent so autoplay does not flash a false play icon.\n    setIsPlaying(false);\n    setIsPlayPending(!playback.paused);",
+            ),
+            (
+              "    if (holdTimerRef.current) clearTimeout(holdTimerRef.current);\n    if (hideTimerRef.current) clearTimeout(hideTimerRef.current);\n    if (burstTimerRef.current) clearTimeout(burstTimerRef.current);",
+              "    if (holdTimerRef.current) clearTimeout(holdTimerRef.current);\n    if (hideTimerRef.current) clearTimeout(hideTimerRef.current);",
+            ),
+            (
+              "  const togglePlay = useCallback(() => {\n    const el = videoRef.current;\n    if (!el) return;\n    if (el.paused || el.ended || isEnded) {\n      if (el.ended || isEnded) {\n        el.currentTime = 0;\n        setCurrentTime(0);\n        setIsEnded(false);\n      }\n      desiredPausedRef.current = false;\n      void el.play().catch(() => {\n        // Do not leave the parent snapshot in a synthetic playing state when\n        // the browser rejects/aborts play().\n        desiredPausedRef.current = true;\n        setIsPlaying(false);\n        publishPlayback({ time: el.currentTime, paused: true });\n      });\n    } else {\n      desiredPausedRef.current = true;\n      const time = el.currentTime;\n      el.pause();\n      publishPlayback({ time, paused: true });\n    }\n    lightTap();\n    revealControls();\n  }, [isEnded, lightTap, publishPlayback, revealControls]);\n\n  const doubleTapLike = useCallback(() => {\n    if (!video) return;\n    successFeedback();\n    if (!video.is_liked) onLike(video.id);\n    setShowLikeBurst(true);\n    if (burstTimerRef.current) clearTimeout(burstTimerRef.current);\n    burstTimerRef.current = setTimeout(() => setShowLikeBurst(false), 680);\n    revealControls();\n  }, [onLike, revealControls, successFeedback, video]);\n\n  const { registerTap, clearPending } = useVideoSurfaceTap({\n    onSingleTap: togglePlay,\n    onDoubleTap: doubleTapLike,\n  });",
+              "  const togglePlay = useCallback(() => {\n    const el = videoRef.current;\n    if (!el) return;\n\n    const shouldPause = !desiredPausedRef.current && !el.ended && !isEnded;\n    if (!shouldPause) {\n      if (el.ended || isEnded) {\n        el.currentTime = 0;\n        setCurrentTime(0);\n        setIsEnded(false);\n      }\n      requestPlay(el);\n    } else {\n      desiredPausedRef.current = true;\n      setIsPlayPending(false);\n      const time = el.currentTime;\n      el.pause();\n      publishPlayback({ time, paused: true });\n    }\n    lightTap();\n    revealControls();\n  }, [isEnded, lightTap, publishPlayback, requestPlay, revealControls]);\n\n  const { registerTap, clearPending } = useVideoSurfaceTap({\n    // YouTube mobile behavior: a normal tap only reveals/hides the controller.\n    // Playback changes only from the visible play/pause control.\n    onSingleTap: toggleSurfaceControls,\n    // The generic hook owns left/right 10s seeking. The center double-tap no\n    // longer likes Watch videos; it simply keeps the controller visible.\n    onDoubleTap: revealControls,\n  });",
+            ),
+            (
+              "      if (el.paused) {\n        desiredPausedRef.current = false;\n        void el.play().catch(() => {\n          desiredPausedRef.current = true;\n          setIsPlaying(false);\n        });\n      }\n      mediumTap();\n    }, HOLD_TO_SPEED_MS);\n  }, [clearPending, mediumTap]);",
+              "      if (el.paused) requestPlay(el);\n      mediumTap();\n    }, HOLD_TO_SPEED_MS);\n  }, [clearPending, mediumTap, requestPlay]);",
+            ),
+            (
+              "      if (startedPaused) {\n        desiredPausedRef.current = true;\n        const time = Number.isFinite(el.currentTime) ? el.currentTime : currentTime;",
+              "      if (startedPaused) {\n        desiredPausedRef.current = true;\n        setIsPlayPending(false);\n        const time = Number.isFinite(el.currentTime) ? el.currentTime : currentTime;",
+            ),
+            (
+              "          onPointerMove={(event) => {\n            revealControls();\n            zoom.handlers.onPointerMove(event);\n          }}",
+              "          onPointerMove={(event) => {\n            if (shouldRevealWatchControlsOnPointerMove(event.pointerType)) revealControls();\n            zoom.handlers.onPointerMove(event);\n          }}",
+            ),
+            (
+              "          onPointerDown={(event) => {\n            const target = event.target instanceof HTMLElement ? event.target : null;",
+              "          onPointerDown={(event) => {\n            lastPointerTypeRef.current = event.pointerType || 'mouse';\n            const target = event.target instanceof HTMLElement ? event.target : null;",
+            ),
+            (
+              "          onDoubleClick={(event) => {\n            const target = event.target instanceof HTMLElement ? event.target : null;\n            if (target?.closest('button, a, input, textarea, select, [role=\"slider\"], [data-video-interactive=\"true\"]')) return;\n            event.preventDefault();\n            void toggleFullscreen();\n          }}",
+              "          onDoubleClick={(event) => {\n            if (!shouldHandleWatchDesktopDoubleClick(lastPointerTypeRef.current)) return;\n            const target = event.target instanceof HTMLElement ? event.target : null;\n            if (target?.closest('button, a, input, textarea, select, [role=\"slider\"], [data-video-interactive=\"true\"]')) return;\n            event.preventDefault();\n            void toggleFullscreen();\n          }}",
+            ),
+            (
+              "            onCanPlay={(event) => {\n              if (!desiredPausedRef.current && !isEnded) void event.currentTarget.play().catch(() => setIsPlaying(false));\n            }}",
+              "            onCanPlay={(event) => {\n              if (!desiredPausedRef.current && !isEnded && event.currentTarget.paused) requestPlay(event.currentTarget);\n            }}",
+            ),
+            (
+              "            onPlay={(event) => {\n              desiredPausedRef.current = false;\n              setIsPlaying(true);",
+              "            onPlay={(event) => {\n              desiredPausedRef.current = false;\n              setIsPlayPending(false);\n              setIsPlaying(true);",
+            ),
+            (
+              "            onPause={() => setIsPlaying(false)}",
+              "            onPause={() => {\n              setIsPlaying(false);\n              if (desiredPausedRef.current) setIsPlayPending(false);\n            }}",
+            ),
+            (
+              "              desiredPausedRef.current = true;\n              setCurrentTime(endTime);\n              setIsPlaying(false);",
+              "              desiredPausedRef.current = true;\n              setCurrentTime(endTime);\n              setIsPlayPending(false);\n              setIsPlaying(false);",
+            ),
+            (
+              "          {showLikeBurst && <div className=\"pointer-events-none absolute inset-0 z-40 flex items-center justify-center\"><Heart className=\"h-28 w-28 animate-[ping_.55s_ease-out_1] fill-white text-white\" /></div>}\n          {zoom.isZoomed && <button type=\"button\" data-video-interactive=\"true\" onClick={(event) => { event.stopPropagation(); zoom.resetZoom(); }} className=\"absolute left-1/2 top-3 z-50 -translate-x-1/2 rounded-full bg-black/55 px-3 py-1.5 text-xs font-semibold text-white\">{zoom.scale.toFixed(1)}× · Reset</button>}\n          {!isPlaying && <div className=\"pointer-events-none absolute inset-0 z-20 flex items-center justify-center\"><div className=\"flex h-16 w-16 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-xl\">{isEnded ? <RotateCcw className=\"h-8 w-8\" /> : <Play className=\"ml-1 h-8 w-8 fill-white\" />}</div></div>}",
+              "          <div className={cn('pointer-events-none absolute inset-0 z-[15] bg-black/20 transition-opacity', showControls ? 'opacity-100' : 'opacity-0')} />\n          {zoom.isZoomed && <button type=\"button\" data-video-interactive=\"true\" onClick={(event) => { event.stopPropagation(); zoom.resetZoom(); }} className=\"absolute left-1/2 top-3 z-50 -translate-x-1/2 rounded-full bg-black/55 px-3 py-1.5 text-xs font-semibold text-white\">{zoom.scale.toFixed(1)}× · Reset</button>}\n          {showControls && (\n            <div className=\"pointer-events-none absolute inset-0 z-30 flex items-center justify-center lg:hidden\">\n              <button\n                type=\"button\"\n                data-video-interactive=\"true\"\n                onClick={(event) => { event.stopPropagation(); togglePlay(); }}\n                className=\"pointer-events-auto flex h-16 w-16 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-xl transition-transform active:scale-95\"\n                aria-label={isEnded ? 'Qayta ijro' : playbackLooksPlaying ? 'Pauza' : 'Ijro'}\n              >\n                {isEnded ? <RotateCcw className=\"h-8 w-8\" /> : playbackLooksPlaying ? <Pause className=\"h-8 w-8 fill-white\" /> : <Play className=\"ml-1 h-8 w-8 fill-white\" />}\n              </button>\n            </div>\n          )}",
+            ),
+            (
+              "  const isOwnVideo = Boolean(currentUserId && video.user_id === currentUserId);",
+              "  const isOwnVideo = Boolean(currentUserId && video.user_id === currentUserId);\n  const playbackLooksPlaying = isPlaying || isPlayPending;",
+            ),
+            (
+              "aria-label={isPlaying ? 'Pauza' : 'Ijro'}>{isPlaying ? <Pause className=\"h-5 w-5\" /> : isEnded ? <RotateCcw className=\"h-5 w-5\" /> : <Play className=\"h-5 w-5\" />}</Button>",
+              "aria-label={isEnded ? 'Qayta ijro' : playbackLooksPlaying ? 'Pauza' : 'Ijro'}>{isEnded ? <RotateCcw className=\"h-5 w-5\" /> : playbackLooksPlaying ? <Pause className=\"h-5 w-5\" /> : <Play className=\"h-5 w-5\" />}</Button>",
+            ),
+          ]
+
+          for old, new in replacements:
+              count = panel.count(old)
+              if count != 1:
+                  raise SystemExit(f'VideoWatchPanel replacement expected 1 match, found {count}: {old[:120]!r}')
+              panel = panel.replace(old, new, 1)
+
+          panel_path.write_text(panel)
+
+          helper_path = Path('src/lib/videoWatchControls.ts')
+          helper_path.write_text("""export const WATCH_CONTROLS_HIDE_MS = 3000;\n\nexport type WatchSurfaceTapAction = 'show-controls' | 'hide-controls';\n\n/** Mobile/tablet Watch taps mirror YouTube: the surface controls chrome, not playback. */\nexport function resolveWatchSurfaceTapAction(controlsVisible: boolean): WatchSurfaceTapAction {\n  return controlsVisible ? 'hide-controls' : 'show-controls';\n}\n\n/** Hover/move should reveal controls only for a mouse, never from touch jitter. */\nexport function shouldRevealWatchControlsOnPointerMove(pointerType: string): boolean {\n  return pointerType === 'mouse';\n}\n\n/** YouTube-style double-click fullscreen is a desktop mouse gesture only. */\nexport function shouldHandleWatchDesktopDoubleClick(pointerType: string): boolean {\n  return pointerType === 'mouse';\n}\n""")
+
+          hook_path = Path('src/hooks/useVideoSurfaceTap.ts')
+          hook = hook_path.read_text()
+          old = """ * - regular Videos feed single tap: play/pause;\n * - if the caption is expanded, a single tap above its info block: collapse it;\n * - YouTube-style VideoWatchPanel single tap: play/pause through the caller;"""
+          new = """ * - regular Videos feed single tap: caller-controlled action (currently play/pause);\n * - if the caption is expanded, a single tap above its info block: collapse it;\n * - VideoWatchPanel single tap: caller-controlled controller visibility;"""
+          if hook.count(old) != 1:
+              raise SystemExit('useVideoSurfaceTap comment block did not match')
+          hook_path.write_text(hook.replace(old, new, 1))
+
+          test_path = Path('src/hooks/useVideoSurfaceTap.test.tsx')
+          test = test_path.read_text()
+          old_import = "import { resolveAdjacentVideoIndex, resolveVideoDigitSeekTarget } from '@/lib/videoKeyboardControls';"
+          new_import = """import { resolveAdjacentVideoIndex, resolveVideoDigitSeekTarget } from '@/lib/videoKeyboardControls';\nimport {\n  resolveWatchSurfaceTapAction,\n  shouldHandleWatchDesktopDoubleClick,\n  shouldRevealWatchControlsOnPointerMove,\n  WATCH_CONTROLS_HIDE_MS,\n} from '@/lib/videoWatchControls';"""
+          if test.count(old_import) != 1:
+              raise SystemExit('test import did not match')
+          test = test.replace(old_import, new_import, 1)
+
+          anchor = """describe('useVideoSurfaceTap', () => {"""
+          policy_tests = """describe('Watch controller interaction policy', () => {\n  it('uses a three-second YouTube-style autohide window', () => {\n    expect(WATCH_CONTROLS_HIDE_MS).toBe(3000);\n  });\n\n  it('uses touch surface taps to show or hide controls instead of playback', () => {\n    expect(resolveWatchSurfaceTapAction(false)).toBe('show-controls');\n    expect(resolveWatchSurfaceTapAction(true)).toBe('hide-controls');\n  });\n\n  it('keeps hover reveal and double-click fullscreen mouse-only', () => {\n    expect(shouldRevealWatchControlsOnPointerMove('mouse')).toBe(true);\n    expect(shouldRevealWatchControlsOnPointerMove('touch')).toBe(false);\n    expect(shouldRevealWatchControlsOnPointerMove('pen')).toBe(false);\n    expect(shouldHandleWatchDesktopDoubleClick('mouse')).toBe(true);\n    expect(shouldHandleWatchDesktopDoubleClick('touch')).toBe(false);\n  });\n});\n\n"""
+          if test.count(anchor) != 1:
+              raise SystemExit('test describe anchor did not match')
+          test = test.replace(anchor, policy_tests + anchor, 1)
+
+          old_name = "it('routes VideoWatchPanel single taps to the play pause callback', () => {"
+          new_name = "it('routes Watch single taps to the caller without mutating media playback', () => {"
+          if test.count(old_name) != 1:
+              raise SystemExit('Watch single tap test name did not match')
+          test = test.replace(old_name, new_name, 1)
+
+          old_assert = """    expect(onSingleTap).toHaveBeenCalledTimes(1);\n    expect(onDoubleTap).not.toHaveBeenCalled();\n  });\n\n  it('collapses an expanded caption"""
+          new_assert = """    expect(onSingleTap).toHaveBeenCalledTimes(1);\n    expect(onDoubleTap).not.toHaveBeenCalled();\n    expect(video.paused).toBe(true);\n    expect(video.currentTime).toBe(0);\n  });\n\n  it('collapses an expanded caption"""
+          if test.count(old_assert) != 1:
+              raise SystemExit('Watch single tap assertion block did not match')
+          test_path.write_text(test.replace(old_assert, new_assert, 1))
+      - name: Install dependencies
+        run: npm ci
+      - name: Watch interaction regression
+        run: npx vitest run src/hooks/useVideoSurfaceTap.test.tsx
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Production build
+        run: npm run build
+      - name: Remove temporary workflow and commit
+        run: |
+          rm .github/workflows/apply-youtube-watch-controller-fix.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/components/video/VideoWatchPanel.tsx src/lib/videoWatchControls.ts src/hooks/useVideoSurfaceTap.ts src/hooks/useVideoSurfaceTap.test.tsx .github/workflows/apply-youtube-watch-controller-fix.yml
+          git commit -m "fix: align Watch controller lifecycle with YouTube [youtube-watch-controls-applied]"
+          git push
