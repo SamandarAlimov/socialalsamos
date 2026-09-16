@@ -91,7 +91,7 @@ export function GifPicker({ onSelect, trigger, className }: GifPickerProps) {
         {trigger}
       </PopoverTrigger>
       <PopoverContent 
-        className={cn("w-80 p-0 bg-popover border border-border shadow-lg z-50", className)}
+        className={cn("w-80 p-0 bg-popover border border-border shadow-lg", className)}
         align="end"
         sideOffset={8}
       >
