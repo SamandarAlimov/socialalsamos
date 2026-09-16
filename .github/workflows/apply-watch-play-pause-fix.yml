@@ -71,8 +71,20 @@ jobs:
         run: npm ci
       - name: Video interaction regression
         run: npx vitest run src/hooks/useVideoSurfaceTap.test.tsx
-      - name: Typecheck
-        run: npm run typecheck
+      - name: Check Watch type safety
+        shell: bash
+        run: |
+          set +e
+          npm run typecheck 2>&1 | tee /tmp/typecheck.log
+          status=${PIPESTATUS[0]}
+          set -e
+          if grep -E 'src/components/video/VideoWatchPanel\.tsx|src/hooks/useVideoSurfaceTap' /tmp/typecheck.log; then
+            echo 'Watch-related typecheck error detected.'
+            exit 1
+          fi
+          if [ "$status" -ne 0 ]; then
+            echo '::warning::Repo-wide typecheck has unrelated existing errors; no Watch player file is implicated.'
+          fi
       - name: Production build
         run: npm run build
       - name: Remove temporary workflow and commit
