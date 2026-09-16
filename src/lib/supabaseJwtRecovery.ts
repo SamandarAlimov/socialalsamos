@@ -1,5 +1,7 @@
 const EXPIRED_JWT_PATTERN = /(?:JWT\s+expired|"code"\s*:\s*"PGRST303"|\bPGRST303\b)/i;
 
+let refreshInFlight: Promise<string | null> | null = null;
+
 /**
  * PostgREST returns HTTP 401 when an access token expires. Supabase normally
  * refreshes proactively, but browsers can miss the timer while a tab/device is
@@ -8,6 +10,25 @@ const EXPIRED_JWT_PATTERN = /(?:JWT\s+expired|"code"\s*:\s*"PGRST303"|\bPGRST303
  */
 export function isExpiredSupabaseJwtResponse(status: number, bodyText: string) {
   return status === 401 && EXPIRED_JWT_PATTERN.test(bodyText || '');
+}
+
+/**
+ * Supabase refresh tokens are rotated. If many protected requests all discover
+ * the same expired access token at once, let exactly one refresh operation run
+ * and share its resulting access token with every waiter.
+ */
+export function coordinateSupabaseJwtRefresh(
+  refresh: () => Promise<string | null>,
+): Promise<string | null> {
+  if (!refreshInFlight) {
+    refreshInFlight = Promise.resolve()
+      .then(refresh)
+      .finally(() => {
+        refreshInFlight = null;
+      });
+  }
+
+  return refreshInFlight;
 }
 
 /**
