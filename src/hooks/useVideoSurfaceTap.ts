@@ -65,14 +65,6 @@ function findVideoSurfaceAt(clientX: number, clientY: number) {
   return null;
 }
 
-function isVideoWatchSurface(surface: HTMLElement) {
-  return Boolean(surface.querySelector('button[aria-label="Videolarga qaytish"]'));
-}
-
-function revealVideoWatchControls(surface: HTMLElement) {
-  surface.dispatchEvent(new Event('pointermove', { bubbles: true }));
-}
-
 /**
  * VideosPage renders the expanded caption in a bounded scroll region. When it
  * is expanded, a normal tap in the free video area above the username/info
@@ -122,8 +114,7 @@ function seekVideoBy(video: HTMLVideoElement, delta: number) {
  * video gesture model:
  * - regular Videos feed single tap: play/pause;
  * - if the caption is expanded, a single tap above its info block: collapse it;
- * - YouTube-style VideoWatchPanel single tap: reveal controls without changing
- *   playback; play/pause remains an explicit controller action;
+ * - YouTube-style VideoWatchPanel single tap: play/pause through the caller;
  * - double tap in left third: seek -10s (YouTube-style);
  * - double tap in center third: caller action (VideosPage = like);
  * - double tap in right third: seek +10s (YouTube-style).
@@ -211,10 +202,6 @@ export function useVideoSurfaceTap({
       if (point) {
         const hit = findVideoSurfaceAt(point.x, point.y);
         if (hit && collapseExpandedCaptionFromUpperSurface(hit.surface, point.y)) return;
-        if (hit && isVideoWatchSurface(hit.surface)) {
-          revealVideoWatchControls(hit.surface);
-          return;
-        }
       }
 
       onSingleTap();

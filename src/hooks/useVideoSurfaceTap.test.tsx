@@ -1,6 +1,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { resolveAdjacentVideoIndex, resolveVideoDigitSeekTarget } from '@/lib/videoKeyboardControls';
 import { resolveVideoDoubleTapZone, useVideoSurfaceTap } from './useVideoSurfaceTap';
 
 describe('resolveVideoDoubleTapZone', () => {
@@ -12,6 +13,28 @@ describe('resolveVideoDoubleTapZone', () => {
     expect(resolveVideoDoubleTapZone(200, 0, 300)).toBe('center');
     expect(resolveVideoDoubleTapZone(201, 0, 300)).toBe('forward');
     expect(resolveVideoDoubleTapZone(300, 0, 300)).toBe('forward');
+  });
+});
+
+describe('video keyboard controls', () => {
+  it('maps 0-9 to YouTube-style 0%-90% timeline positions', () => {
+    expect(resolveVideoDigitSeekTarget('0', 120)).toBe(0);
+    expect(resolveVideoDigitSeekTarget('1', 120)).toBe(12);
+    expect(resolveVideoDigitSeekTarget('5', 120)).toBe(60);
+    expect(resolveVideoDigitSeekTarget('9', 120)).toBe(108);
+  });
+
+  it('ignores non-digit keys and invalid durations', () => {
+    expect(resolveVideoDigitSeekTarget('k', 120)).toBeNull();
+    expect(resolveVideoDigitSeekTarget('1', 0)).toBeNull();
+    expect(resolveVideoDigitSeekTarget('1', Number.NaN)).toBeNull();
+  });
+
+  it('clamps Reel previous/next navigation to feed bounds', () => {
+    expect(resolveAdjacentVideoIndex(0, 4, -1)).toBe(0);
+    expect(resolveAdjacentVideoIndex(1, 4, -1)).toBe(0);
+    expect(resolveAdjacentVideoIndex(1, 4, 1)).toBe(2);
+    expect(resolveAdjacentVideoIndex(3, 4, 1)).toBe(3);
   });
 });
 
@@ -166,7 +189,7 @@ describe('useVideoSurfaceTap', () => {
     expect(onSingleTap).not.toHaveBeenCalled();
   });
 
-  it('reveals VideoWatchPanel controls on single tap instead of toggling playback', () => {
+  it('routes VideoWatchPanel single taps to the play pause callback', () => {
     const surface = document.createElement('div');
     const video = document.createElement('video');
     const backButton = document.createElement('button');
@@ -179,9 +202,6 @@ describe('useVideoSurfaceTap', () => {
       value: vi.fn(() => surface),
     });
 
-    const revealControls = vi.fn();
-    surface.addEventListener('pointermove', revealControls);
-
     const onSingleTap = vi.fn();
     const onDoubleTap = vi.fn();
     const { result } = renderHook(() =>
@@ -193,8 +213,7 @@ describe('useVideoSurfaceTap', () => {
       vi.advanceTimersByTime(240);
     });
 
-    expect(revealControls).toHaveBeenCalledTimes(1);
-    expect(onSingleTap).not.toHaveBeenCalled();
+    expect(onSingleTap).toHaveBeenCalledTimes(1);
     expect(onDoubleTap).not.toHaveBeenCalled();
   });
 
