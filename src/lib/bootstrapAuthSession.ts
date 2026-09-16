@@ -1,5 +1,8 @@
 import { supabase } from '@/integrations/supabase/client';
-import { isTerminalRefreshTokenError } from '@/lib/supabaseJwtRecovery';
+import {
+  coordinateSupabaseJwtRefresh,
+  isTerminalRefreshTokenError,
+} from '@/lib/supabaseJwtRecovery';
 
 const REFRESH_EARLY_MS = 60_000;
 let recoveryInFlight: Promise<void> | null = null;
@@ -21,17 +24,29 @@ async function recoverAuthSession() {
       const expiresAtMs = (session.expires_at ?? 0) * 1000;
       if (expiresAtMs > Date.now() + REFRESH_EARLY_MS) return;
 
-      const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession();
-      if (!refreshError && refreshed.session?.access_token) return;
+      await coordinateSupabaseJwtRefresh(async () => {
+        const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession();
+        const accessToken = refreshed.session?.access_token ?? null;
+        if (!refreshError && accessToken) {
+          try {
+            await supabase.realtime.setAuth(accessToken);
+          } catch (realtimeError) {
+            console.warn('[alsamos/auth] Realtime token sync failed:', realtimeError);
+          }
+          return accessToken;
+        }
 
-      const message = refreshError?.message ?? 'Session refresh returned no session';
-      console.warn('[alsamos/auth] Session refresh failed:', message);
+        const message = refreshError?.message ?? 'Session refresh returned no session';
+        console.warn('[alsamos/auth] Session refresh failed:', message);
 
-      // Only an invalid refresh token is terminal. Offline/network failures must
-      // not sign the user out because they can recover when connectivity returns.
-      if (refreshError && isTerminalRefreshTokenError(message)) {
-        await supabase.auth.signOut({ scope: 'local' }).catch(() => undefined);
-      }
+        // Only an invalid refresh token is terminal. Offline/network failures must
+        // not sign the user out because they can recover when connectivity returns.
+        if (refreshError && isTerminalRefreshTokenError(message)) {
+          await supabase.auth.signOut({ scope: 'local' }).catch(() => undefined);
+        }
+
+        return null;
+      });
     } catch (error) {
       console.warn('[alsamos/auth] Session recovery failed:', error);
     }

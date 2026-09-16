@@ -7,6 +7,11 @@ import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 import { sharedSupabaseStorage } from './sharedCookieStorage';
 import { AUTH_STORAGE_KEY } from '@/lib/authConstants';
+import {
+  coordinateSupabaseJwtRefresh,
+  isExpiredSupabaseJwtResponse,
+  isTerminalRefreshTokenError,
+} from '@/lib/supabaseJwtRecovery';
 
 // Client-side Supabase project configuration is public by design. Keep the
 // canonical project here as a safe migration fallback so a stale or malformed
@@ -113,6 +118,104 @@ const supabaseUrl = requireValue('VITE_SUPABASE_URL', SUPABASE_URL);
 const supabaseKey = requireValue('VITE_SUPABASE_PUBLISHABLE_KEY', SUPABASE_PUBLISHABLE_KEY);
 const supabaseOrigin = new URL(supabaseUrl).origin;
 
+function extractBearerToken(authorization: string | null): string | null {
+  const match = /^Bearer\s+(.+)$/i.exec(authorization?.trim() ?? '');
+  return match?.[1] ?? null;
+}
+
+async function syncRealtimeAccessToken(accessToken: string) {
+  try {
+    await supabaseClient.realtime.setAuth(accessToken);
+  } catch (realtimeError) {
+    console.warn('[alsamos/auth] Realtime token sync failed:', realtimeError);
+  }
+}
+
+/**
+ * Resolve a usable access token after an expired-JWT response. A different
+ * token may already have been produced by another recovery path while this
+ * particular request was in flight; in that case reuse it instead of rotating
+ * the refresh token again. Otherwise coordinate one refresh for all waiters.
+ */
+async function refreshExpiredAccessToken(
+  failedAuthorization: string | null,
+): Promise<string | null> {
+  const failedAccessToken = extractBearerToken(failedAuthorization);
+  const { data: currentSessionData } = await supabaseClient.auth.getSession();
+  const currentAccessToken = currentSessionData.session?.access_token ?? null;
+
+  if (
+    failedAccessToken &&
+    currentAccessToken &&
+    currentAccessToken !== failedAccessToken
+  ) {
+    await syncRealtimeAccessToken(currentAccessToken);
+    return currentAccessToken;
+  }
+
+  if (failedAccessToken && !currentAccessToken) {
+    // The session was already cleared while this request was in flight.
+    return null;
+  }
+
+  return coordinateSupabaseJwtRefresh(async () => {
+    // Re-check inside the shared critical section. A refresh may have completed
+    // between the getSession() above and our turn to enter this callback.
+    const { data: latestSessionData } = await supabaseClient.auth.getSession();
+    const latestAccessToken = latestSessionData.session?.access_token ?? null;
+    if (
+      failedAccessToken &&
+      latestAccessToken &&
+      latestAccessToken !== failedAccessToken
+    ) {
+      await syncRealtimeAccessToken(latestAccessToken);
+      return latestAccessToken;
+    }
+
+    const { data, error } = await supabaseClient.auth.refreshSession();
+    const accessToken = data.session?.access_token ?? null;
+
+    if (!error && accessToken) {
+      await syncRealtimeAccessToken(accessToken);
+      return accessToken;
+    }
+
+    const message = error?.message ?? 'Session refresh returned no access token';
+    console.warn('[alsamos/auth] Expired JWT refresh failed:', message);
+
+    if (error && isTerminalRefreshTokenError(message)) {
+      await supabaseClient.auth.signOut({ scope: 'local' }).catch(() => undefined);
+    }
+
+    return null;
+  });
+}
+
+/**
+ * Run one protected request and transparently recover only the explicit
+ * PostgREST "JWT expired" failure. Permission/RLS 401s are returned untouched.
+ * A clone is kept before the first attempt so JSON RPC/mutation bodies can be
+ * replayed safely after the token refresh.
+ */
+async function fetchWithExpiredJwtRecovery(request: Request): Promise<Response> {
+  const retryTemplate = request.clone();
+  const response = await fetch(request);
+  if (response.status !== 401) return response;
+
+  const bodyText = await response.clone().text().catch(() => '');
+  if (!isExpiredSupabaseJwtResponse(response.status, bodyText)) return response;
+
+  const freshAccessToken = await refreshExpiredAccessToken(
+    retryTemplate.headers.get('authorization'),
+  );
+  if (!freshAccessToken) return response;
+
+  const retryHeaders = new Headers(retryTemplate.headers);
+  retryHeaders.set('Authorization', `Bearer ${freshAccessToken}`);
+
+  return fetch(new Request(retryTemplate, { headers: retryHeaders }));
+}
+
 // Some client networks intermittently time out or close direct PostgREST
 // connections to *.supabase.co. Keep Auth/Realtime untouched, but route
 // browser /rest/v1 traffic through an external same-origin Vercel rewrite.
@@ -167,17 +270,18 @@ const sameOriginSupabaseFetch: typeof fetch = async (input, init) => {
     const clientInfo = requestHeaders.get('x-client-info');
     if (clientInfo) deleteHeaders.set('x-client-info', clientInfo);
 
-    const response = await fetch(`${supabaseOrigin}/functions/v1/account-delete`, {
-      method: 'POST',
-      headers: deleteHeaders,
-      body: JSON.stringify({ confirm: 'DELETE' }),
+    return fetchWithExpiredJwtRecovery(
+      new Request(`${supabaseOrigin}/functions/v1/account-delete`, {
+        method: 'POST',
+        headers: deleteHeaders,
+        body: JSON.stringify({ confirm: 'DELETE' }),
+      }),
+    ).then((response) => {
+      if (response.ok) {
+        return new Response(null, { status: 204, headers: { 'Cache-Control': 'no-store' } });
+      }
+      return response;
     });
-
-    if (response.ok) {
-      return new Response(null, { status: 204, headers: { 'Cache-Control': 'no-store' } });
-    }
-
-    return response;
   }
 
   if (target.origin !== supabaseOrigin || !target.pathname.startsWith('/rest/v1/')) {
@@ -187,11 +291,11 @@ const sameOriginSupabaseFetch: typeof fetch = async (input, init) => {
   const restSuffix = target.pathname.slice('/rest/v1'.length);
   const proxyUrl = `${window.location.origin}/__supabase-rest${restSuffix}${target.search}`;
 
-  if (inputIsRequest) {
-    return fetch(new Request(proxyUrl, input), init);
-  }
+  const proxyRequest = inputIsRequest
+    ? new Request(new Request(proxyUrl, input), init)
+    : new Request(proxyUrl, init);
 
-  return fetch(proxyUrl, init);
+  return fetchWithExpiredJwtRecovery(proxyRequest);
 };
 
 const supabaseClient = createClient<Database>(supabaseUrl, supabaseKey, {

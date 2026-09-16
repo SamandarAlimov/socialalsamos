@@ -5,7 +5,7 @@ import { useServiceWorker } from './useServiceWorker';
 import { useNotificationSound } from './useNotificationSound';
 
 export function usePushNotifications() {
-  const { user } = useAuth();
+  const { user, session } = useAuth();
   const { isRegistered, showNotification, registration } = useServiceWorker();
   const { playNotificationSound, playMessageSound } = useNotificationSound();
   const lastMessageIdRef = useRef<string | null>(null);
@@ -110,9 +110,10 @@ export function usePushNotifications() {
     playNotificationSoundRef.current = playNotificationSound;
   }, [sendNotification, playMessageSound, playNotificationSound]);
 
-  // Subscribe to new messages
+  // Subscribe to new messages. Include the access token in the lifecycle key so
+  // a TOKEN_REFRESHED event replaces channels that timed out with a stale JWT.
   useEffect(() => {
-    if (!user) return;
+    if (!user || !session?.access_token) return;
 
     console.log('[Push] Setting up message subscription for user:', user.id);
 
@@ -187,13 +188,15 @@ export function usePushNotifications() {
       });
 
     return () => {
-      supabase.removeChannel(channel);
+      void supabase.removeChannel(channel);
     };
-  }, [user?.id]);
+  }, [user?.id, session?.access_token]);
 
-  // Subscribe to other notifications (likes, comments, follows, mentions)
+  // Subscribe to other notifications (likes, comments, follows, mentions).
+  // Recreate this channel after access-token rotation for the same reason as
+  // the message channel above.
   useEffect(() => {
-    if (!user) return;
+    if (!user || !session?.access_token) return;
 
     const channel = supabase
       .channel(`push-notifications:${user.id}`)
@@ -266,9 +269,9 @@ export function usePushNotifications() {
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      void supabase.removeChannel(channel);
     };
-  }, [user?.id]);
+  }, [user?.id, session?.access_token]);
 
   return {
     requestPermission,
