@@ -130,6 +130,10 @@ export default function AIPageV2() {
   const location = useLocation();
   const navigate = useNavigate();
   const initialPrefs = useMemo(readPrefs, []);
+  const requestedProjectId = useMemo(
+    () => new URLSearchParams(location.search).get('project'),
+    [location.search],
+  );
 
   const [messages, setMessages] = useState<AIMessage[]>([]);
   const [input, setInput] = useState('');
@@ -160,12 +164,22 @@ export default function AIPageV2() {
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const mediaPollsRef = useRef<Map<string, boolean>>(new Map());
+  const appliedProjectParamRef = useRef<string | null>(null);
   const { uploadFileOrThrow, uploading, getFileType } = useFileUpload();
   const busy = isStreaming;
 
   const activeProject = useMemo(
     () => projects.find((project) => project.id === activeProjectId) ?? null,
     [activeProjectId, projects],
+  );
+
+  const syncProjectUrl = useCallback(
+    (projectId: string | null) => {
+      const search = projectId ? `?project=${encodeURIComponent(projectId)}` : '';
+      if (location.pathname === '/ai' && location.search === search) return;
+      navigate({ pathname: '/ai', search }, { replace: true });
+    },
+    [location.pathname, location.search, navigate],
   );
 
   useEffect(() => setSidebarOpen(!isMobile), [isMobile]);
@@ -230,6 +244,25 @@ export default function AIPageV2() {
 
     void load();
   }, [deriveTitle, user]);
+
+  useEffect(() => {
+    if (!projectsAvailable || !requestedProjectId) {
+      if (!requestedProjectId) appliedProjectParamRef.current = null;
+      return;
+    }
+    if (appliedProjectParamRef.current === requestedProjectId) return;
+    if (!projects.some((project) => project.id === requestedProjectId)) return;
+
+    abortRef.current?.abort();
+    appliedProjectParamRef.current = requestedProjectId;
+    setActiveProjectId(requestedProjectId);
+    setMessages([]);
+    setCurrentConversationId(null);
+    setInput('');
+    setAttachments([]);
+    setForwardedPost(null);
+    if (isMobile) setSidebarOpen(false);
+  }, [isMobile, projects, projectsAvailable, requestedProjectId]);
 
   const saveConversation = async (newMessages: AIMessage[]): Promise<string | null> => {
     if (!user) return currentConversationId;
@@ -439,8 +472,8 @@ export default function AIPageV2() {
         }
       });
 
-    navigate(location.pathname, { replace: true, state: {} });
-  }, [location.pathname, location.state, navigate]);
+    navigate(`${location.pathname}${location.search}`, { replace: true, state: {} });
+  }, [location.pathname, location.search, location.state, navigate]);
 
   useEffect(() => {
     const viewport = scrollAreaRef.current?.querySelector('[data-radix-scroll-area-viewport]');
@@ -450,33 +483,42 @@ export default function AIPageV2() {
   const startNew = useCallback(
     (projectId: string | null = activeProjectId) => {
       abortRef.current?.abort();
+      const nextProjectId = projectsAvailable ? projectId : null;
+      appliedProjectParamRef.current = nextProjectId;
       setMessages([]);
       setCurrentConversationId(null);
-      setActiveProjectId(projectsAvailable ? projectId : null);
+      setActiveProjectId(nextProjectId);
       setInput('');
       setAttachments([]);
       setForwardedPost(null);
+      syncProjectUrl(nextProjectId);
       if (isMobile) setSidebarOpen(false);
     },
-    [activeProjectId, isMobile, projectsAvailable],
+    [activeProjectId, isMobile, projectsAvailable, syncProjectUrl],
   );
 
   const selectConversation = (conversation: AIConversation) => {
     abortRef.current?.abort();
+    const projectId = projectsAvailable ? conversation.projectId || null : null;
+    appliedProjectParamRef.current = projectId;
     setMessages(conversation.messages);
     setCurrentConversationId(conversation.id);
-    setActiveProjectId(projectsAvailable ? conversation.projectId || null : null);
+    setActiveProjectId(projectId);
+    syncProjectUrl(projectId);
     if (isMobile) setSidebarOpen(false);
   };
 
   const selectProject = (projectId: string | null) => {
     if (!projectsAvailable) return;
     abortRef.current?.abort();
+    appliedProjectParamRef.current = projectId;
     setActiveProjectId(projectId);
     setMessages([]);
     setCurrentConversationId(null);
     setInput('');
     setAttachments([]);
+    setForwardedPost(null);
+    syncProjectUrl(projectId);
     if (isMobile) setSidebarOpen(false);
   };
 
@@ -529,7 +571,7 @@ export default function AIPageV2() {
     }
     const project = projectFromRow(data);
     setProjects((previous) => [project, ...previous]);
-    startNew(project.id);
+    selectProject(project.id);
   };
 
   const updateProject = async (projectId: string, value: { name: string; instructions: string }) => {
@@ -588,7 +630,11 @@ export default function AIPageV2() {
         conversation.id === conversationId ? { ...conversation, projectId, updatedAt: new Date() } : conversation,
       ),
     );
-    if (currentConversationId === conversationId) setActiveProjectId(projectId);
+    if (currentConversationId === conversationId) {
+      appliedProjectParamRef.current = projectId;
+      setActiveProjectId(projectId);
+      syncProjectUrl(projectId);
+    }
   };
 
   const uploadFiles = async (list: FileList | null) => {
@@ -924,9 +970,13 @@ export default function AIPageV2() {
       content = content ? `${content}\n\n${attachmentText}` : attachmentText;
     }
 
-    const remembered = captureMemories(raw, activeProject?.name);
-    if (remembered.length > 0) {
-      sonnerToast.success('Eslab qoldim', { description: remembered[0].text.slice(0, 90) });
+    // Project chats are self-contained. Their facts stay in project chat context
+    // and must not silently become account-wide long-term memories.
+    if (!activeProject) {
+      const remembered = captureMemories(raw);
+      if (remembered.length > 0) {
+        sonnerToast.success('Eslab qoldim', { description: remembered[0].text.slice(0, 90) });
+      }
     }
 
     const userMessage: AIMessage = {
@@ -1031,7 +1081,9 @@ export default function AIPageV2() {
               transition={{ type: 'spring', damping: 26, stiffness: 300 }}
               className={cn(
                 'z-50 flex min-h-0 flex-col border-r border-border/50 bg-background',
-                isMobile ? 'fixed bottom-0 left-0 top-0 w-[300px]' : 'relative h-full w-[280px] lg:w-[300px]',
+                isMobile
+                  ? 'fixed bottom-0 left-0 top-0 w-[300px] max-w-[88vw]'
+                  : 'relative h-full w-[260px] xl:w-[272px] 2xl:w-[280px]',
               )}
             >
               <AISidebar
@@ -1048,6 +1100,7 @@ export default function AIPageV2() {
                 onOpenArtifacts={openArtifacts}
                 onOpenConnectors={() => setConnectorsOpen(true)}
                 onOpenGithub={() => setGithubOpen(true)}
+                onOpenProjects={() => navigate('/projects')}
                 artifactCount={artifacts.length}
                 projects={projectsAvailable ? projects : []}
                 activeProjectId={projectsAvailable ? activeProjectId : null}
@@ -1132,7 +1185,7 @@ export default function AIPageV2() {
                 </div>
               )}
 
-              <div className="grid w-full max-w-2xl grid-cols-2 gap-2">
+              <div className="grid w-full max-w-2xl grid-cols-1 gap-2 sm:grid-cols-2">
                 {suggestions.map((suggestion, index) => (
                   <motion.button
                     key={suggestion.title}
