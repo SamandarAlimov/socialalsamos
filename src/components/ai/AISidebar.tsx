@@ -14,6 +14,10 @@ import {
   setConversationProject,
   updateLocalProject,
 } from '@/lib/ai/projectsStore';
+import {
+  buildAIWorkspaceHref,
+  parseAIWorkspaceSearch,
+} from '@/lib/ai/workspaceUrl';
 import { AISidebar as AISidebarV2 } from './AISidebarV2';
 import type { AIConversation, AIProject } from './types';
 
@@ -33,6 +37,7 @@ export function AISidebar(props: Props) {
   const [localProjects, setLocalProjects] = useState<AIProject[]>([]);
   const [pendingProjectNew, setPendingProjectNew] = useState<string | null>(null);
   const migrationStartedRef = useRef(false);
+  const previousActiveIdRef = useRef<string | null>(props.activeId);
 
   const useLocalProjects = Boolean(user?.id) && !props.onCreateProject;
 
@@ -44,14 +49,17 @@ export function AISidebar(props: Props) {
     setLocalProjects(listLocalProjects(user.id));
   };
 
-  const syncProjectQuery = (projectId: string | null) => {
-    const next = new URLSearchParams(location.search);
-    if (projectId) next.set('project', projectId);
-    else next.delete('project');
-    const query = next.toString();
-    const target = `${location.pathname}${query ? `?${query}` : ''}`;
+  const syncWorkspaceQuery = (
+    projectId: string | null,
+    conversationId: string | null = null,
+    replace = true,
+  ) => {
+    const target = buildAIWorkspaceHref(location.pathname, location.search, {
+      projectId,
+      conversationId,
+    });
     const current = `${location.pathname}${location.search}`;
-    if (target !== current) navigate(target, { replace: true });
+    if (target !== current) navigate(target, { replace });
   };
 
   useEffect(() => {
@@ -96,19 +104,126 @@ export function AISidebar(props: Props) {
     return active?.userId === user.id ? active.project.id : null;
   }, [localProjects, location.search, useLocalProjects, user?.id]);
 
-  // `/ai?project=<id>` is the durable project URL. When the database project
-  // list arrives, apply that URL to the real AI workspace state.
+  const conversations = useMemo(() => {
+    if (!useLocalProjects || !user?.id) return props.conversations;
+    return props.conversations.map((conversation) => ({
+      ...conversation,
+      projectId: conversation.projectId || projectForConversation(user.id, conversation.id),
+    }));
+  }, [props.conversations, useLocalProjects, user?.id]);
+
+  // `/ai?project=<id>` is the durable project root. Do not blank the workspace
+  // first when a chat deep link is present; the chat hydration effect below owns
+  // that state transition.
   useEffect(() => {
-    if (useLocalProjects || !props.onSelectProject) return;
-    const projectId = new URLSearchParams(location.search).get('project');
-    if (!projectId || projectId === props.activeProjectId) return;
-    if (!props.projects.some((project) => project.id === projectId)) return;
-    props.onSelectProject(projectId);
+    if (useLocalProjects || !props.onSelectProject || props.loading) return;
+    const route = parseAIWorkspaceSearch(location.search);
+    if (route.conversationId) return;
+    if (!route.projectId || route.projectId === props.activeProjectId) return;
+    if (!props.projects.some((project) => project.id === route.projectId)) return;
+    props.onSelectProject(route.projectId);
   }, [
     location.search,
     props.activeProjectId,
+    props.loading,
     props.onSelectProject,
     props.projects,
+    useLocalProjects,
+  ]);
+
+  // A chat URL is a real deep link. Hydrate it only from the user's already
+  // RLS-filtered conversation list, then canonicalize project+chat together.
+  useEffect(() => {
+    if (props.loading) return;
+    const route = parseAIWorkspaceSearch(location.search);
+    if (!route.conversationId) return;
+
+    const conversation = conversations.find((item) => item.id === route.conversationId);
+    if (!conversation) {
+      const projectExists = route.projectId
+        ? (useLocalProjects ? localProjects : props.projects).some(
+            (project) => project.id === route.projectId,
+          )
+        : false;
+      syncWorkspaceQuery(projectExists ? route.projectId : null, null, true);
+      return;
+    }
+
+    const mappedProjectId =
+      conversation.projectId ||
+      (useLocalProjects && user?.id
+        ? projectForConversation(user.id, conversation.id)
+        : null);
+    const availableProjects = useLocalProjects ? localProjects : props.projects;
+    const projectId = mappedProjectId && availableProjects.some((project) => project.id === mappedProjectId)
+      ? mappedProjectId
+      : null;
+
+    if (useLocalProjects && user?.id) {
+      if (projectId) setActiveLocalProject(user.id, projectId);
+      else clearActiveLocalProject();
+    }
+
+    if (props.activeId !== conversation.id) props.onSelect(conversation);
+
+    if (route.projectId !== projectId) {
+      syncWorkspaceQuery(projectId, conversation.id, true);
+    }
+  }, [
+    conversations,
+    localProjects,
+    location.search,
+    props.activeId,
+    props.loading,
+    props.onSelect,
+    props.projects,
+    useLocalProjects,
+    user?.id,
+  ]);
+
+  // When a brand-new chat receives its database id after the first response,
+  // replace the project-root/new-chat URL with its durable address.
+  useEffect(() => {
+    const previousActiveId = previousActiveIdRef.current;
+    previousActiveIdRef.current = props.activeId;
+    if (previousActiveId === props.activeId) return;
+
+    if (props.activeId) {
+      const projectId = useLocalProjects ? localActiveProjectId : props.activeProjectId;
+      syncWorkspaceQuery(projectId || null, props.activeId, true);
+      return;
+    }
+
+    if (previousActiveId) {
+      const route = parseAIWorkspaceSearch(location.search);
+      if (route.conversationId === previousActiveId) {
+        const projectId = useLocalProjects ? localActiveProjectId : props.activeProjectId;
+        syncWorkspaceQuery(projectId || null, null, true);
+      }
+    }
+  }, [
+    localActiveProjectId,
+    location.search,
+    props.activeId,
+    props.activeProjectId,
+    useLocalProjects,
+  ]);
+
+  // If the current chat is moved into/out of a project, keep the same chat URL
+  // but update its project scope instead of creating a second address.
+  useEffect(() => {
+    if (!props.activeId) return;
+    const route = parseAIWorkspaceSearch(location.search);
+    if (route.conversationId !== props.activeId) return;
+    const projectId = useLocalProjects ? localActiveProjectId : props.activeProjectId;
+    if (route.projectId !== (projectId || null)) {
+      syncWorkspaceQuery(projectId || null, props.activeId, true);
+    }
+  }, [
+    localActiveProjectId,
+    location.search,
+    props.activeId,
+    props.activeProjectId,
     useLocalProjects,
   ]);
 
@@ -120,20 +235,12 @@ export function AISidebar(props: Props) {
     setConversationProject(user.id, props.activeId, localActiveProjectId);
   }, [localActiveProjectId, props.activeId, useLocalProjects, user?.id]);
 
-  const conversations = useMemo(() => {
-    if (!useLocalProjects || !user?.id) return props.conversations;
-    return props.conversations.map((conversation) => ({
-      ...conversation,
-      projectId: conversation.projectId || projectForConversation(user.id, conversation.id),
-    }));
-  }, [props.conversations, useLocalProjects, user?.id]);
-
   const selectLocalProject = (projectId: string | null) => {
     if (!user?.id) return;
     if (projectId) setActiveLocalProject(user.id, projectId);
     else clearActiveLocalProject();
 
-    syncProjectQuery(projectId);
+    syncWorkspaceQuery(projectId, null, false);
 
     if (projectId) {
       const latest = conversations
@@ -148,7 +255,7 @@ export function AISidebar(props: Props) {
   };
 
   const selectBackendProject = (projectId: string | null) => {
-    syncProjectQuery(projectId);
+    syncWorkspaceQuery(projectId, null, false);
     props.onSelectProject?.(projectId);
   };
 
@@ -159,9 +266,9 @@ export function AISidebar(props: Props) {
       const localProjectId = projectId || projectForConversation(user.id, conversation.id);
       if (localProjectId) setActiveLocalProject(user.id, localProjectId);
       else clearActiveLocalProject();
-      syncProjectQuery(localProjectId);
+      syncWorkspaceQuery(localProjectId, conversation.id, false);
     } else {
-      syncProjectQuery(projectId);
+      syncWorkspaceQuery(projectId, conversation.id, false);
     }
 
     props.onSelect(conversation);
@@ -190,31 +297,43 @@ export function AISidebar(props: Props) {
 
   const deleteBackend = async (projectId: string) => {
     await props.onDeleteProject?.(projectId);
-    const routeProjectId = new URLSearchParams(location.search).get('project');
-    if (routeProjectId === projectId) syncProjectQuery(null);
+    const route = parseAIWorkspaceSearch(location.search);
+    if (route.projectId === projectId) syncWorkspaceQuery(null, null, true);
   };
 
   const moveLocalConversation = async (conversationId: string, projectId: string | null) => {
     if (!user?.id) return;
     setConversationProject(user.id, conversationId, projectId);
+    if (props.activeId === conversationId) {
+      if (projectId) setActiveLocalProject(user.id, projectId);
+      else clearActiveLocalProject();
+      syncWorkspaceQuery(projectId, conversationId, true);
+    }
     refreshLocalProjects();
+  };
+
+  const startNewConversation = () => {
+    const projectId = useLocalProjects ? localActiveProjectId : props.activeProjectId;
+    syncWorkspaceQuery(projectId || null, null, false);
+    props.onNew();
   };
 
   const startLocalProjectConversation = (projectId: string) => {
     if (!user?.id) return;
     setActiveLocalProject(user.id, projectId);
-    syncProjectQuery(projectId);
+    syncWorkspaceQuery(projectId, null, false);
     props.onNew();
     refreshLocalProjects();
   };
 
   const startBackendProjectConversation = (projectId: string) => {
+    syncWorkspaceQuery(projectId, null, false);
     if (props.activeProjectId === projectId) {
       props.onNew();
       return;
     }
     setPendingProjectNew(projectId);
-    selectBackendProject(projectId);
+    props.onSelectProject?.(projectId);
   };
 
   // Wait for AIPageV2 to adopt the project before calling its `onNew` closure;
@@ -230,6 +349,7 @@ export function AISidebar(props: Props) {
     <AISidebarV2
       {...props}
       conversations={conversations}
+      onNew={startNewConversation}
       onSelect={selectConversation}
       loading={props.loading && conversations.length === 0}
       projects={useLocalProjects ? localProjects : props.projects}

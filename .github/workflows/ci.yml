@@ -69,7 +69,7 @@ jobs:
         run: npx vitest run src/pages/marketplaceModuleSmoke.test.ts
 
       - name: AI routing regression tests
-        run: npx vitest run src/lib/ai/agentClient.test.ts src/lib/ai/projectWorkspace.test.ts src/lib/aiArtifacts.test.ts
+        run: npx vitest run src/lib/ai/agentClient.test.ts src/lib/ai/projectWorkspace.test.ts src/lib/ai/workspaceUrl.test.ts src/lib/aiArtifacts.test.ts
 
       - name: Messages typecheck
         run: npm run typecheck:messages
