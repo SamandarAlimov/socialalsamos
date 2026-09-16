@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   ChevronDown,
   ChevronLeft,
@@ -110,9 +111,9 @@ export function AISidebar({
   onDeleteProject,
   onMoveConversation,
 }: Props) {
+  const navigate = useNavigate();
   const [query, setQuery] = useState('');
   const [recentsOpen, setRecentsOpen] = useState(true);
-  const [projectsOpen, setProjectsOpen] = useState(true);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [projectDialogOpen, setProjectDialogOpen] = useState(false);
@@ -127,12 +128,12 @@ export function AISidebar({
   );
 
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return scopedConversations;
+    const clean = query.trim().toLowerCase();
+    if (!clean) return scopedConversations;
     return scopedConversations.filter(
       (conversation) =>
-        conversation.title.toLowerCase().includes(q) ||
-        conversation.messages.some((message) => message.content.toLowerCase().includes(q)),
+        conversation.title.toLowerCase().includes(clean) ||
+        conversation.messages.some((message) => message.content.toLowerCase().includes(clean)),
     );
   }, [query, scopedConversations]);
 
@@ -141,11 +142,11 @@ export function AISidebar({
   const activeProject = projects.find((project) => project.id === activeProjectId) ?? null;
 
   const snippetFor = (conversation: AIConversation) => {
-    const q = query.trim().toLowerCase();
-    if (!q) return null;
-    const hit = conversation.messages.find((message) => message.content.toLowerCase().includes(q));
+    const clean = query.trim().toLowerCase();
+    if (!clean) return null;
+    const hit = conversation.messages.find((message) => message.content.toLowerCase().includes(clean));
     if (!hit) return null;
-    const index = hit.content.toLowerCase().indexOf(q);
+    const index = hit.content.toLowerCase().indexOf(clean);
     return `…${hit.content.slice(Math.max(0, index - 24), index + 56).trim()}…`;
   };
 
@@ -312,7 +313,7 @@ export function AISidebar({
             <div className="flex items-center gap-1">
               <button
                 type="button"
-                onClick={() => setProjectsOpen((value) => !value)}
+                onClick={() => navigate('/projects')}
                 className={cn(
                   'flex min-w-0 flex-1 items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[13px] font-medium transition-colors hover:bg-muted/60',
                   activeProjectId && 'bg-muted/45',
@@ -321,7 +322,6 @@ export function AISidebar({
                 <FolderKanban className="h-4 w-4 shrink-0 text-muted-foreground" />
                 <span className="min-w-0 flex-1 truncate">Loyihalar</span>
                 {projects.length > 0 && <span className="text-[10px] text-muted-foreground">{projects.length}</span>}
-                <ChevronDown className={cn('h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform', !projectsOpen && '-rotate-90')} />
               </button>
               {onCreateProject && (
                 <Button
@@ -337,87 +337,66 @@ export function AISidebar({
               )}
             </div>
 
-            {projectsOpen && (
-              <div className="ml-3 mt-1 space-y-0.5 border-l border-border/55 pl-2">
-                <button
-                  type="button"
-                  onClick={() => onSelectProject?.(null)}
+            <div className="ml-3 mt-1 space-y-0.5 border-l border-border/55 pl-2">
+              {projects.map((project) => (
+                <div
+                  key={project.id}
                   className={cn(
-                    'flex w-full min-w-0 items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:bg-muted/55 hover:text-foreground',
-                    !activeProjectId && 'bg-muted/45 text-foreground',
+                    'group/project flex min-w-0 items-center rounded-lg transition-colors hover:bg-muted/55',
+                    activeProjectId === project.id && 'bg-muted/55',
                   )}
                 >
-                  <MessageSquare className="h-3.5 w-3.5 shrink-0" />
-                  <span className="truncate">Barcha suhbatlar</span>
-                </button>
-
-                {projects.map((project) => (
-                  <div
-                    key={project.id}
-                    className={cn(
-                      'group/project flex min-w-0 items-center rounded-lg transition-colors hover:bg-muted/55',
-                      activeProjectId === project.id && 'bg-muted/55',
-                    )}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => onSelectProject?.(project.id)}
-                      className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 text-left text-xs"
-                    >
-                      <FolderKanban className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                      <span className="min-w-0 flex-1 truncate font-medium">{project.name}</span>
-                    </button>
-
-                    {(onUpdateProject || onDeleteProject) && (
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            className="mr-0.5 h-6 w-6 shrink-0 rounded-md text-muted-foreground opacity-50 hover:opacity-100 group-hover/project:opacity-100"
-                            aria-label="Loyiha amallari"
-                          >
-                            <MoreHorizontal className="h-3.5 w-3.5" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="min-w-44">
-                          {onUpdateProject && (
-                            <DropdownMenuItem
-                              className="text-xs"
-                              onClick={() => {
-                                setEditingProject(project);
-                                setProjectDialogOpen(true);
-                              }}
-                            >
-                              <Pencil className="mr-2 h-3.5 w-3.5" /> Tahrirlash
-                            </DropdownMenuItem>
-                          )}
-                          {onDeleteProject && (
-                            <DropdownMenuItem
-                              className="text-xs text-destructive"
-                              onClick={() => void onDeleteProject(project.id)}
-                            >
-                              <Trash2 className="mr-2 h-3.5 w-3.5" /> O‘chirish
-                            </DropdownMenuItem>
-                          )}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    )}
-                  </div>
-                ))}
-
-                {projects.length === 0 && (
                   <button
                     type="button"
-                    onClick={openCreateProject}
-                    disabled={!onCreateProject}
-                    className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-[11px] text-muted-foreground hover:bg-muted/45 disabled:cursor-default disabled:hover:bg-transparent"
+                    onClick={() => onSelectProject?.(project.id)}
+                    className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 text-left text-xs"
                   >
-                    <Plus className="h-3.5 w-3.5" /> Birinchi loyihani yarating
+                    <FolderKanban className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    <span className="min-w-0 flex-1 truncate font-medium">{project.name}</span>
                   </button>
-                )}
-              </div>
-            )}
+
+                  {(onUpdateProject || onDeleteProject) && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="mr-0.5 h-6 w-6 shrink-0 rounded-md text-muted-foreground opacity-50 hover:opacity-100 group-hover/project:opacity-100"
+                          aria-label="Loyiha amallari"
+                        >
+                          <MoreHorizontal className="h-3.5 w-3.5" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="min-w-44">
+                        {onUpdateProject && (
+                          <DropdownMenuItem
+                            className="text-xs"
+                            onClick={() => {
+                              setEditingProject(project);
+                              setProjectDialogOpen(true);
+                            }}
+                          >
+                            <Pencil className="mr-2 h-3.5 w-3.5" /> Tahrirlash
+                          </DropdownMenuItem>
+                        )}
+                        {onDeleteProject && (
+                          <DropdownMenuItem
+                            className="text-xs text-destructive"
+                            onClick={() => void onDeleteProject(project.id)}
+                          >
+                            <Trash2 className="mr-2 h-3.5 w-3.5" /> O‘chirish
+                          </DropdownMenuItem>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
+                </div>
+              ))}
+
+              {projects.length === 0 && (
+                <p className="px-2 py-1.5 text-[11px] text-muted-foreground">Hozircha loyiha yo‘q</p>
+              )}
+            </div>
           </div>
 
           <button
