@@ -99,7 +99,11 @@
       "destination": "https://tcykulflvagvwuygwgmu.supabase.co/rest/v1/:path*"
     },
     {
-      "source": "/((?!api/.*|mp/.*|__media/.*|__supabase-media/.*|__supabase-rest/.*).*)",
+      "source": "/__ai-agent/:path*",
+      "destination": "https://api.alsamos.com/ai/:path*"
+    },
+    {
+      "source": "/((?!api/.*|mp/.*|__media/.*|__supabase-media/.*|__supabase-rest/.*|__ai-agent/.*).*)",
       "destination": "/index.html"
     }
   ],
