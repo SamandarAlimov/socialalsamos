@@ -23,7 +23,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
-import { db } from '@/lib/db';
+import { migrateLegacyLocalProjectsToCloud } from '@/lib/ai/migrateLegacyProjects';
 import {
   countConversationsByProject,
   createLocalProject,
@@ -31,6 +31,7 @@ import {
   listLocalProjects,
   updateLocalProject,
 } from '@/lib/ai/projectsStore';
+import { db } from '@/lib/db';
 
 type ProjectBackendMode = 'database' | 'local';
 
@@ -125,6 +126,15 @@ export default function ProjectsPage() {
 
     setLoading(true);
     try {
+      // Older builds could create projects only in this browser. Migrate them
+      // before reading the cloud list so /projects works correctly even when it
+      // is the first AI route the user opens after this fix ships.
+      try {
+        await migrateLegacyLocalProjectsToCloud(user.id);
+      } catch (migrationError) {
+        console.error('Legacy AI project migration failed on Projects page:', migrationError);
+      }
+
       const projectResult = await db
         .from('ai_projects')
         .select('*')
