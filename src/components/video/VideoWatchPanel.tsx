@@ -30,7 +30,9 @@ import { cn } from '@/lib/utils';
 import { UI_LAYER } from '@/lib/uiLayers';
 import { resolveVideoDigitSeekTarget } from '@/lib/videoKeyboardControls';
 import {
+  readVideosAutoplayPreference,
   readVideosMutedPreference,
+  writeVideosAutoplayPreference,
   writeVideosMutedPreference,
 } from '@/lib/videoPlaybackPreference';
 import {
@@ -89,6 +91,7 @@ export function VideoWatchPanel({
     () => videos.filter((item) => item.id !== activeVideoId),
     [activeVideoId, videos],
   );
+  const nextVideo = upNext[0] ?? null;
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const playerRef = useRef<HTMLDivElement>(null);
@@ -101,6 +104,7 @@ export function VideoWatchPanel({
   const initialPlaybackRef = useRef<VideoPlaybackSnapshot | null>(initialPlayback);
   const pendingPlaybackRef = useRef<VideoPlaybackSnapshot | null>(initialPlayback);
   const desiredPausedRef = useRef(initialPlayback?.paused ?? false);
+  const autoAdvanceRef = useRef(false);
   const zoom = usePinchZoom(2.5, 1, playerRef);
 
   initialPlaybackRef.current = initialPlayback;
@@ -108,6 +112,7 @@ export function VideoWatchPanel({
   const [isPlaying, setIsPlaying] = useState(!(initialPlayback?.paused ?? false));
   const [isEnded, setIsEnded] = useState(false);
   const [isMuted, setIsMuted] = useState(mutedRef.current);
+  const [isAutoplayEnabled, setIsAutoplayEnabled] = useState(readVideosAutoplayPreference);
   const [speed, setSpeed] = useState(1);
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(initialPlayback?.time ?? 0);
@@ -116,7 +121,6 @@ export function VideoWatchPanel({
   const [showControls, setShowControls] = useState(true);
   const [showLikeBurst, setShowLikeBurst] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [fitCover, setFitCover] = useState(false);
   const [descriptionOpen, setDescriptionOpen] = useState(false);
 
   const { lightTap, mediumTap, successFeedback } = useHapticFeedback();
@@ -171,11 +175,22 @@ export function VideoWatchPanel({
     onClose(playback);
   }, [onClose, publishPlayback]);
 
+  const advanceToNextVideo = useCallback((playback?: VideoPlaybackSnapshot) => {
+    if (!nextVideo) return false;
+    autoAdvanceRef.current = true;
+    onSelectVideo(nextVideo.id, playback ?? publishPlayback());
+    return true;
+  }, [nextVideo, onSelectVideo, publishPlayback]);
+
   useEffect(() => {
     mutedRef.current = isMuted;
     writeVideosMutedPreference(isMuted);
     if (videoRef.current) videoRef.current.muted = isMuted;
   }, [isMuted]);
+
+  useEffect(() => {
+    writeVideosAutoplayPreference(isAutoplayEnabled);
+  }, [isAutoplayEnabled]);
 
   useEffect(() => {
     speedRef.current = speed;
@@ -189,7 +204,10 @@ export function VideoWatchPanel({
   }, []);
 
   useEffect(() => {
-    const playback = initialPlaybackRef.current ?? { time: 0, paused: false };
+    const playback = autoAdvanceRef.current
+      ? { time: 0, paused: false }
+      : initialPlaybackRef.current ?? { time: 0, paused: false };
+    autoAdvanceRef.current = false;
     pendingPlaybackRef.current = playback;
     desiredPausedRef.current = playback.paused;
     setCurrentTime(playback.time);
@@ -314,6 +332,18 @@ export function VideoWatchPanel({
     revealControls();
   }, [lightTap, revealControls]);
 
+  const stepSpeed = useCallback((direction: -1 | 1) => {
+    setSpeed((current) => {
+      const index = PLAYBACK_RATES.indexOf(current as (typeof PLAYBACK_RATES)[number]);
+      const nextIndex = Math.min(
+        PLAYBACK_RATES.length - 1,
+        Math.max(0, Math.max(index, 0) + direction),
+      );
+      return PLAYBACK_RATES[nextIndex];
+    });
+    revealControls();
+  }, [revealControls]);
+
   const toggleFullscreen = useCallback(async () => {
     try {
       if (document.fullscreenElement) await document.exitFullscreen();
@@ -329,6 +359,12 @@ export function VideoWatchPanel({
       const target = event.target instanceof HTMLElement ? event.target : null;
       if (target?.closest('input, textarea, select, button, a, [contenteditable="true"], [role="slider"]')) return;
       if (event.metaKey || event.ctrlKey || event.altKey) return;
+
+      if (event.shiftKey && event.key.toLowerCase() === 'n') {
+        event.preventDefault();
+        advanceToNextVideo();
+        return;
+      }
 
       const digitTarget = resolveVideoDigitSeekTarget(
         event.key,
@@ -348,13 +384,15 @@ export function VideoWatchPanel({
         case 'arrowleft': event.preventDefault(); seekBy(-5); break;
         case 'arrowright': event.preventDefault(); seekBy(5); break;
         case 'm': event.preventDefault(); setIsMuted((value) => !value); break;
+        case '>': event.preventDefault(); stepSpeed(1); break;
+        case '<': event.preventDefault(); stepSpeed(-1); break;
         case 'f': event.preventDefault(); void toggleFullscreen(); break;
         case 'escape': if (!document.fullscreenElement) { event.preventDefault(); closeWithPlayback(); } break;
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [closeWithPlayback, duration, handleSeek, keyboardEnabled, seekBy, toggleFullscreen, togglePlay]);
+  }, [advanceToNextVideo, closeWithPlayback, duration, handleSeek, keyboardEnabled, seekBy, stepSpeed, toggleFullscreen, togglePlay]);
 
   if (!video) return null;
 
@@ -366,7 +404,7 @@ export function VideoWatchPanel({
     <div className="min-h-full bg-background pb-[calc(env(safe-area-inset-bottom,0px)+24px)] text-foreground">
       <div className="sticky top-0 z-10 border-b border-border/70 bg-background/95 px-4 py-3 backdrop-blur-xl">
         <h2 className="text-sm font-semibold">Keyingi videolar</h2>
-        <p className="mt-0.5 text-[11px] text-muted-foreground">Avtomatik o‘tish o‘chirilgan</p>
+        <p className="mt-0.5 text-[11px] text-muted-foreground">{isAutoplayEnabled ? 'Avtomatik o‘tish yoqilgan' : 'Avtomatik o‘tish o‘chirilgan'}</p>
       </div>
       <div className="py-1">
         {upNext.map((item) => (
@@ -391,7 +429,10 @@ export function VideoWatchPanel({
         <div
           ref={playerRef}
           className={cn('relative w-full shrink-0 overflow-hidden bg-black', isFullscreen ? 'h-full' : 'aspect-video lg:h-full lg:flex-1 lg:aspect-auto')}
-          onPointerMove={revealControls}
+          onPointerMove={(event) => {
+            revealControls();
+            zoom.handlers.onPointerMove(event);
+          }}
           onWheel={zoom.handlers.onWheel}
           onTouchStart={(event) => {
             if (event.touches.length >= 2 || zoom.isZoomed) { event.stopPropagation(); endHold(); }
@@ -407,19 +448,32 @@ export function VideoWatchPanel({
           onPointerDown={(event) => {
             const target = event.target instanceof HTMLElement ? event.target : null;
             if (target?.closest('button, a, input, textarea, select, [role="slider"], [data-video-interactive="true"]')) return;
+            if (zoom.isZoomed) {
+              endHold();
+              zoom.handlers.onPointerDown(event);
+              return;
+            }
             if (event.pointerType === 'mouse' && event.button !== 0) return;
             startHold();
           }}
           onPointerUp={(event) => {
             const target = event.target instanceof HTMLElement ? event.target : null;
             if (target?.closest('button, a, input, textarea, select, [role="slider"], [data-video-interactive="true"]')) return;
+            if (zoom.isZoomed) {
+              zoom.handlers.onPointerUp(event);
+              endHold();
+              return;
+            }
             if (!endHold()) registerTap(event.clientX, event.clientY);
           }}
-          onPointerCancel={() => endHold()}
+          onPointerCancel={(event) => {
+            zoom.handlers.onPointerCancel(event);
+            endHold();
+          }}
           onPointerLeave={() => endHold()}
           onDoubleClick={(event) => event.preventDefault()}
         >
-          {aspectKind !== 'landscape' && !fitCover && posterUrl && (
+          {aspectKind !== 'landscape' && posterUrl && (
             <><img src={posterUrl} alt="" aria-hidden className="pointer-events-none absolute inset-0 h-full w-full scale-110 object-cover opacity-45 blur-[34px]" /><div className="pointer-events-none absolute inset-0 bg-black/30" /></>
           )}
 
@@ -427,7 +481,7 @@ export function VideoWatchPanel({
             ref={videoRef}
             src={videoUrl}
             poster={posterUrl}
-            className={cn('relative z-[1] h-full w-full will-change-transform', fitCover ? 'object-cover' : 'object-contain')}
+            className="relative z-[1] h-full w-full object-contain will-change-transform"
             style={{ transform: `translate3d(${zoom.translateX}px, ${zoom.translateY}px, 0) scale(${zoom.scale})`, transformOrigin: 'center center' }}
             playsInline
             muted={isMuted}
@@ -454,13 +508,16 @@ export function VideoWatchPanel({
             }}
             onPause={() => setIsPlaying(false)}
             onEnded={(event) => {
-              // No autoplay/auto-next: stop on the current item and expose replay.
               const endTime = event.currentTarget.duration || duration;
+              const playback = { time: endTime, paused: true };
               desiredPausedRef.current = true;
               setCurrentTime(endTime);
-              setIsEnded(true);
               setIsPlaying(false);
-              onPlaybackChange?.(activeVideoId, { time: endTime, paused: true });
+              onPlaybackChange?.(activeVideoId, playback);
+
+              if (isAutoplayEnabled && advanceToNextVideo(playback)) return;
+
+              setIsEnded(true);
               setShowControls(true);
               if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
             }}
@@ -470,7 +527,6 @@ export function VideoWatchPanel({
             <Button variant="ghost" size="icon" onClick={(event) => { event.stopPropagation(); closeWithPlayback(); }} className={cn('h-10 w-10 rounded-full bg-black/30 text-white hover:bg-white/15', showControls ? 'pointer-events-auto' : 'pointer-events-none')} aria-label="Videolarga qaytish"><ArrowLeft className="h-5 w-5" /></Button>
             <div className={cn('flex items-center gap-2', showControls ? 'pointer-events-auto' : 'pointer-events-none')}>
               <Button variant="ghost" size="sm" onClick={cycleSpeed} className="h-9 rounded-full bg-black/30 px-3 text-xs font-semibold text-white">{speed}x</Button>
-              <Button variant="ghost" size="icon" onClick={() => setFitCover((value) => !value)} className="h-10 w-10 rounded-full bg-black/30 text-white" aria-label="Sig‘dirish">{fitCover ? <Minimize2 className="h-4.5 w-4.5" /> : <Maximize2 className="h-4.5 w-4.5" />}</Button>
             </div>
           </div>
 
@@ -486,7 +542,22 @@ export function VideoWatchPanel({
                 <Button variant="ghost" size="icon" onClick={() => setIsMuted((value) => !value)} className="h-9 w-9 rounded-full text-white hover:bg-white/15" aria-label={isMuted ? 'Ovozni yoqish' : 'Ovozni o‘chirish'}>{isMuted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}</Button>
                 <span className="ml-1 text-[11px] tabular-nums text-white/90">{formatMediaTime(currentTime)} / {formatMediaTime(duration)}</span>
               </div>
-              <Button variant="ghost" size="icon" onClick={() => void toggleFullscreen()} className="h-9 w-9 rounded-full text-white hover:bg-white/15" aria-label="To‘liq ekran">{isFullscreen ? <Minimize2 className="h-5 w-5" /> : <Maximize2 className="h-5 w-5" />}</Button>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setIsAutoplayEnabled((value) => !value)}
+                  className="h-9 w-10 rounded-full text-white hover:bg-white/15"
+                  aria-label={isAutoplayEnabled ? 'Avtomatik ijroni o‘chirish' : 'Avtomatik ijroni yoqish'}
+                  aria-pressed={isAutoplayEnabled}
+                  title={isAutoplayEnabled ? 'Avtomatik ijro yoqilgan' : 'Avtomatik ijro o‘chirilgan'}
+                >
+                  <span className={cn('relative block h-4 w-7 rounded-full transition-colors', isAutoplayEnabled ? 'bg-white/90' : 'bg-white/35')}>
+                    <span className={cn('absolute top-0.5 h-3 w-3 rounded-full transition-transform', isAutoplayEnabled ? 'translate-x-3.5 bg-black' : 'translate-x-0.5 bg-white')} />
+                  </span>
+                </Button>
+                <Button variant="ghost" size="icon" onClick={() => void toggleFullscreen()} className="h-9 w-9 rounded-full text-white hover:bg-white/15" aria-label="To‘liq ekran">{isFullscreen ? <Minimize2 className="h-5 w-5" /> : <Maximize2 className="h-5 w-5" />}</Button>
+              </div>
             </div>
           </div>
         </div>

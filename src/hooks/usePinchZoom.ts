@@ -15,6 +15,10 @@ interface UsePinchZoomReturn {
     onTouchStart: (e: React.TouchEvent) => void;
     onTouchMove: (e: React.TouchEvent) => void;
     onTouchEnd: (e: React.TouchEvent) => void;
+    onPointerDown: (e: React.PointerEvent) => void;
+    onPointerMove: (e: React.PointerEvent) => void;
+    onPointerUp: (e: React.PointerEvent) => void;
+    onPointerCancel: (e: React.PointerEvent) => void;
     onDoubleClick: (e: React.MouseEvent) => void;
     onWheel: (e: React.WheelEvent) => void;
   };
@@ -37,6 +41,13 @@ export function usePinchZoom(
   const isPinching = useRef(false);
   const isDragging = useRef(false);
   const dragStart = useRef<{ x: number; y: number } | null>(null);
+  const pointerDrag = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+    translateX: number;
+    translateY: number;
+  } | null>(null);
   const isZoomed = state.scale > 1;
 
   const getDistance = (touches: React.TouchList) => {
@@ -143,6 +154,53 @@ export function usePinchZoom(
     }
   }, [clampTranslation, containerRef, isZoomed, resetZoom, state.scale]);
 
+  const onPointerDown = useCallback((e: React.PointerEvent) => {
+    if (!isZoomed || (e.pointerType !== 'mouse' && e.pointerType !== 'pen')) return;
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    e.preventDefault();
+    pointerDrag.current = {
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      startY: e.clientY,
+      translateX: state.translateX,
+      translateY: state.translateY,
+    };
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+  }, [isZoomed, state.translateX, state.translateY]);
+
+  const onPointerMove = useCallback((e: React.PointerEvent) => {
+    const drag = pointerDrag.current;
+    if (!drag || drag.pointerId !== e.pointerId || !isZoomed) return;
+    e.preventDefault();
+    const clamped = clampTranslation(
+      drag.translateX + (e.clientX - drag.startX),
+      drag.translateY + (e.clientY - drag.startY),
+      state.scale,
+    );
+    setState((previous) => ({
+      ...previous,
+      translateX: clamped.x,
+      translateY: clamped.y,
+    }));
+  }, [clampTranslation, isZoomed, state.scale]);
+
+  const finishPointerDrag = useCallback((e: React.PointerEvent) => {
+    const drag = pointerDrag.current;
+    if (!drag || drag.pointerId !== e.pointerId) return;
+    pointerDrag.current = null;
+    if (e.currentTarget.hasPointerCapture?.(e.pointerId)) {
+      e.currentTarget.releasePointerCapture?.(e.pointerId);
+    }
+  }, []);
+
+  const onPointerUp = useCallback((e: React.PointerEvent) => {
+    finishPointerDrag(e);
+  }, [finishPointerDrag]);
+
+  const onPointerCancel = useCallback((e: React.PointerEvent) => {
+    finishPointerDrag(e);
+  }, [finishPointerDrag]);
+
   const onDoubleClick = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     if (isZoomed) {
@@ -208,13 +266,27 @@ export function usePinchZoom(
     translateX: state.translateX,
     translateY: state.translateY,
     isZoomed,
-    handlers: { onTouchStart, onTouchMove, onTouchEnd, onDoubleClick, onWheel },
+    handlers: {
+      onTouchStart,
+      onTouchMove,
+      onTouchEnd,
+      onPointerDown,
+      onPointerMove,
+      onPointerUp,
+      onPointerCancel,
+      onDoubleClick,
+      onWheel,
+    },
     resetZoom,
     containerRef: containerRef as React.RefObject<HTMLDivElement>,
   }), [
     containerRef,
     isZoomed,
     onDoubleClick,
+    onPointerCancel,
+    onPointerDown,
+    onPointerMove,
+    onPointerUp,
     onTouchEnd,
     onTouchMove,
     onTouchStart,
