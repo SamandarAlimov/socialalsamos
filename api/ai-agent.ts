@@ -63,7 +63,7 @@ export default async function handler(req: any, res: any) {
   }
 
   const controller = new AbortController();
-  req.on?.('close', () => controller.abort());
+  req.on?.('aborted', () => controller.abort());
 
   try {
     const upstream = await fetch(`${agentServerBase()}/api/alsamos/agent`, {
@@ -104,7 +104,10 @@ export default async function handler(req: any, res: any) {
   } catch (error) {
     if (controller.signal.aborted) return;
     console.error('AI agent proxy failed', error);
-    if (!res.headersSent) res.status(502);
-    res.end(JSON.stringify({ error: 'UPSTREAM_UNAVAILABLE', message: 'AI agent serveriga ulanib bo‘lmadi.' }));
+    if (!res.headersSent) {
+      res.status(502).json({ error: 'UPSTREAM_UNAVAILABLE', message: 'AI agent serveriga ulanib bo‘lmadi.' });
+      return;
+    }
+    res.end();
   }
 }
