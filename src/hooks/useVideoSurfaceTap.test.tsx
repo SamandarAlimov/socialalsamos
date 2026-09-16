@@ -2,6 +2,12 @@ import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { resolveAdjacentVideoIndex, resolveVideoDigitSeekTarget } from '@/lib/videoKeyboardControls';
+import {
+  resolveWatchSurfaceTapAction,
+  shouldHandleWatchDesktopDoubleClick,
+  shouldRevealWatchControlsOnPointerMove,
+  WATCH_CONTROLS_HIDE_MS,
+} from '@/lib/videoWatchControls';
 import { resolveVideoDoubleTapZone, useVideoSurfaceTap } from './useVideoSurfaceTap';
 
 describe('resolveVideoDoubleTapZone', () => {
@@ -35,6 +41,25 @@ describe('video keyboard controls', () => {
     expect(resolveAdjacentVideoIndex(1, 4, -1)).toBe(0);
     expect(resolveAdjacentVideoIndex(1, 4, 1)).toBe(2);
     expect(resolveAdjacentVideoIndex(3, 4, 1)).toBe(3);
+  });
+});
+
+describe('Watch controller interaction policy', () => {
+  it('uses a three-second YouTube-style autohide window', () => {
+    expect(WATCH_CONTROLS_HIDE_MS).toBe(3000);
+  });
+
+  it('uses touch surface taps to show or hide controls instead of playback', () => {
+    expect(resolveWatchSurfaceTapAction(false)).toBe('show-controls');
+    expect(resolveWatchSurfaceTapAction(true)).toBe('hide-controls');
+  });
+
+  it('keeps hover reveal and double-click fullscreen mouse-only', () => {
+    expect(shouldRevealWatchControlsOnPointerMove('mouse')).toBe(true);
+    expect(shouldRevealWatchControlsOnPointerMove('touch')).toBe(false);
+    expect(shouldRevealWatchControlsOnPointerMove('pen')).toBe(false);
+    expect(shouldHandleWatchDesktopDoubleClick('mouse')).toBe(true);
+    expect(shouldHandleWatchDesktopDoubleClick('touch')).toBe(false);
   });
 });
 
@@ -189,7 +214,7 @@ describe('useVideoSurfaceTap', () => {
     expect(onSingleTap).not.toHaveBeenCalled();
   });
 
-  it('routes VideoWatchPanel single taps to the play pause callback', () => {
+  it('routes Watch single taps to the caller without mutating media playback', () => {
     const surface = document.createElement('div');
     const video = document.createElement('video');
     const backButton = document.createElement('button');
@@ -215,6 +240,8 @@ describe('useVideoSurfaceTap', () => {
 
     expect(onSingleTap).toHaveBeenCalledTimes(1);
     expect(onDoubleTap).not.toHaveBeenCalled();
+    expect(video.paused).toBe(true);
+    expect(video.currentTime).toBe(0);
   });
 
   it('collapses an expanded caption when a single tap lands above the username info block', () => {

@@ -112,9 +112,9 @@ function seekVideoBy(video: HTMLVideoElement, delta: number) {
 /**
  * Distinguishes single tap from double tap while preserving the richer Alsamos
  * video gesture model:
- * - regular Videos feed single tap: play/pause;
+ * - regular Videos feed single tap: caller-controlled action (currently play/pause);
  * - if the caption is expanded, a single tap above its info block: collapse it;
- * - YouTube-style VideoWatchPanel single tap: play/pause through the caller;
+ * - VideoWatchPanel single tap: caller-controlled controller visibility;
  * - double tap in left third: seek -10s (YouTube-style);
  * - double tap in center third: caller action (VideosPage = like);
  * - double tap in right third: seek +10s (YouTube-style).
