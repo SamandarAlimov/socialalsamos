@@ -1,0 +1,129 @@
+name: Apply notification count fix once
+
+on:
+  push:
+    branches:
+      - fix/notification-counts
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: ${{ !contains(github.event.head_commit.message, '[notification-count-fix-applied]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/notification-counts
+          fetch-depth: 0
+
+      - name: Patch notification tab counts
+        shell: bash
+        run: |
+          python <<'PY'
+          from pathlib import Path
+
+          path = Path('src/pages/NotificationsPage.tsx')
+          source = path.read_text()
+
+          consolidate_end = """  return Array.from(groups.values()).sort(
+            (a, b) => new Date(b.latestAt).getTime() - new Date(a.latestAt).getTime(),
+          );
+          }
+
+          function GroupedNotificationItem({
+          """
+
+          consolidate_with_counter = """  return Array.from(groups.values()).sort(
+            (a, b) => new Date(b.latestAt).getTime() - new Date(a.latestAt).getTime(),
+          );
+          }
+
+          function countDisplayedNotifications(notifications: Notification[]): number {
+            const buckets: Record<keyof TimeGroupedNotifications, Notification[]> = {
+              today: [],
+              yesterday: [],
+              thisWeek: [],
+              thisMonth: [],
+              older: [],
+            };
+
+            notifications.forEach((notification) => {
+              const date = new Date(notification.created_at);
+              if (Number.isNaN(date.getTime())) return buckets.older.push(notification);
+              if (isToday(date)) buckets.today.push(notification);
+              else if (isYesterday(date)) buckets.yesterday.push(notification);
+              else if (isThisWeek(date, { weekStartsOn: 1 })) buckets.thisWeek.push(notification);
+              else if (isThisMonth(date)) buckets.thisMonth.push(notification);
+              else buckets.older.push(notification);
+            });
+
+            return (
+              consolidateNotifications(buckets.today).length +
+              consolidateNotifications(buckets.yesterday).length +
+              consolidateNotifications(buckets.thisWeek).length +
+              consolidateNotifications(buckets.thisMonth).length +
+              consolidateNotifications(buckets.older).length
+            );
+          }
+
+          function GroupedNotificationItem({
+          """
+
+          if consolidate_end not in source:
+            raise SystemExit('Could not find consolidateNotifications insertion point')
+          source = source.replace(consolidate_end, consolidate_with_counter, 1)
+
+          old_counts = """  const filterCounts = useMemo(
+            () => ({
+              all: notifications.length,
+              mentions: notifications.filter((item) => MENTION_TYPES.includes(item.type)).length,
+              comments: notifications.filter((item) => COMMENT_TYPES.includes(item.type)).length,
+              collaborations: notifications.filter((item) => COLLABORATION_TYPES.includes(item.type)).length,
+              likes: notifications.filter((item) => item.type === 'like').length,
+              follows: notifications.filter((item) => item.type === 'follow').length,
+            }),
+            [notifications],
+          );
+          """
+
+          new_counts = """  const filterCounts = useMemo(
+            () => ({
+              all: countDisplayedNotifications(notifications),
+              mentions: countDisplayedNotifications(
+                notifications.filter((item) => MENTION_TYPES.includes(item.type)),
+              ),
+              comments: countDisplayedNotifications(
+                notifications.filter((item) => COMMENT_TYPES.includes(item.type)),
+              ),
+              collaborations: countDisplayedNotifications(
+                notifications.filter((item) => COLLABORATION_TYPES.includes(item.type)),
+              ),
+              likes: countDisplayedNotifications(
+                notifications.filter((item) => item.type === 'like'),
+              ),
+              follows: countDisplayedNotifications(
+                notifications.filter((item) => item.type === 'follow'),
+              ),
+            }),
+            [notifications],
+          );
+          """
+
+          if old_counts not in source:
+            raise SystemExit('Could not find notification filter count block')
+          source = source.replace(old_counts, new_counts, 1)
+
+          path.write_text(source)
+          PY
+
+      - name: Commit the fix and remove this one-off workflow
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/fix-notification-counts-once.yml
+          git add src/pages/NotificationsPage.tsx
+          git commit -m "fix: count consolidated notifications [notification-count-fix-applied]"
+          git push origin HEAD:fix/notification-counts
