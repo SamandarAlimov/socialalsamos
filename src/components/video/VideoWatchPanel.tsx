@@ -91,7 +91,8 @@ export function VideoWatchPanel({
     () => videos.filter((item) => item.id !== activeVideoId),
     [activeVideoId, videos],
   );
-  const nextVideo = upNext[0] ?? null;
+  const autoplayHistoryRef = useRef<Set<string>>(new Set([activeVideoId]));
+  const nextVideo = upNext.find((item) => !autoplayHistoryRef.current.has(item.id)) ?? upNext[0] ?? null;
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const playerRef = useRef<HTMLDivElement>(null);
@@ -101,6 +102,8 @@ export function VideoWatchPanel({
   const holdActiveRef = useRef(false);
   const speedRef = useRef(1);
   const mutedRef = useRef(readVideosMutedPreference());
+  const volumeRef = useRef(1);
+  const lastAudibleVolumeRef = useRef(1);
   const initialPlaybackRef = useRef<VideoPlaybackSnapshot | null>(initialPlayback);
   const pendingPlaybackRef = useRef<VideoPlaybackSnapshot | null>(initialPlayback);
   const desiredPausedRef = useRef(initialPlayback?.paused ?? false);
@@ -160,6 +163,7 @@ export function VideoWatchPanel({
     }
 
     el.muted = mutedRef.current;
+    el.volume = volumeRef.current;
     el.playbackRate = speedRef.current;
 
     if (desiredPausedRef.current) {
@@ -181,6 +185,29 @@ export function VideoWatchPanel({
     onSelectVideo(nextVideo.id, playback ?? publishPlayback());
     return true;
   }, [nextVideo, onSelectVideo, publishPlayback]);
+
+  const toggleMute = useCallback(() => {
+    setIsMuted((current) => {
+      const next = !current;
+      if (!next && volumeRef.current <= 0) {
+        volumeRef.current = Math.max(0.05, lastAudibleVolumeRef.current);
+        if (videoRef.current) videoRef.current.volume = volumeRef.current;
+      }
+      return next;
+    });
+    revealControls();
+  }, [revealControls]);
+
+  const adjustVolume = useCallback((delta: number) => {
+    const el = videoRef.current;
+    const current = el?.volume ?? volumeRef.current;
+    const next = Math.min(1, Math.max(0, current + delta));
+    volumeRef.current = next;
+    if (next > 0) lastAudibleVolumeRef.current = next;
+    if (el) el.volume = next;
+    setIsMuted(next <= 0);
+    revealControls();
+  }, [revealControls]);
 
   useEffect(() => {
     mutedRef.current = isMuted;
@@ -204,6 +231,7 @@ export function VideoWatchPanel({
   }, []);
 
   useEffect(() => {
+    autoplayHistoryRef.current.add(activeVideoId);
     const playback = autoAdvanceRef.current
       ? { time: 0, paused: false }
       : initialPlaybackRef.current ?? { time: 0, paused: false };
@@ -383,7 +411,9 @@ export function VideoWatchPanel({
         case 'l': event.preventDefault(); seekBy(10); break;
         case 'arrowleft': event.preventDefault(); seekBy(-5); break;
         case 'arrowright': event.preventDefault(); seekBy(5); break;
-        case 'm': event.preventDefault(); setIsMuted((value) => !value); break;
+        case 'arrowup': event.preventDefault(); adjustVolume(0.05); break;
+        case 'arrowdown': event.preventDefault(); adjustVolume(-0.05); break;
+        case 'm': event.preventDefault(); toggleMute(); break;
         case '>': event.preventDefault(); stepSpeed(1); break;
         case '<': event.preventDefault(); stepSpeed(-1); break;
         case 'f': event.preventDefault(); void toggleFullscreen(); break;
@@ -392,7 +422,7 @@ export function VideoWatchPanel({
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [advanceToNextVideo, closeWithPlayback, duration, handleSeek, keyboardEnabled, seekBy, stepSpeed, toggleFullscreen, togglePlay]);
+  }, [adjustVolume, advanceToNextVideo, closeWithPlayback, duration, handleSeek, keyboardEnabled, seekBy, stepSpeed, toggleFullscreen, toggleMute, togglePlay]);
 
   if (!video) return null;
 
@@ -539,7 +569,7 @@ export function VideoWatchPanel({
             <div className="mt-1 flex items-center justify-between text-white">
               <div className="flex items-center gap-1">
                 <Button variant="ghost" size="icon" onClick={togglePlay} className="h-9 w-9 rounded-full text-white hover:bg-white/15" aria-label={isPlaying ? 'Pauza' : 'Ijro'}>{isPlaying ? <Pause className="h-5 w-5" /> : isEnded ? <RotateCcw className="h-5 w-5" /> : <Play className="h-5 w-5" />}</Button>
-                <Button variant="ghost" size="icon" onClick={() => setIsMuted((value) => !value)} className="h-9 w-9 rounded-full text-white hover:bg-white/15" aria-label={isMuted ? 'Ovozni yoqish' : 'Ovozni o‘chirish'}>{isMuted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}</Button>
+                <Button variant="ghost" size="icon" onClick={toggleMute} className="h-9 w-9 rounded-full text-white hover:bg-white/15" aria-label={isMuted ? 'Ovozni yoqish' : 'Ovozni o‘chirish'}>{isMuted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}</Button>
                 <span className="ml-1 text-[11px] tabular-nums text-white/90">{formatMediaTime(currentTime)} / {formatMediaTime(duration)}</span>
               </div>
               <div className="flex items-center gap-1">
