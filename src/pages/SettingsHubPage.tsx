@@ -506,13 +506,7 @@ export default function SettingsHubPage() {
             <h1 className="truncate text-xl font-bold tracking-tight md:text-2xl">
               {routeSection ? activeLabel : 'Sozlamalar'}
             </h1>
-            <p className="mt-1 hidden text-sm text-muted-foreground md:block">
-              Hisobingiz, maxfiylik, xavfsizlik va ilova tajribasini bitta markazdan boshqaring.
-            </p>
           </div>
-        </div>
-        <div className="hidden items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground md:flex">
-          <ShieldCheck className="h-3.5 w-3.5" /> Hisob markazi
         </div>
       </div>
 
