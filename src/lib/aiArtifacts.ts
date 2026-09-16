@@ -44,7 +44,7 @@ export function extensionFor(a: AIArtifact): string {
 const CODE_BLOCK = /```([\w+-]+)?\n([\s\S]*?)```/g;
 const DOC_LANGS = new Set(['markdown', 'md', 'csv', 'html']);
 const MIN_CODE_LINES = 8;
-const MIN_DOC_LINES = 6;
+const MIN_DOC_LINES = 8;
 
 const CODE_INTENT =
   /(?:^|\s)(?:\/code|\/run)\b|\b(kod|code|script|skript|function|funksiya|component|komponent|fayl|file|migration|migratsiya|sql|api|endpoint|class|module|modul)\b.{0,90}\b(yoz|yarat|qil|tayyorla|build|create|write|generate|implement|make|создай|напиши|сделай)\b|\b(yoz|yarat|qil|tayyorla|build|create|write|generate|implement|make|создай|напиши|сделай)\b.{0,90}\b(kod|code|script|skript|function|funksiya|component|komponent|fayl|file|migration|migratsiya|sql|api|endpoint|class|module|modul)\b/i;
@@ -66,14 +66,14 @@ function previousUserText(messages: AIMessage[], index: number): string {
   return '';
 }
 
-function toolUsed(msg: AIMessage, name: string): boolean {
-  return Boolean(msg.tools?.some((tool) => tool.name === name && tool.status === 'done'));
-}
-
 /**
- * Artifact = user asked for a reusable deliverable, not merely a long answer.
- * Explanatory prose, ordinary plans, and code snippets inside an explanation do
- * not automatically populate the artifact shelf.
+ * Artifact = a standalone reusable deliverable, not a mirror of chat output.
+ *
+ * Generated images/videos stay in the message that created them. Ordinary prose
+ * also stays in chat. Today the artifact shelf is populated only by substantial
+ * fenced code/document deliverables that the user explicitly asked to create.
+ * Media kinds remain in AIArtifact for backwards compatibility with any future
+ * explicit artifact records, but chat media must never be auto-promoted here.
  */
 export function extractArtifacts(messages: AIMessage[]): AIArtifact[] {
   const out: AIArtifact[] = [];
@@ -81,47 +81,9 @@ export function extractArtifacts(messages: AIMessage[]): AIArtifact[] {
   messages.forEach((msg, messageIndex) => {
     if (msg.role !== 'assistant' || msg.error) return;
     const userText = previousUserText(messages, messageIndex);
-
-    const singleImage = msg.imageUrl;
-    const imageUrls = [
-      ...(singleImage ? [singleImage] : []),
-      ...(msg.images ?? []),
-    ].filter((url, index, all) => Boolean(url) && all.indexOf(url) === index);
-
-    if (imageUrls.length > 0 || toolUsed(msg, 'generate_image')) {
-      imageUrls.forEach((url, index) => {
-        out.push({
-          id: `${msg.id}:image:${index}`,
-          messageId: msg.id,
-          kind: 'image',
-          title: imageUrls.length > 1 ? `Yaratilgan rasm ${index + 1}` : 'Yaratilgan rasm',
-          content: url,
-          createdAt: msg.timestamp,
-        });
-      });
-    }
-
-    const singleVideo = msg.videoUrl;
-    const videoUrls = [
-      ...(singleVideo ? [singleVideo] : []),
-      ...(msg.videos ?? []),
-    ].filter((url, index, all) => Boolean(url) && all.indexOf(url) === index);
-
-    if (videoUrls.length > 0 || toolUsed(msg, 'generate_video')) {
-      videoUrls.forEach((url, index) => {
-        out.push({
-          id: `${msg.id}:video:${index}`,
-          messageId: msg.id,
-          kind: 'video',
-          title: videoUrls.length > 1 ? `Yaratilgan video ${index + 1}` : 'Yaratilgan video',
-          content: url,
-          createdAt: msg.timestamp,
-        });
-      });
-    }
-
     const wantsCode = CODE_INTENT.test(userText);
     const wantsDocument = DOC_INTENT.test(userText);
+
     if (!wantsCode && !wantsDocument) return;
 
     let match: RegExpExecArray | null;
