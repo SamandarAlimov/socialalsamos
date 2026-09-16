@@ -46,6 +46,7 @@ interface Props {
   onOpenArtifacts?: () => void;
   onOpenConnectors?: () => void;
   onOpenGithub?: () => void;
+  onOpenProjects?: () => void;
   artifactCount?: number;
   projects?: AIProject[];
   activeProjectId?: string | null;
@@ -101,6 +102,7 @@ export function AISidebar({
   onClose,
   onOpenArtifacts,
   onOpenConnectors,
+  onOpenProjects,
   artifactCount = 0,
   projects = [],
   activeProjectId = null,
@@ -287,9 +289,9 @@ export function AISidebar({
 
   return (
     <div className="flex h-full w-full min-w-0 flex-col overflow-hidden bg-background">
-      <div className="space-y-2.5 p-3 pb-2">
-        <div className="flex items-center justify-between">
-          <div className="flex min-w-0 items-center gap-2.5">
+      <div className="space-y-2 p-2.5 pb-2">
+        <div className="flex items-center justify-between px-0.5">
+          <div className="flex min-w-0 items-center gap-2">
             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-border/70 bg-muted/50">
               <MessageSquare className="h-4 w-4" />
             </span>
@@ -309,10 +311,10 @@ export function AISidebar({
 
         <nav className="space-y-0.5">
           <div className="rounded-xl">
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-0.5">
               <button
                 type="button"
-                onClick={() => setProjectsOpen((value) => !value)}
+                onClick={() => onOpenProjects?.()}
                 className={cn(
                   'flex min-w-0 flex-1 items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[13px] font-medium transition-colors hover:bg-muted/60',
                   activeProjectId && 'bg-muted/45',
@@ -321,8 +323,18 @@ export function AISidebar({
                 <FolderKanban className="h-4 w-4 shrink-0 text-muted-foreground" />
                 <span className="min-w-0 flex-1 truncate">Loyihalar</span>
                 {projects.length > 0 && <span className="text-[10px] text-muted-foreground">{projects.length}</span>}
-                <ChevronDown className={cn('h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform', !projectsOpen && '-rotate-90')} />
               </button>
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                className="h-8 w-8 shrink-0 rounded-lg"
+                onClick={() => setProjectsOpen((value) => !value)}
+                aria-label={projectsOpen ? 'Loyihalarni yig‘ish' : 'Loyihalarni ochish'}
+                aria-expanded={projectsOpen}
+              >
+                <ChevronDown className={cn('h-3.5 w-3.5 text-muted-foreground transition-transform', !projectsOpen && '-rotate-90')} />
+              </Button>
               {onCreateProject && (
                 <Button
                   type="button"
@@ -462,7 +474,7 @@ export function AISidebar({
         </div>
       </div>
 
-      <ScrollArea className="min-h-0 flex-1 px-3 pb-3">
+      <ScrollArea className="min-h-0 flex-1 px-2.5 pb-3">
         {loading ? (
           <div className="space-y-2 px-1 pt-1">
             {Array.from({ length: 6 }).map((_, index) => <Skeleton key={index} className="h-10 w-full rounded-xl" />)}
