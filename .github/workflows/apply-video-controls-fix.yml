@@ -1,0 +1,307 @@
+name: Apply video controls fix
+
+on:
+  push:
+    branches:
+      - fix/video-keyboard-navigation
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: "!contains(github.event.head_commit.message, '[video-controls-fix-applied]')"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/video-keyboard-navigation
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Apply focused player interaction patch
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str):
+              p = Path(path)
+              text = p.read_text(encoding='utf-8')
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{path}: expected exactly one match, found {count}: {old[:120]!r}')
+              p.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          # Shared YouTube-style keyboard helpers.
+          Path('src/lib/videoKeyboardControls.ts').write_text("""export function resolveVideoDigitSeekTarget(key: string, duration: number): number | null {
+            if (!/^[0-9]$/.test(key)) return null;
+            if (!Number.isFinite(duration) || duration <= 0) return null;
+            return (Number(key) / 10) * duration;
+          }
+
+          export function resolveAdjacentVideoIndex(
+            currentIndex: number,
+            totalVideos: number,
+            delta: -1 | 1,
+          ): number {
+            if (!Number.isFinite(currentIndex) || totalVideos <= 0) return 0;
+            return Math.min(totalVideos - 1, Math.max(0, currentIndex + delta));
+          }
+          """, encoding='utf-8')
+
+          # VideosPage: number-key timeline seek + explicit Reel previous/next controls.
+          replace_once(
+              'src/pages/VideosPage.tsx',
+              "  ArrowLeft,\n  Bookmark,\n  Gauge,",
+              "  ArrowLeft,\n  Bookmark,\n  ChevronDown,\n  ChevronUp,\n  Gauge,",
+          )
+          replace_once(
+              'src/pages/VideosPage.tsx',
+              "import { resolveTouchAxis, type TouchAxis } from '@/lib/touchGesture';",
+              "import { resolveTouchAxis, type TouchAxis } from '@/lib/touchGesture';\nimport { resolveAdjacentVideoIndex, resolveVideoDigitSeekTarget } from '@/lib/videoKeyboardControls';",
+          )
+          replace_once(
+              'src/pages/VideosPage.tsx',
+              "      if (event.metaKey || event.ctrlKey || event.altKey) return;\n\n      switch (event.key.toLowerCase()) {",
+              "      if (event.metaKey || event.ctrlKey || event.altKey) return;\n\n      const digitTarget = resolveVideoDigitSeekTarget(\n        event.key,\n        videoRef.current?.duration ?? duration,\n      );\n      if (digitTarget !== null) {\n        event.preventDefault();\n        handleSeek(digitTarget);\n        return;\n      }\n\n      switch (event.key.toLowerCase()) {",
+          )
+          replace_once(
+              'src/pages/VideosPage.tsx',
+              "  }, [isActive, keyboardEnabled, onMuteToggle, seekBy, toggleFullscreen, togglePlay]);",
+              "  }, [duration, handleSeek, isActive, keyboardEnabled, onMuteToggle, seekBy, toggleFullscreen, togglePlay]);",
+          )
+
+          handle_scroll = """  const handleScroll = useCallback(() => {
+            const container = containerRef.current;
+            if (!container || container.clientHeight <= 0) return;
+            const next = Math.round(container.scrollTop / container.clientHeight);
+            if (next >= 0 && next < rankedVideos.length) {
+              setActiveIndex((current) => {
+                if (current === next) return current;
+                mediumTap();
+                return next;
+              });
+            }
+          }, [mediumTap, rankedVideos.length]);
+          """
+          handle_scroll_new = handle_scroll + """
+          const moveFeedBy = useCallback((delta: -1 | 1) => {
+            const container = containerRef.current;
+            if (!container || container.clientHeight <= 0 || rankedVideos.length === 0) return;
+            const next = resolveAdjacentVideoIndex(activeIndex, rankedVideos.length, delta);
+            if (next === activeIndex) return;
+
+            setActiveIndex(next);
+            mediumTap();
+            container.scrollTo({
+              top: next * container.clientHeight,
+              behavior: 'smooth',
+            });
+          }, [activeIndex, mediumTap, rankedVideos.length]);
+
+          useEffect(() => {
+            if (watchVideoId || commentsOpen || shareDialogOpen || likesDialogOpen) return;
+            const handler = (event: KeyboardEvent) => {
+              const target = event.target instanceof HTMLElement ? event.target : null;
+              if (target?.closest('input, textarea, select, button, a, [contenteditable=\"true\"], [role=\"slider\"]')) return;
+              if (event.metaKey || event.ctrlKey || event.altKey || document.fullscreenElement) return;
+
+              if (event.key === 'ArrowUp') {
+                event.preventDefault();
+                moveFeedBy(-1);
+              } else if (event.key === 'ArrowDown') {
+                event.preventDefault();
+                moveFeedBy(1);
+              }
+            };
+            window.addEventListener('keydown', handler);
+            return () => window.removeEventListener('keydown', handler);
+          }, [commentsOpen, likesDialogOpen, moveFeedBy, shareDialogOpen, watchVideoId]);
+          """
+          replace_once('src/pages/VideosPage.tsx', handle_scroll, handle_scroll_new)
+
+          replace_once(
+              'src/pages/VideosPage.tsx',
+              "      {floatingBack}\n      <div\n        ref={containerRef}",
+              """      {floatingBack}
+                {!isMobile && !watchVideoId && !commentsOpen && !shareDialogOpen && !likesDialogOpen && rankedVideos.length > 1 && (
+                  <div className=\"absolute right-5 top-1/2 z-[55] flex -translate-y-1/2 flex-col gap-3\">
+                    <button
+                      type=\"button\"
+                      onClick={() => moveFeedBy(-1)}
+                      disabled={activeIndex === 0}
+                      aria-label=\"Oldingi videoga o‘tish\"
+                      className=\"flex h-11 w-11 items-center justify-center rounded-full bg-black/55 text-white shadow-lg ring-1 ring-white/15 backdrop-blur-xl transition hover:bg-black/70 active:scale-95 disabled:cursor-not-allowed disabled:opacity-30\"
+                    >
+                      <ChevronUp className=\"h-6 w-6\" />
+                    </button>
+                    <button
+                      type=\"button\"
+                      onClick={() => moveFeedBy(1)}
+                      disabled={activeIndex >= rankedVideos.length - 1}
+                      aria-label=\"Keyingi videoga o‘tish\"
+                      className=\"flex h-11 w-11 items-center justify-center rounded-full bg-black/55 text-white shadow-lg ring-1 ring-white/15 backdrop-blur-xl transition hover:bg-black/70 active:scale-95 disabled:cursor-not-allowed disabled:opacity-30\"
+                    >
+                      <ChevronDown className=\"h-6 w-6\" />
+                    </button>
+                  </div>
+                )}
+                <div
+                  ref={containerRef}""",
+          )
+
+          # Watch panel: 0-9 seeks, arrow left/right seeks, single click now toggles playback.
+          replace_once(
+              'src/components/video/VideoWatchPanel.tsx',
+              "import { UI_LAYER } from '@/lib/uiLayers';",
+              "import { UI_LAYER } from '@/lib/uiLayers';\nimport { resolveVideoDigitSeekTarget } from '@/lib/videoKeyboardControls';",
+          )
+          replace_once(
+              'src/components/video/VideoWatchPanel.tsx',
+              "    publishPlayback({ time, paused: el.paused });\n    if (time < duration) setIsEnded(false);\n  }, [duration, publishPlayback]);",
+              "    publishPlayback({ time, paused: el.paused });\n    if (time < duration) setIsEnded(false);\n    revealControls();\n  }, [duration, publishPlayback, revealControls]);",
+          )
+          replace_once(
+              'src/components/video/VideoWatchPanel.tsx',
+              "      if (event.metaKey || event.ctrlKey || event.altKey) return;\n      switch (event.key.toLowerCase()) {",
+              "      if (event.metaKey || event.ctrlKey || event.altKey) return;\n\n      const digitTarget = resolveVideoDigitSeekTarget(\n        event.key,\n        videoRef.current?.duration ?? duration,\n      );\n      if (digitTarget !== null) {\n        event.preventDefault();\n        handleSeek(digitTarget);\n        return;\n      }\n\n      switch (event.key.toLowerCase()) {",
+          )
+          replace_once(
+              'src/components/video/VideoWatchPanel.tsx',
+              "        case 'j': event.preventDefault(); seekBy(-10); break;\n        case 'l': event.preventDefault(); seekBy(10); break;",
+              "        case 'j': event.preventDefault(); seekBy(-10); break;\n        case 'l': event.preventDefault(); seekBy(10); break;\n        case 'arrowleft': event.preventDefault(); seekBy(-5); break;\n        case 'arrowright': event.preventDefault(); seekBy(5); break;",
+          )
+          replace_once(
+              'src/components/video/VideoWatchPanel.tsx',
+              "  }, [closeWithPlayback, keyboardEnabled, seekBy, toggleFullscreen, togglePlay]);",
+              "  }, [closeWithPlayback, duration, handleSeek, keyboardEnabled, seekBy, toggleFullscreen, togglePlay]);",
+          )
+
+          # Shared tap hook: Watch surface single tap should call the owner's play/pause handler.
+          hook = Path('src/hooks/useVideoSurfaceTap.ts')
+          text = hook.read_text(encoding='utf-8')
+          old_helpers = """function isVideoWatchSurface(surface: HTMLElement) {
+            return Boolean(surface.querySelector('button[aria-label=\"Videolarga qaytish\"]'));
+          }
+
+          function revealVideoWatchControls(surface: HTMLElement) {
+            surface.dispatchEvent(new Event('pointermove', { bubbles: true }));
+          }
+
+          """
+          if text.count(old_helpers) != 1:
+              raise SystemExit('useVideoSurfaceTap.ts: watch helper block mismatch')
+          text = text.replace(old_helpers, '', 1)
+          old_doc = """ * - YouTube-style VideoWatchPanel single tap: reveal controls without changing
+           *   playback; play/pause remains an explicit controller action;
+          """
+          new_doc = """ * - YouTube-style VideoWatchPanel single tap: play/pause through the caller;
+          """
+          if text.count(old_doc) != 1:
+              raise SystemExit('useVideoSurfaceTap.ts: doc block mismatch')
+          text = text.replace(old_doc, new_doc, 1)
+          old_watch_branch = """        if (hit && isVideoWatchSurface(hit.surface)) {
+                  revealVideoWatchControls(hit.surface);
+                  return;
+                }
+          """
+          if text.count(old_watch_branch) != 1:
+              raise SystemExit('useVideoSurfaceTap.ts: watch branch mismatch')
+          text = text.replace(old_watch_branch, '', 1)
+          hook.write_text(text, encoding='utf-8')
+
+          # Regression coverage lives in the already-executed media regression test file.
+          replace_once(
+              'src/hooks/useVideoSurfaceTap.test.tsx',
+              "import { resolveVideoDoubleTapZone, useVideoSurfaceTap } from './useVideoSurfaceTap';",
+              "import { resolveAdjacentVideoIndex, resolveVideoDigitSeekTarget } from '@/lib/videoKeyboardControls';\nimport { resolveVideoDoubleTapZone, useVideoSurfaceTap } from './useVideoSurfaceTap';",
+          )
+          test_file = Path('src/hooks/useVideoSurfaceTap.test.tsx')
+          test_text = test_file.read_text(encoding='utf-8')
+          marker = "describe('useVideoSurfaceTap', () => {"
+          helper_tests = """describe('video keyboard controls', () => {
+            it('maps 0-9 to YouTube-style 0%-90% timeline positions', () => {
+              expect(resolveVideoDigitSeekTarget('0', 120)).toBe(0);
+              expect(resolveVideoDigitSeekTarget('1', 120)).toBe(12);
+              expect(resolveVideoDigitSeekTarget('5', 120)).toBe(60);
+              expect(resolveVideoDigitSeekTarget('9', 120)).toBe(108);
+            });
+
+            it('ignores non-digit keys and invalid durations', () => {
+              expect(resolveVideoDigitSeekTarget('k', 120)).toBeNull();
+              expect(resolveVideoDigitSeekTarget('1', 0)).toBeNull();
+              expect(resolveVideoDigitSeekTarget('1', Number.NaN)).toBeNull();
+            });
+
+            it('clamps Reel previous/next navigation to the feed bounds', () => {
+              expect(resolveAdjacentVideoIndex(0, 4, -1)).toBe(0);
+              expect(resolveAdjacentVideoIndex(1, 4, -1)).toBe(0);
+              expect(resolveAdjacentVideoIndex(1, 4, 1)).toBe(2);
+              expect(resolveAdjacentVideoIndex(3, 4, 1)).toBe(3);
+            });
+          });
+
+          """
+          if test_text.count(marker) != 1:
+              raise SystemExit('useVideoSurfaceTap.test.tsx: describe marker mismatch')
+          test_text = test_text.replace(marker, helper_tests + marker, 1)
+          start = test_text.find("  it('reveals VideoWatchPanel controls on single tap instead of toggling playback'")
+          end = test_text.find("  it('collapses an expanded caption", start)
+          if start < 0 or end < 0:
+              raise SystemExit('useVideoSurfaceTap.test.tsx: watch test block mismatch')
+          new_watch_test = """  it('routes VideoWatchPanel single taps to the play pause callback', () => {
+            const surface = document.createElement('div');
+            const video = document.createElement('video');
+            const backButton = document.createElement('button');
+            backButton.setAttribute('aria-label', 'Videolarga qaytish');
+            surface.append(video, backButton);
+            document.body.appendChild(surface);
+
+            Object.defineProperty(document, 'elementFromPoint', {
+              configurable: true,
+              value: vi.fn(() => surface),
+            });
+
+            const onSingleTap = vi.fn();
+            const onDoubleTap = vi.fn();
+            const { result } = renderHook(() =>
+              useVideoSurfaceTap({ onSingleTap, onDoubleTap, delay: 240 }),
+            );
+
+            act(() => {
+              result.current.registerTap(150, 220);
+              vi.advanceTimersByTime(240);
+            });
+
+            expect(onSingleTap).toHaveBeenCalledTimes(1);
+            expect(onDoubleTap).not.toHaveBeenCalled();
+          });
+
+          """
+          test_text = test_text[:start] + new_watch_test + test_text[end:]
+          test_file.write_text(test_text, encoding='utf-8')
+          PY
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Video interaction regression
+        run: npx vitest run src/hooks/useVideoSurfaceTap.test.tsx
+
+      - name: Typecheck
+        run: npm run typecheck:create
+
+      - name: Commit patch and remove temporary workflow
+        shell: bash
+        run: |
+          rm .github/workflows/apply-video-controls-fix.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/pages/VideosPage.tsx src/components/video/VideoWatchPanel.tsx src/hooks/useVideoSurfaceTap.ts src/hooks/useVideoSurfaceTap.test.tsx src/lib/videoKeyboardControls.ts .github/workflows/apply-video-controls-fix.yml
+          git commit -m "fix: add YouTube video keyboard and reel navigation [video-controls-fix-applied]"
+          git push origin HEAD:fix/video-keyboard-navigation
