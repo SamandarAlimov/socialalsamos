@@ -1,7 +1,7 @@
 // Alsamos AI agent klienti.
-// Kod/sandbox vazifalari Oracle/K3s serveridagi real izolyatsiyalangan agentga
-// yo'naltiriladi. Web/image/video/connector kabi boy vositalar server parity
-// tugamaguncha mavjud Supabase agent orqali ishlashda davom etadi.
+// Browser faqat Supabase Edge endpointlariga murojaat qiladi. Real sandbox yoki
+// boshqa private AI infratuzilmasiga chiqish server-to-server bajariladi; shu
+// bilan browser CORS xatolari va infratuzilma originining clientga sizishi yo'q.
 
 import { supabase } from '@/integrations/supabase/client';
 import type { AgentEvent, AIMode, ModelId, ToolGroupId } from './capabilities';
@@ -19,38 +19,8 @@ export type StreamAgentOptions = {
 };
 
 const FUNCTIONS_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
-// Never call the Oracle/K3s origin directly from the browser. Besides leaking
-// infrastructure topology into the client, a missing OPTIONS/CORS header on
-// api.alsamos.com used to make the fallback agent fail before POST was sent.
-// These same-origin Vercel routes forward the user's own auth token server-side.
-const ORACLE_AGENT_PROXY = '/api/ai-agent';
-const ORACLE_SANDBOX_PROXY = '/api/ai-sandbox';
 
 class AgentUnavailableError extends Error {}
-
-const SERVER_CODE_INTENT =
-  /\b(code|coding|debug|debugging|bug|python|javascript|typescript|node(?:js)?|react|sql|algorithm|compile|compiler|runtime|sandbox|execute|execution|terminal|script|function|regex|json|csv|calculate|calculation|formula|equation|math|mathematics|kod|dastur|dasturlash|xato|hisobla|hisoblash|formula|algoritm|ishga\s+tushir|tekshir|питон|код|отлад|ошибк|алгоритм|вычисл|запусти)\b/i;
-
-function latestUserMessage(messages: StreamAgentOptions['messages']): string {
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    if (messages[index]?.role === 'user') return messages[index].content;
-  }
-  return '';
-}
-
-/**
- * Hozir server agenti professional darajada real `run_code` sandboxga ega.
- * Qolgan boy tool'lar Edge agentda allaqachon mavjud. Shuning uchun faqat
- * kod/hisoblash vazifalarini server-first qilamiz — boshqa AI funksiyalarini
- * tasodifan regress qilmaymiz.
- */
-export function shouldPreferServerAgent(
-  options: Pick<StreamAgentOptions, 'messages' | 'model' | 'toolGroups'>,
-): boolean {
-  if (!options.toolGroups.includes('code')) return false;
-  if (options.model === 'coding') return true;
-  return SERVER_CODE_INTENT.test(latestUserMessage(options.messages));
-}
 
 async function authHeaders(): Promise<Record<string, string>> {
   const { data } = await supabase.auth.getSession();
@@ -76,10 +46,10 @@ async function readSse(
     if (done) break;
     buffer += decoder.decode(value, { stream: true });
 
-    let nl: number;
-    while ((nl = buffer.indexOf('\n')) !== -1) {
-      let line = buffer.slice(0, nl);
-      buffer = buffer.slice(nl + 1);
+    let newline: number;
+    while ((newline = buffer.indexOf('\n')) !== -1) {
+      let line = buffer.slice(0, newline);
+      buffer = buffer.slice(newline + 1);
       if (line.endsWith('\r')) line = line.slice(0, -1);
       if (!line.startsWith('data: ')) continue;
 
@@ -90,35 +60,35 @@ async function readSse(
   }
 }
 
-/** Supabase Edge'dagi to'liq agent — web/image/video/connectors uchun parity manbai. */
+/** Supabase Edge'dagi to'liq agent: web/image/video/code/connectors/computer. */
 async function streamFromAgent(options: StreamAgentOptions): Promise<void> {
   const { messages, mode, model, toolGroups, conversationId, context, signal, onEvent } = options;
 
-  let res: Response;
+  let response: Response;
   try {
-    res = await fetch(`${FUNCTIONS_BASE}/ai-agent`, {
+    response = await fetch(`${FUNCTIONS_BASE}/ai-agent`, {
       method: 'POST',
       headers: await authHeaders(),
       body: JSON.stringify({ messages, mode, model, toolGroups, conversationId, context }),
       signal,
     });
-  } catch (err) {
-    if (signal?.aborted) throw err;
+  } catch (error) {
+    if (signal?.aborted) throw error;
     throw new AgentUnavailableError('ai-agent mavjud emas');
   }
 
-  if ([404, 501, 502, 503, 504].includes(res.status)) {
-    throw new AgentUnavailableError(`ai-agent HTTP ${res.status}`);
+  if ([404, 501, 502, 503, 504].includes(response.status)) {
+    throw new AgentUnavailableError(`ai-agent HTTP ${response.status}`);
   }
 
-  if (!res.ok || !res.body) {
-    let message = `AI xizmatiga ulanib bo'lmadi (HTTP ${res.status}).`;
+  if (!response.ok || !response.body) {
+    let message = `AI xizmatiga ulanib bo'lmadi (HTTP ${response.status}).`;
     try {
-      const json = await res.json();
+      const json = await response.json();
       if (json?.message) message = json.message;
       else if (json?.error) message = json.error;
     } catch {
-      // e'tiborsiz
+      // JSON bo'lmasa umumiy HTTP xabarini saqlaymiz.
     }
     throw new Error(message);
   }
@@ -127,7 +97,7 @@ async function streamFromAgent(options: StreamAgentOptions): Promise<void> {
   let sawSuccessfulMedia = false;
   let lastToolFailure: string | null = null;
 
-  await readSse(res.body, (raw) => {
+  await readSse(response.body, (raw) => {
     try {
       const event = JSON.parse(raw) as AgentEvent;
 
@@ -163,34 +133,34 @@ async function streamFromAgent(options: StreamAgentOptions): Promise<void> {
 async function streamFromAssistant(options: StreamAgentOptions): Promise<void> {
   const { messages, context, signal, onEvent } = options;
 
-  const res = await fetch(`${FUNCTIONS_BASE}/ai-assistant`, {
+  const response = await fetch(`${FUNCTIONS_BASE}/ai-assistant`, {
     method: 'POST',
     headers: await authHeaders(),
     body: JSON.stringify({ messages, context }),
     signal,
   });
 
-  if (!res.ok || !res.body) {
-    let message = `AI xizmatiga ulanib bo'lmadi (HTTP ${res.status}).`;
+  if (!response.ok || !response.body) {
+    let message = `AI xizmatiga ulanib bo'lmadi (HTTP ${response.status}).`;
     try {
-      const json = await res.json();
+      const json = await response.json();
       if (json?.error) message = json.error;
       else if (json?.message) message = json.message;
     } catch {
-      // e'tiborsiz
+      // JSON bo'lmasa umumiy HTTP xabarini saqlaymiz.
     }
     throw new Error(message);
   }
 
   onEvent({
     type: 'meta',
-    model: res.headers.get('X-AI-Model') ?? 'auto',
-    task: res.headers.get('X-AI-Task') ?? 'general',
-    language: res.headers.get('X-AI-Language') ?? 'uz',
+    model: response.headers.get('X-AI-Model') ?? 'auto',
+    task: response.headers.get('X-AI-Task') ?? 'general',
+    language: response.headers.get('X-AI-Language') ?? 'uz',
     tools: [],
   });
 
-  await readSse(res.body, (raw) => {
+  await readSse(response.body, (raw) => {
     try {
       const json = JSON.parse(raw) as {
         choices?: Array<{ delta?: { content?: string }; message?: { content?: string } }>;
@@ -198,188 +168,25 @@ async function streamFromAssistant(options: StreamAgentOptions): Promise<void> {
       const text = json.choices?.[0]?.delta?.content ?? json.choices?.[0]?.message?.content ?? '';
       if (text) onEvent({ type: 'delta', text });
     } catch {
-      // e'tiborsiz
+      // Noto'g'ri SSE bo'lagi keyingi paket bilan davom etadi.
     }
   });
-}
-
-/** Oracle/K3s server agenti: real server vositalari va Kubernetes sandbox. */
-async function streamFromOracleAgent(options: StreamAgentOptions): Promise<void> {
-  const { messages, mode, model, toolGroups, conversationId, context, signal, onEvent } = options;
-
-  let res: Response;
-  try {
-    res = await fetch(ORACLE_AGENT_PROXY, {
-      method: 'POST',
-      headers: await authHeaders(),
-      body: JSON.stringify({ messages, mode, model, toolGroups, conversationId, context }),
-      signal,
-    });
-  } catch (error) {
-    if (signal?.aborted) throw error;
-    throw new AgentUnavailableError('Alsamos server agentiga ulanib bo\'lmadi');
-  }
-
-  if ([404, 501, 502, 503, 504].includes(res.status)) {
-    throw new AgentUnavailableError(`oracle agent HTTP ${res.status}`);
-  }
-
-  if (!res.ok || !res.body) {
-    let message = `Alsamos agent serveriga ulanib bo'lmadi (HTTP ${res.status}).`;
-    try {
-      const json = await res.json();
-      if (json?.message) message = json.message;
-      else if (json?.detail) message = json.detail;
-      else if (json?.error) message = json.error;
-    } catch {
-      // e'tiborsiz
-    }
-    throw new Error(message);
-  }
-
-  let streamedText = '';
-  let lastToolFailure: string | null = null;
-  let sawSuccessfulMedia = false;
-  const oracleToolIds = new Map<string, string>();
-  onEvent({ type: 'meta', model, task: mode, language: 'uz', tools: toolGroups });
-
-  await readSse(res.body, (raw) => {
-    let event: Record<string, any>;
-    try {
-      event = JSON.parse(raw);
-    } catch {
-      return;
-    }
-
-    switch (event.type) {
-      case 'meta':
-        onEvent({
-          type: 'meta',
-          model: String(event.model ?? model),
-          task: String(event.task ?? mode),
-          language: String(event.language ?? 'uz'),
-          tools: Array.isArray(event.tools) ? event.tools.map(String) : toolGroups,
-        });
-        break;
-      case 'token': {
-        const text = String(event.text ?? '');
-        if (text) {
-          streamedText += text;
-          onEvent({ type: 'delta', text });
-        }
-        break;
-      }
-      case 'tool': {
-        const name = String(event.name ?? 'tool');
-        if (event.phase === 'call') {
-          const id = String(event.id ?? crypto.randomUUID());
-          oracleToolIds.set(name, id);
-          onEvent({
-            type: 'tool_call',
-            id,
-            name,
-            args: (event.args ?? {}) as Record<string, unknown>,
-          });
-        } else if (event.phase === 'result') {
-          const id = String(event.id ?? oracleToolIds.get(name) ?? crypto.randomUUID());
-          oracleToolIds.delete(name);
-          const data = (event.data ?? null) as Record<string, unknown> | null;
-          const ok = Boolean(event.ok);
-          const summary =
-            typeof event.summary === 'string'
-              ? event.summary
-              : typeof data?.error === 'string'
-                ? String(data.error)
-                : JSON.stringify(event.data ?? {}).slice(0, 600);
-
-          if (!ok) {
-            lastToolFailure = `${name === 'generate_video' ? 'Video yaratilmadi' : 'Vosita bajarilmadi'}: ${summary}`;
-          }
-          if (ok && (typeof data?.videoUrl === 'string' || typeof data?.imageUrl === 'string')) {
-            sawSuccessfulMedia = true;
-          }
-
-          onEvent({
-            type: 'tool_result',
-            id,
-            name,
-            ok,
-            summary,
-            data,
-          });
-        }
-        break;
-      }
-      case 'stage':
-      case 'iteration':
-        if (event.label) onEvent({ type: 'notice', message: String(event.label) });
-        break;
-      case 'final': {
-        const output = String(event.output ?? '');
-        if (output && !streamedText) {
-          streamedText += output;
-          onEvent({ type: 'delta', text: output });
-        }
-        break;
-      }
-      case 'error':
-        throw new Error(String(event.message ?? 'Alsamos agent server xatosi.'));
-      default:
-        break;
-    }
-  });
-
-  if (!streamedText && !sawSuccessfulMedia && lastToolFailure) {
-    onEvent({ type: 'error', message: lastToolFailure });
-  }
-}
-
-async function streamServerThenEdge(options: StreamAgentOptions): Promise<void> {
-  try {
-    await streamFromOracleAgent(options);
-    return;
-  } catch (serverError) {
-    if (!(serverError instanceof AgentUnavailableError)) throw serverError;
-  }
-
-  try {
-    await streamFromAgent(options);
-  } catch (edgeError) {
-    if (!(edgeError instanceof AgentUnavailableError)) throw edgeError;
-    await streamFromAssistant(options);
-  }
-}
-
-async function streamEdgeThenServer(options: StreamAgentOptions): Promise<void> {
-  try {
-    await streamFromAgent(options);
-    return;
-  } catch (edgeError) {
-    if (!(edgeError instanceof AgentUnavailableError)) throw edgeError;
-  }
-
-  try {
-    await streamFromOracleAgent(options);
-  } catch (serverError) {
-    if (!(serverError instanceof AgentUnavailableError)) throw serverError;
-    await streamFromAssistant(options);
-  }
 }
 
 /**
- * Kod vazifasi -> real server sandbox birinchi.
- * Qolgan vazifalar -> rich-tool Edge agent birinchi, server esa resilient fallback.
- * Live/current web so'rovlari oldidan Alsamos Global Search grounding qo'shiladi.
+ * Barcha agent vazifalari Supabase Edge agentga boradi. Edge agentning run_code
+ * vositasi private remote sandboxga server-to-server chiqadi va shu sabab
+ * browser hech qachon api.alsamos.com bilan cross-origin gaplashmaydi.
  */
 export async function streamAgent(options: StreamAgentOptions): Promise<void> {
-  const prepared = shouldPreferServerAgent(options)
-    ? options
-    : await withAlsamosSearchGrounding(options);
+  const prepared = await withAlsamosSearchGrounding(options);
 
-  if (shouldPreferServerAgent(prepared)) {
-    return streamServerThenEdge(prepared);
+  try {
+    await streamFromAgent(prepared);
+  } catch (error) {
+    if (!(error instanceof AgentUnavailableError)) throw error;
+    await streamFromAssistant(prepared);
   }
-  return streamEdgeThenServer(prepared);
 }
 
 export type SandboxRun = {
@@ -391,6 +198,11 @@ export type SandboxRun = {
   isolated: boolean;
   runtime?: string;
   language?: string;
+  stdout?: string;
+  stderr?: string;
+  exitCode?: number | null;
+  signal?: string | null;
+  timedOut?: boolean;
 };
 
 async function sandboxError(response: Response): Promise<string> {
@@ -403,44 +215,23 @@ async function sandboxError(response: Response): Promise<string> {
 }
 
 /**
- * Artifact panelidagi "Ishga tushirish" tugmasi.
- * Birinchi yo'l — serverdagi network-isolated, non-root Kubernetes Job.
- * Eski Edge sandbox faqat JavaScript uchun vaqtinchalik fallback.
+ * Artifact panelidagi "Ishga tushirish" ham aynan Supabase code-sandbox orqali
+ * ishlaydi. code-sandbox remote runner sozlangan bo'lsa JS/TS/Python/Bashni
+ * izolyatsiyada bajaradi; JS uchun restricted Edge fallback ham mavjud.
  */
 export async function runInSandbox(
   code: string,
   timeoutMs = 5000,
   language: 'javascript' | 'typescript' | 'python' = 'javascript',
 ): Promise<SandboxRun> {
-  try {
-    const response = await fetch(ORACLE_SANDBOX_PROXY, {
-      method: 'POST',
-      headers: await authHeaders(),
-      body: JSON.stringify({ code, timeoutMs, language }),
-    });
-
-    if (response.ok) return (await response.json()) as SandboxRun;
-    if (![404, 501, 502, 503, 504].includes(response.status)) {
-      throw new Error(`Server sandbox xatosi: ${await sandboxError(response)}`);
-    }
-  } catch (error) {
-    if (error instanceof Error && error.message.startsWith('Server sandbox xatosi:')) {
-      throw error;
-    }
-    // Server deployment o'tish davrida bo'lsa JS uchun eski Edge fallback qoladi.
-  }
-
-  if (language !== 'javascript') {
-    throw new Error('Server sandbox vaqtincha mavjud emas; TypeScript/Python Edge fallbackda bajarilmaydi.');
-  }
-
-  const res = await fetch(`${FUNCTIONS_BASE}/code-sandbox`, {
+  const response = await fetch(`${FUNCTIONS_BASE}/code-sandbox`, {
     method: 'POST',
     headers: await authHeaders(),
-    body: JSON.stringify({ code, timeoutMs }),
+    body: JSON.stringify({ code, timeoutMs, language }),
   });
-  if (!res.ok) {
-    throw new Error(`Sandbox xatosi (HTTP ${res.status}). Server va Edge sandboxni tekshiring.`);
+
+  if (!response.ok) {
+    throw new Error(`Sandbox xatosi: ${await sandboxError(response)}`);
   }
-  return (await res.json()) as SandboxRun;
+  return (await response.json()) as SandboxRun;
 }
