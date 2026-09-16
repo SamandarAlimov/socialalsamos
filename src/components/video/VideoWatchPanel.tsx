@@ -28,6 +28,7 @@ import { type VideoPost } from '@/hooks/useVideoPosts';
 import { useVideoSurfaceTap } from '@/hooks/useVideoSurfaceTap';
 import { cn } from '@/lib/utils';
 import { UI_LAYER } from '@/lib/uiLayers';
+import { resolveVideoDigitSeekTarget } from '@/lib/videoKeyboardControls';
 import {
   readVideosMutedPreference,
   writeVideosMutedPreference,
@@ -301,7 +302,8 @@ export function VideoWatchPanel({
     setCurrentTime(time);
     publishPlayback({ time, paused: el.paused });
     if (time < duration) setIsEnded(false);
-  }, [duration, publishPlayback]);
+    revealControls();
+  }, [duration, publishPlayback, revealControls]);
 
   const cycleSpeed = useCallback(() => {
     setSpeed((current) => {
@@ -327,11 +329,24 @@ export function VideoWatchPanel({
       const target = event.target instanceof HTMLElement ? event.target : null;
       if (target?.closest('input, textarea, select, button, a, [contenteditable="true"], [role="slider"]')) return;
       if (event.metaKey || event.ctrlKey || event.altKey) return;
+
+      const digitTarget = resolveVideoDigitSeekTarget(
+        event.key,
+        videoRef.current?.duration ?? duration,
+      );
+      if (digitTarget !== null) {
+        event.preventDefault();
+        handleSeek(digitTarget);
+        return;
+      }
+
       switch (event.key.toLowerCase()) {
         case ' ':
         case 'k': event.preventDefault(); togglePlay(); break;
         case 'j': event.preventDefault(); seekBy(-10); break;
         case 'l': event.preventDefault(); seekBy(10); break;
+        case 'arrowleft': event.preventDefault(); seekBy(-5); break;
+        case 'arrowright': event.preventDefault(); seekBy(5); break;
         case 'm': event.preventDefault(); setIsMuted((value) => !value); break;
         case 'f': event.preventDefault(); void toggleFullscreen(); break;
         case 'escape': if (!document.fullscreenElement) { event.preventDefault(); closeWithPlayback(); } break;
@@ -339,7 +354,7 @@ export function VideoWatchPanel({
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [closeWithPlayback, keyboardEnabled, seekBy, toggleFullscreen, togglePlay]);
+  }, [closeWithPlayback, duration, handleSeek, keyboardEnabled, seekBy, toggleFullscreen, togglePlay]);
 
   if (!video) return null;
 

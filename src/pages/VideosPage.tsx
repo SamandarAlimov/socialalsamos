@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ArrowLeft,
   Bookmark,
+  ChevronDown,
+  ChevronUp,
   Gauge,
   Heart,
   ListVideo,
@@ -60,6 +62,7 @@ import {
 } from '@/lib/videoFormat';
 import { resolveVideoHoldIntent, type VideoHoldIntent } from '@/lib/videoHoldGesture';
 import { resolveTouchAxis, type TouchAxis } from '@/lib/touchGesture';
+import { resolveAdjacentVideoIndex, resolveVideoDigitSeekTarget } from '@/lib/videoKeyboardControls';
 
 const HOLD_TO_SPEED_MS = 300;
 const RENDER_WINDOW = 1;
@@ -457,6 +460,16 @@ function VideoCard({
       if (target?.closest('input, textarea, select, button, a, [contenteditable="true"], [role="slider"]')) return;
       if (event.metaKey || event.ctrlKey || event.altKey) return;
 
+      const digitTarget = resolveVideoDigitSeekTarget(
+        event.key,
+        videoRef.current?.duration ?? duration,
+      );
+      if (digitTarget !== null) {
+        event.preventDefault();
+        handleSeek(digitTarget);
+        return;
+      }
+
       switch (event.key.toLowerCase()) {
         case ' ':
         case 'k':
@@ -491,7 +504,7 @@ function VideoCard({
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [isActive, keyboardEnabled, onMuteToggle, seekBy, toggleFullscreen, togglePlay]);
+  }, [duration, handleSeek, isActive, keyboardEnabled, onMuteToggle, seekBy, toggleFullscreen, togglePlay]);
 
   const stopBubble = (event: React.SyntheticEvent) => event.stopPropagation();
   const collapseExpandedFromInfo = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
@@ -935,6 +948,38 @@ export default function VideosPage() {
     }
   }, [mediumTap, rankedVideos.length]);
 
+  const moveFeedBy = useCallback((delta: -1 | 1) => {
+    const container = containerRef.current;
+    if (!container || container.clientHeight <= 0 || rankedVideos.length === 0) return;
+    const next = resolveAdjacentVideoIndex(activeIndex, rankedVideos.length, delta);
+    if (next === activeIndex) return;
+
+    setActiveIndex(next);
+    mediumTap();
+    container.scrollTo({
+      top: next * container.clientHeight,
+      behavior: 'smooth',
+    });
+  }, [activeIndex, mediumTap, rankedVideos.length]);
+
+  useEffect(() => {
+    if (watchVideoId || commentsOpen || shareDialogOpen || likesDialogOpen) return;
+    const handler = (event: KeyboardEvent) => {
+      const target = event.target instanceof HTMLElement ? event.target : null;
+      if (target?.closest('input, textarea, select, button, a, [contenteditable="true"], [role="slider"]')) return;
+      if (event.metaKey || event.ctrlKey || event.altKey || document.fullscreenElement) return;
+
+      if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        moveFeedBy(-1);
+      } else if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        moveFeedBy(1);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [commentsOpen, likesDialogOpen, moveFeedBy, shareDialogOpen, watchVideoId]);
   useEffect(() => {
     if (isLoading || !hasMore || rankedVideos.length === 0) return;
     if (activeIndex >= rankedVideos.length - LOAD_MORE_THRESHOLD) void loadMore();
@@ -1025,6 +1070,28 @@ export default function VideosPage() {
   return (
     <div className={cn('relative bg-black', isMobile ? 'fixed inset-0 z-40' : 'flex h-screen w-full items-center justify-center')}>
       {floatingBack}
+      {!isMobile && !watchVideoId && !commentsOpen && !shareDialogOpen && !likesDialogOpen && rankedVideos.length > 1 && (
+        <div className="absolute right-5 top-1/2 z-[55] flex -translate-y-1/2 flex-col gap-3">
+          <button
+            type="button"
+            onClick={() => moveFeedBy(-1)}
+            disabled={activeIndex === 0}
+            aria-label="Oldingi videoga o‘tish"
+            className="flex h-11 w-11 items-center justify-center rounded-full bg-black/55 text-white shadow-lg ring-1 ring-white/15 backdrop-blur-xl transition hover:bg-black/70 active:scale-95 disabled:cursor-not-allowed disabled:opacity-30"
+          >
+            <ChevronUp className="h-6 w-6" />
+          </button>
+          <button
+            type="button"
+            onClick={() => moveFeedBy(1)}
+            disabled={activeIndex >= rankedVideos.length - 1}
+            aria-label="Keyingi videoga o‘tish"
+            className="flex h-11 w-11 items-center justify-center rounded-full bg-black/55 text-white shadow-lg ring-1 ring-white/15 backdrop-blur-xl transition hover:bg-black/70 active:scale-95 disabled:cursor-not-allowed disabled:opacity-30"
+          >
+            <ChevronDown className="h-6 w-6" />
+          </button>
+        </div>
+      )}
       <div
         ref={containerRef}
         className={cn('h-full w-full snap-y snap-mandatory overflow-y-scroll overscroll-contain scrollbar-hide', !isMobile && commentsOpen && 'pr-[min(430px,38vw)]')}
