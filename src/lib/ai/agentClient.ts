@@ -19,10 +19,12 @@ export type StreamAgentOptions = {
 };
 
 const FUNCTIONS_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
-const AGENT_SERVER_BASE = (
-  (import.meta.env.VITE_ALSAMOS_AGENT_SERVER_URL as string | undefined) ||
-  'https://api.alsamos.com/ai'
-).replace(/\/+$/, '');
+// Never call the Oracle/K3s origin directly from the browser. Besides leaking
+// infrastructure topology into the client, a missing OPTIONS/CORS header on
+// api.alsamos.com used to make the fallback agent fail before POST was sent.
+// These same-origin Vercel routes forward the user's own auth token server-side.
+const ORACLE_AGENT_PROXY = '/api/ai-agent';
+const ORACLE_SANDBOX_PROXY = '/api/ai-sandbox';
 
 class AgentUnavailableError extends Error {}
 
@@ -207,7 +209,7 @@ async function streamFromOracleAgent(options: StreamAgentOptions): Promise<void>
 
   let res: Response;
   try {
-    res = await fetch(`${AGENT_SERVER_BASE}/api/alsamos/agent`, {
+    res = await fetch(ORACLE_AGENT_PROXY, {
       method: 'POST',
       headers: await authHeaders(),
       body: JSON.stringify({ messages, mode, model, toolGroups, conversationId, context }),
@@ -411,7 +413,7 @@ export async function runInSandbox(
   language: 'javascript' | 'typescript' | 'python' = 'javascript',
 ): Promise<SandboxRun> {
   try {
-    const response = await fetch(`${AGENT_SERVER_BASE}/v1/sandbox/run`, {
+    const response = await fetch(ORACLE_SANDBOX_PROXY, {
       method: 'POST',
       headers: await authHeaders(),
       body: JSON.stringify({ code, timeoutMs, language }),
