@@ -22,6 +22,7 @@ import { VerifiedBadge } from '@/components/VerifiedBadge';
 import { VideoScrubBar } from '@/components/video/VideoScrubBar';
 import { VideoUpNextItem } from '@/components/video/VideoUpNextItem';
 import { useHapticFeedback } from '@/hooks/useHapticFeedback';
+import { useVideoAutoplayPreference } from '@/hooks/useVideoAutoplayPreference';
 import { usePinchZoom } from '@/hooks/usePinchZoom';
 import { useVideoHeatmap } from '@/hooks/useVideoHeatmap';
 import { type VideoPost } from '@/hooks/useVideoPosts';
@@ -30,9 +31,7 @@ import { cn } from '@/lib/utils';
 import { UI_LAYER } from '@/lib/uiLayers';
 import { resolveVideoDigitSeekTarget } from '@/lib/videoKeyboardControls';
 import {
-  readVideosAutoplayPreference,
   readVideosMutedPreference,
-  writeVideosAutoplayPreference,
   writeVideosMutedPreference,
 } from '@/lib/videoPlaybackPreference';
 import {
@@ -115,7 +114,6 @@ export function VideoWatchPanel({
   const [isPlaying, setIsPlaying] = useState(!(initialPlayback?.paused ?? false));
   const [isEnded, setIsEnded] = useState(false);
   const [isMuted, setIsMuted] = useState(mutedRef.current);
-  const [isAutoplayEnabled, setIsAutoplayEnabled] = useState(readVideosAutoplayPreference);
   const [speed, setSpeed] = useState(1);
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(initialPlayback?.time ?? 0);
@@ -125,6 +123,12 @@ export function VideoWatchPanel({
   const [showLikeBurst, setShowLikeBurst] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [descriptionOpen, setDescriptionOpen] = useState(false);
+  const {
+    isAutoplayEnabled,
+    isLoading: isAutoplayPreferenceLoading,
+    isSaving: isAutoplayPreferenceSaving,
+    setAutoplayEnabled,
+  } = useVideoAutoplayPreference(currentUserId);
 
   const { lightTap, mediumTap, successFeedback } = useHapticFeedback();
   const heatmap = useVideoHeatmap(activeVideoId || 'video', 56);
@@ -214,10 +218,6 @@ export function VideoWatchPanel({
     writeVideosMutedPreference(isMuted);
     if (videoRef.current) videoRef.current.muted = isMuted;
   }, [isMuted]);
-
-  useEffect(() => {
-    writeVideosAutoplayPreference(isAutoplayEnabled);
-  }, [isAutoplayEnabled]);
 
   useEffect(() => {
     speedRef.current = speed;
@@ -576,8 +576,9 @@ export function VideoWatchPanel({
                 <Button
                   variant="ghost"
                   size="icon"
-                  onClick={() => setIsAutoplayEnabled((value) => !value)}
-                  className="h-9 w-10 rounded-full text-white hover:bg-white/15"
+                  onClick={() => void setAutoplayEnabled(!isAutoplayEnabled)}
+                  disabled={isAutoplayPreferenceLoading || isAutoplayPreferenceSaving}
+                  className="h-9 w-10 rounded-full text-white hover:bg-white/15 disabled:opacity-60"
                   aria-label={isAutoplayEnabled ? 'Avtomatik ijroni o‘chirish' : 'Avtomatik ijroni yoqish'}
                   aria-pressed={isAutoplayEnabled}
                   title={isAutoplayEnabled ? 'Avtomatik ijro yoqilgan' : 'Avtomatik ijro o‘chirilgan'}

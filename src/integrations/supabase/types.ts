@@ -8287,6 +8287,7 @@ export type Database = {
           two_factor_recovery_updated_at: string | null
           updated_at: string
           user_id: string
+          videos_autoplay: boolean
         }
         Insert: {
           ai_data_sharing?: boolean | null
@@ -8357,6 +8358,7 @@ export type Database = {
           two_factor_recovery_updated_at?: string | null
           updated_at?: string
           user_id: string
+          videos_autoplay?: boolean
         }
         Update: {
           ai_data_sharing?: boolean | null
@@ -8427,6 +8429,7 @@ export type Database = {
           two_factor_recovery_updated_at?: string | null
           updated_at?: string
           user_id?: string
+          videos_autoplay?: boolean
         }
         Relationships: [
           {
