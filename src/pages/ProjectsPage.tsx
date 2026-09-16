@@ -1,11 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ArrowUpDown,
-  Cloud,
   FolderKanban,
-  HardDrive,
   Loader2,
-  MessageSquare,
   MoreHorizontal,
   Pencil,
   Plus,
@@ -77,6 +74,16 @@ function countDatabaseProjects(rows: Array<{ project_id?: string | null }>): Rec
   }, {});
 }
 
+function modifiedLabel(date: Date): string {
+  const now = new Date();
+  const sameYear = date.getFullYear() === now.getFullYear();
+  return new Intl.DateTimeFormat('uz-UZ', {
+    day: 'numeric',
+    month: 'short',
+    ...(sameYear ? {} : { year: 'numeric' as const }),
+  }).format(date);
+}
+
 export default function ProjectsPage() {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -94,8 +101,6 @@ export default function ProjectsPage() {
     setBackendMode('local');
     setProjects(listLocalProjects(userId));
 
-    // ai_conversations itself is old/stable schema. Use its IDs to avoid
-    // counting mappings for chats that were already deleted remotely.
     try {
       const { data } = await db
         .from('ai_conversations')
@@ -319,7 +324,7 @@ export default function ProjectsPage() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-6xl px-4 pb-24 pt-6 sm:px-6 lg:px-8">
+    <div className="mx-auto w-full max-w-5xl px-4 pb-24 pt-10 sm:px-6 lg:px-8 lg:pt-20">
       <AIProjectDialog
         open={dialogOpen}
         onOpenChange={setDialogOpen}
@@ -327,52 +332,55 @@ export default function ProjectsPage() {
         onSave={save}
       />
 
-      <header className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
+      <header className="mb-8 flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
           <h1 className="text-3xl font-semibold tracking-tight">Loyihalar</h1>
-          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            Bir mavzu yoki ish uchun doimiy AI kontekstini alohida saqlang.
+          <p className="mt-1 text-xs text-muted-foreground">
+            {backendMode === 'database' ? 'Hisobingiz bilan sinxronlangan' : 'Shu qurilmada saqlanmoqda'}
           </p>
-          <div className="mt-2 inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
-            {backendMode === 'database' ? (
-              <>
-                <Cloud className="h-3.5 w-3.5" /> Bulut bilan sinxron
-              </>
-            ) : (
-              <>
-                <HardDrive className="h-3.5 w-3.5" /> Shu qurilmada saqlanmoqda
-              </>
-            )}
-          </div>
         </div>
-        <Button
-          onClick={openCreate}
-          className="h-10 shrink-0 gap-1.5 rounded-xl bg-foreground px-4 text-background hover:bg-foreground/90"
-        >
-          <Plus className="h-4 w-4" /> Yangi loyiha
-        </Button>
+
+        <div className="flex w-full items-center gap-2 sm:w-auto">
+          <div className="relative min-w-0 flex-1 sm:w-64 sm:flex-none">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Loyihalarni qidirish"
+              className="h-10 rounded-xl pl-9"
+              autoComplete="off"
+              aria-label="Loyihalarni qidirish"
+            />
+          </div>
+          <Button
+            onClick={openCreate}
+            className="h-10 shrink-0 gap-1.5 rounded-xl bg-foreground px-4 text-background hover:bg-foreground/90"
+          >
+            <Plus className="h-4 w-4" /> Yangi
+          </Button>
+        </div>
       </header>
 
-      <div className="mb-7 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div className="relative w-full max-w-sm">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Loyihalarni qidirish"
-            className="h-10 rounded-xl pl-9"
-            autoComplete="off"
-          />
-        </div>
-        <Button
+      <div className="mb-3 border-b border-border/60">
+        <button
           type="button"
-          variant="outline"
-          className="h-10 justify-start gap-2 rounded-xl sm:justify-center"
-          onClick={() => setSortNewest((value) => !value)}
+          className="relative px-1 pb-3 text-sm font-medium text-foreground after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:rounded-full after:bg-foreground"
         >
-          <ArrowUpDown className="h-4 w-4" />
-          {sortNewest ? 'Oxirgi yangilangan' : 'Eski yangilangan'}
-        </Button>
+          Barchasi
+        </button>
+      </div>
+
+      <div className="grid grid-cols-[minmax(0,1fr)_auto_36px] items-center gap-3 border-b border-border/60 px-2 py-3 text-xs text-muted-foreground">
+        <span>Nomi</span>
+        <button
+          type="button"
+          onClick={() => setSortNewest((value) => !value)}
+          className="flex items-center gap-1 rounded-md px-1 py-0.5 hover:text-foreground"
+          aria-label="Yangilangan vaqt bo‘yicha saralash"
+        >
+          O‘zgartirilgan <ArrowUpDown className="h-3 w-3" />
+        </button>
+        <span className="sr-only">Amallar</span>
       </div>
 
       {loading ? (
@@ -380,80 +388,78 @@ export default function ProjectsPage() {
           <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Yuklanmoqda…
         </div>
       ) : filtered.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-border/70 p-10 text-center">
-          <FolderKanban className="mx-auto mb-3 h-8 w-8 text-muted-foreground" />
+        <div className="py-20 text-center">
+          <FolderKanban className="mx-auto mb-3 h-9 w-9 text-muted-foreground" />
           <p className="font-medium">{query ? 'Loyiha topilmadi' : 'Hozircha loyiha yo‘q'}</p>
           <p className="mt-1 text-sm text-muted-foreground">
-            {query ? 'Qidiruv so‘zini o‘zgartirib ko‘ring.' : 'Birinchi loyihani yarating.'}
+            {query ? 'Qidiruv so‘zini o‘zgartirib ko‘ring.' : 'Birinchi loyihangizni yarating.'}
           </p>
           {!query && (
             <Button
-              className="mt-4 rounded-xl bg-foreground text-background hover:bg-foreground/90"
+              className="mt-5 rounded-xl bg-foreground text-background hover:bg-foreground/90"
               onClick={openCreate}
             >
-              <Plus className="mr-1 h-4 w-4" /> Yaratish
+              <Plus className="mr-1 h-4 w-4" /> Yangi loyiha
             </Button>
           )}
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div>
           {filtered.map((project) => (
-            <article
+            <div
               key={project.id}
               role="button"
               tabIndex={0}
               onClick={() => openProject(project)}
-              onKeyDown={(event) => event.key === 'Enter' && openProject(project)}
-              className="group flex min-h-52 cursor-pointer flex-col rounded-2xl border border-border/70 bg-card p-5 transition-colors hover:bg-muted/25 focus:outline-none focus:ring-2 focus:ring-ring"
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  openProject(project);
+                }
+              }}
+              className="group grid cursor-pointer grid-cols-[minmax(0,1fr)_auto_36px] items-center gap-3 border-b border-border/50 px-2 py-4 transition-colors hover:bg-muted/35 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
             >
-              <div className="flex items-start gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-border/70 bg-muted/50">
+              <div className="flex min-w-0 items-center gap-3">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-border/70 bg-muted/35">
                   <FolderKanban className="h-4 w-4" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <h2 className="truncate font-semibold" title={project.name}>{project.name}</h2>
-                  <div className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
-                    <MessageSquare className="h-3.5 w-3.5" /> {counts[project.id] || 0} suhbat
-                  </div>
-                </div>
-
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="h-8 w-8 shrink-0 rounded-lg"
-                      aria-label="Loyiha amallari"
-                      onClick={(event) => event.stopPropagation()}
-                    >
-                      <MoreHorizontal className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" onClick={(event) => event.stopPropagation()}>
-                    <DropdownMenuItem onClick={() => openEdit(project)}>
-                      <Pencil className="mr-2 h-4 w-4" /> Tahrirlash
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      className="text-destructive"
-                      onClick={() => void remove(project)}
-                    >
-                      <Trash2 className="mr-2 h-4 w-4" /> O‘chirish
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-
-              <p className="mt-5 line-clamp-4 flex-1 text-sm leading-relaxed text-muted-foreground">
-                {project.instructions || 'Bu loyiha uchun hali doimiy ko‘rsatma yozilmagan.'}
-              </p>
-
-              <div className="mt-5 flex items-center justify-between border-t border-border/60 pt-3">
-                <span className="text-[11px] text-muted-foreground">
-                  {project.updatedAt.toLocaleDateString('uz-UZ')}
                 </span>
-                <span className="text-xs font-medium">Ochish →</span>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium" title={project.name}>{project.name}</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {counts[project.id] || 0} suhbat
+                  </p>
+                </div>
               </div>
-            </article>
+
+              <span className="whitespace-nowrap text-xs text-muted-foreground">
+                {modifiedLabel(project.updatedAt)}
+              </span>
+
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-8 w-8 rounded-lg opacity-60 group-hover:opacity-100"
+                    aria-label="Loyiha amallari"
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <MoreHorizontal className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" onClick={(event) => event.stopPropagation()}>
+                  <DropdownMenuItem onClick={() => openEdit(project)}>
+                    <Pencil className="mr-2 h-4 w-4" /> Tahrirlash
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className="text-destructive"
+                    onClick={() => void remove(project)}
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" /> O‘chirish
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           ))}
         </div>
       )}
