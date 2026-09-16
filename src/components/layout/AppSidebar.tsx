@@ -1,5 +1,5 @@
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { Home, Search, Video, MessageCircle, ShoppingBag, Map, PlusSquare, User, Settings, LogOut, Compass, Wallet, Sparkles, LayoutGrid, MoreHorizontal, Moon, Sun, UsersRound } from 'lucide-react';
+import { Home, Search, Video, MessageCircle, ShoppingBag, Map, PlusSquare, User, Settings, LogOut, Compass, Wallet, Sparkles, LayoutGrid, MoreHorizontal, Moon, Sun, UsersRound, FolderKanban } from 'lucide-react';
 import { AlsamosLogo } from '@/components/AlsamosLogo';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
@@ -32,6 +32,7 @@ const navItems: NavItem[] = [
   { icon: Map, labelKey: 'nav.map', path: '/map' },
   { icon: Wallet, labelKey: 'nav.payment', path: '/payment' },
   { icon: Sparkles, labelKey: 'nav.ai', path: '/ai' },
+  { icon: FolderKanban, labelKey: 'nav.projects', path: '/projects' },
   { icon: LayoutGrid, labelKey: 'nav.miniApps', path: '/mini-apps' },
   { icon: PlusSquare, labelKey: 'nav.create', path: '/create' },
 ];
@@ -55,11 +56,15 @@ export function AppSidebar({ collapsed, onCollapsedChange }: AppSidebarProps) {
 
   useEffect(() => {
     const COLLAPSE_BREAKPOINT = 1100;
-    const check = () => onCollapsedChange(window.innerWidth < COLLAPSE_BREAKPOINT);
+    const isAiWorkspace =
+      location.pathname === '/ai' ||
+      location.pathname.startsWith('/ai/') ||
+      location.pathname === '/projects';
+    const check = () => onCollapsedChange(isAiWorkspace || window.innerWidth < COLLAPSE_BREAKPOINT);
     check();
     window.addEventListener('resize', check);
     return () => window.removeEventListener('resize', check);
-  }, [onCollapsedChange]);
+  }, [location.pathname, onCollapsedChange]);
 
   const { theme, setTheme } = useTheme();
   const { playMessageSound } = useNotificationSound();
@@ -94,6 +99,7 @@ export function AppSidebar({ collapsed, onCollapsedChange }: AppSidebarProps) {
               key={item.path}
               to={item.path!}
               className={cn(NAV_ITEM_BASE, isActive ? NAV_ITEM_ACTIVE : NAV_ITEM_INACTIVE)}
+              title={collapsed ? t(item.labelKey) : undefined}
             >
               <div className="relative">
                 <item.icon
