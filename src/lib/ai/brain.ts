@@ -136,6 +136,7 @@ export function buildBrainContext(input: BrainInput): string {
   const effectiveProject = input.activeProject || localActive?.project || null;
   const localUserId =
     localActive && effectiveProject?.id === localActive.project.id ? localActive.userId : undefined;
+  const projectScoped = Boolean(effectiveProject);
 
   return [
     MASTER_PROMPT,
@@ -146,8 +147,10 @@ export function buildBrainContext(input: BrainInput): string {
       input.currentConversationId,
       localUserId,
     ),
-    memoryBlock(memories),
-    crossChatBlock(input.conversations, input.currentConversationId),
+    // Projects are isolated workspaces by default. Do not leak account-wide
+    // memories or chats from other projects into a project-scoped request.
+    projectScoped ? '' : memoryBlock(memories),
+    projectScoped ? '' : crossChatBlock(input.conversations, input.currentConversationId),
     skillBlock(skills),
   ]
     .filter(Boolean)
