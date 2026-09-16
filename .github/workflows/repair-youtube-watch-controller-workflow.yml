@@ -19,28 +19,10 @@ jobs:
         shell: python
         run: |
           from pathlib import Path
-
           path = Path('.github/workflows/apply-youtube-watch-controller-fix.yml')
           text = path.read_text()
-          old = """      - name: Typecheck
-        run: npm run typecheck
-"""
-          new = """      - name: Check Watch type safety
-        shell: bash
-        run: |
-          set +e
-          npx tsc -p tsconfig.app.json --noEmit --pretty false > /tmp/typecheck.log 2>&1
-          status=$?
-          set -e
-          cat /tmp/typecheck.log
-          if grep -E 'src/(components/video/VideoWatchPanel|hooks/useVideoSurfaceTap|lib/videoWatchControls)' /tmp/typecheck.log; then
-            echo 'Watch-related TypeScript errors found.'
-            exit 1
-          fi
-          if [ "$status" -ne 0 ]; then
-            echo 'Repo-wide typecheck still has pre-existing errors outside the Watch files; no Watch-related TypeScript errors were found.'
-          fi
-"""
+          old = "      - name: Typecheck\n        run: npm run typecheck\n"
+          new = "      - name: Check Watch type safety\n        shell: bash\n        run: |\n          set +e\n          npx tsc -p tsconfig.app.json --noEmit --pretty false > /tmp/typecheck.log 2>&1\n          status=$?\n          set -e\n          cat /tmp/typecheck.log\n          if grep -E 'src/(components/video/VideoWatchPanel|hooks/useVideoSurfaceTap|lib/videoWatchControls)' /tmp/typecheck.log; then\n            echo 'Watch-related TypeScript errors found.'\n            exit 1\n          fi\n          if [ \"$status\" -ne 0 ]; then\n            echo 'Repo-wide typecheck still has pre-existing errors outside the Watch files; no Watch-related TypeScript errors were found.'\n          fi\n"
           if text.count(old) != 1:
               raise SystemExit('Expected exactly one Typecheck step to replace')
           path.write_text(text.replace(old, new, 1))
