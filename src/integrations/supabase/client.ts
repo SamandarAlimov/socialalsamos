@@ -118,26 +118,65 @@ const supabaseUrl = requireValue('VITE_SUPABASE_URL', SUPABASE_URL);
 const supabaseKey = requireValue('VITE_SUPABASE_PUBLISHABLE_KEY', SUPABASE_PUBLISHABLE_KEY);
 const supabaseOrigin = new URL(supabaseUrl).origin;
 
+function extractBearerToken(authorization: string | null): string | null {
+  const match = /^Bearer\s+(.+)$/i.exec(authorization?.trim() ?? '');
+  return match?.[1] ?? null;
+}
+
+async function syncRealtimeAccessToken(accessToken: string) {
+  try {
+    await supabaseClient.realtime.setAuth(accessToken);
+  } catch (realtimeError) {
+    console.warn('[alsamos/auth] Realtime token sync failed:', realtimeError);
+  }
+}
+
 /**
- * Recover a stale access JWT exactly once even when dozens of PostgREST calls
- * fail together after a sleeping/backgrounded browser resumes. The coordinator
- * is shared with bootstrap recovery so we never rotate the same refresh token
- * concurrently from two independent recovery paths.
+ * Resolve a usable access token after an expired-JWT response. A different
+ * token may already have been produced by another recovery path while this
+ * particular request was in flight; in that case reuse it instead of rotating
+ * the refresh token again. Otherwise coordinate one refresh for all waiters.
  */
-async function refreshExpiredAccessToken(): Promise<string | null> {
+async function refreshExpiredAccessToken(
+  failedAuthorization: string | null,
+): Promise<string | null> {
+  const failedAccessToken = extractBearerToken(failedAuthorization);
+  const { data: currentSessionData } = await supabaseClient.auth.getSession();
+  const currentAccessToken = currentSessionData.session?.access_token ?? null;
+
+  if (
+    failedAccessToken &&
+    currentAccessToken &&
+    currentAccessToken !== failedAccessToken
+  ) {
+    await syncRealtimeAccessToken(currentAccessToken);
+    return currentAccessToken;
+  }
+
+  if (failedAccessToken && !currentAccessToken) {
+    // The session was already cleared while this request was in flight.
+    return null;
+  }
+
   return coordinateSupabaseJwtRefresh(async () => {
+    // Re-check inside the shared critical section. A refresh may have completed
+    // between the getSession() above and our turn to enter this callback.
+    const { data: latestSessionData } = await supabaseClient.auth.getSession();
+    const latestAccessToken = latestSessionData.session?.access_token ?? null;
+    if (
+      failedAccessToken &&
+      latestAccessToken &&
+      latestAccessToken !== failedAccessToken
+    ) {
+      await syncRealtimeAccessToken(latestAccessToken);
+      return latestAccessToken;
+    }
+
     const { data, error } = await supabaseClient.auth.refreshSession();
     const accessToken = data.session?.access_token ?? null;
 
     if (!error && accessToken) {
-      // Auth normally propagates TOKEN_REFRESHED to Realtime, but set the token
-      // explicitly as well so a channel that reconnects immediately cannot use
-      // the expired JWT that caused the REST 401 storm.
-      try {
-        await supabaseClient.realtime.setAuth(accessToken);
-      } catch (realtimeError) {
-        console.warn('[alsamos/auth] Realtime token sync failed:', realtimeError);
-      }
+      await syncRealtimeAccessToken(accessToken);
       return accessToken;
     }
 
@@ -166,7 +205,9 @@ async function fetchWithExpiredJwtRecovery(request: Request): Promise<Response> 
   const bodyText = await response.clone().text().catch(() => '');
   if (!isExpiredSupabaseJwtResponse(response.status, bodyText)) return response;
 
-  const freshAccessToken = await refreshExpiredAccessToken();
+  const freshAccessToken = await refreshExpiredAccessToken(
+    retryTemplate.headers.get('authorization'),
+  );
   if (!freshAccessToken) return response;
 
   const retryHeaders = new Headers(retryTemplate.headers);
