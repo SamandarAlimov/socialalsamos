@@ -19,10 +19,22 @@ export type StreamAgentOptions = {
 };
 
 const FUNCTIONS_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
-const AGENT_SERVER_BASE = (
-  (import.meta.env.VITE_ALSAMOS_AGENT_SERVER_URL as string | undefined) ||
-  'https://api.alsamos.com/ai'
-).replace(/\/+$/, '');
+
+export function resolveAgentServerBase(options: {
+  isDevelopment: boolean;
+  configuredUrl?: string;
+}): string {
+  if (!options.isDevelopment) return '/__ai-agent';
+  return (options.configuredUrl || 'https://api.alsamos.com/ai').replace(/\/+$/, '');
+}
+
+// Production/preview browsers must stay on the Alsamos origin. Vercel reverse
+// proxies /__ai-agent/* to the Oracle/K3s service, so SSE, auth headers and POST
+// bodies work without exposing the browser to cross-origin preflight failures.
+const AGENT_SERVER_BASE = resolveAgentServerBase({
+  isDevelopment: import.meta.env.DEV,
+  configuredUrl: import.meta.env.VITE_ALSAMOS_AGENT_SERVER_URL as string | undefined,
+});
 
 class AgentUnavailableError extends Error {}
 
