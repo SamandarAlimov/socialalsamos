@@ -22,6 +22,17 @@ const FUNCTIONS_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
 
 class AgentUnavailableError extends Error {}
 
+/**
+ * Backward-compatible routing contract used by regression tests. Browser code
+ * must never choose the private runner directly; code execution is a tool of
+ * the Supabase Edge agent and its remote sandbox hop is server-to-server.
+ */
+export function shouldPreferServerAgent(
+  _options: Pick<StreamAgentOptions, 'messages' | 'model' | 'toolGroups'>,
+): boolean {
+  return false;
+}
+
 async function authHeaders(): Promise<Record<string, string>> {
   const { data } = await supabase.auth.getSession();
   const token = data.session?.access_token ?? import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
