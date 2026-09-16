@@ -21,6 +21,11 @@ export function getMobileChromeMode(pathname: string): MobileChromeMode {
   if (PRIMARY_ROUTES.has(path)) return 'primary';
   if (IMMERSIVE_ROUTES.has(path)) return 'immersive';
 
+  // Settings landing and detail pages render their own titles/back controls.
+  // Adding the shell MobileBackHeader here creates the duplicate top "Orqaga"
+  // row on mobile and also adds unnecessary top padding.
+  if (path === '/settings' || path.startsWith('/settings/')) return 'immersive';
+
   // Marketplace has its own search/header, product header, sticky purchase CTA
   // and mobile bottom navigation. Shell chrome here caused duplicate back rows
   // and stole valuable viewport width/height on product pages.
