@@ -99,6 +99,7 @@ export function VideoWatchPanel({
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const burstTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const holdActiveRef = useRef(false);
+  const holdStartedPausedRef = useRef(false);
   const speedRef = useRef(1);
   const mutedRef = useRef(readVideosMutedPreference());
   const volumeRef = useRef(1);
@@ -244,7 +245,8 @@ export function VideoWatchPanel({
     setRatio(null);
     setDescriptionOpen(false);
     setIsEnded(false);
-    setIsPlaying(!playback.paused);
+    // Reflect the real media element state; onPlay is the source of truth.
+    setIsPlaying(false);
     zoom.resetZoom();
     revealControls();
 
@@ -278,8 +280,13 @@ export function VideoWatchPanel({
         setIsEnded(false);
       }
       desiredPausedRef.current = false;
-      void el.play().catch(() => setIsPlaying(false));
-      publishPlayback({ time: el.currentTime, paused: false });
+      void el.play().catch(() => {
+        // Do not leave the parent snapshot in a synthetic playing state when
+        // the browser rejects/aborts play().
+        desiredPausedRef.current = true;
+        setIsPlaying(false);
+        publishPlayback({ time: el.currentTime, paused: true });
+      });
     } else {
       desiredPausedRef.current = true;
       const time = el.currentTime;
@@ -312,10 +319,14 @@ export function VideoWatchPanel({
       if (!el) return;
       clearPending();
       holdActiveRef.current = true;
+      holdStartedPausedRef.current = el.paused || desiredPausedRef.current;
       el.playbackRate = 2;
       if (el.paused) {
         desiredPausedRef.current = false;
-        void el.play().catch(() => setIsPlaying(false));
+        void el.play().catch(() => {
+          desiredPausedRef.current = true;
+          setIsPlaying(false);
+        });
       }
       mediumTap();
     }, HOLD_TO_SPEED_MS);
@@ -328,9 +339,24 @@ export function VideoWatchPanel({
     }
     if (!holdActiveRef.current) return false;
     holdActiveRef.current = false;
-    if (videoRef.current) videoRef.current.playbackRate = speedRef.current;
+    const startedPaused = holdStartedPausedRef.current;
+    holdStartedPausedRef.current = false;
+
+    const el = videoRef.current;
+    if (el) {
+      el.playbackRate = speedRef.current;
+      // A YouTube-style hold may preview at 2x, but releasing a hold that
+      // started from pause must return to pause instead of silently changing
+      // the user's play/pause intent.
+      if (startedPaused) {
+        desiredPausedRef.current = true;
+        const time = Number.isFinite(el.currentTime) ? el.currentTime : currentTime;
+        el.pause();
+        publishPlayback({ time, paused: true });
+      }
+    }
     return true;
-  }, []);
+  }, [currentTime, publishPlayback]);
 
   const seekBy = useCallback((delta: number) => {
     const el = videoRef.current;
@@ -494,14 +520,29 @@ export function VideoWatchPanel({
               endHold();
               return;
             }
-            if (!endHold()) registerTap(event.clientX, event.clientY);
+            if (!endHold()) {
+              if (event.pointerType === 'mouse') {
+                // Desktop YouTube interaction: mouse play/pause should respond
+                // on release immediately instead of waiting for the 240ms
+                // touch double-tap arbitration window.
+                clearPending();
+                togglePlay();
+              } else {
+                registerTap(event.clientX, event.clientY);
+              }
+            }
           }}
           onPointerCancel={(event) => {
             zoom.handlers.onPointerCancel(event);
             endHold();
           }}
           onPointerLeave={() => endHold()}
-          onDoubleClick={(event) => event.preventDefault()}
+          onDoubleClick={(event) => {
+            const target = event.target instanceof HTMLElement ? event.target : null;
+            if (target?.closest('button, a, input, textarea, select, [role="slider"], [data-video-interactive="true"]')) return;
+            event.preventDefault();
+            void toggleFullscreen();
+          }}
         >
           {aspectKind !== 'landscape' && posterUrl && (
             <><img src={posterUrl} alt="" aria-hidden className="pointer-events-none absolute inset-0 h-full w-full scale-110 object-cover opacity-45 blur-[34px]" /><div className="pointer-events-none absolute inset-0 bg-black/30" /></>
