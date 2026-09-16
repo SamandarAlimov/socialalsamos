@@ -8,11 +8,29 @@ vi.mock('@/integrations/supabase/client', () => ({
   },
 }));
 
-import { shouldPreferServerAgent } from './agentClient';
+import { resolveAgentServerBase, shouldPreferServerAgent } from './agentClient';
 
 const allTools = ['web', 'image', 'video', 'code', 'alsamos', 'connectors'] as const;
 
 describe('Alsamos AI server routing', () => {
+  it('uses the same-origin reverse proxy outside development', () => {
+    expect(
+      resolveAgentServerBase({
+        isDevelopment: false,
+        configuredUrl: 'https://api.alsamos.com/ai',
+      }),
+    ).toBe('/__ai-agent');
+  });
+
+  it('keeps the direct Oracle URL available for local development', () => {
+    expect(
+      resolveAgentServerBase({
+        isDevelopment: true,
+        configuredUrl: 'https://agent-dev.example.com/ai/',
+      }),
+    ).toBe('https://agent-dev.example.com/ai');
+  });
+
   it('sends coding requests to the server sandbox even when all default tools are enabled', () => {
     expect(
       shouldPreferServerAgent({
