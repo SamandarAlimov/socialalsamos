@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ComponentProps } from 'react
 import { useLocation, useNavigate } from 'react-router-dom';
 
 import { useAuth } from '@/contexts/AuthContext';
-import { db } from '@/lib/db';
+import { migrateLegacyLocalProjectsToCloud } from '@/lib/ai/migrateLegacyProjects';
 import {
   clearActiveLocalProject,
   createLocalProject,
@@ -10,7 +10,6 @@ import {
   listLocalProjects,
   projectForConversation,
   readActiveLocalProject,
-  readConversationProjectMap,
   setActiveLocalProject,
   setConversationProject,
   updateLocalProject,
@@ -60,70 +59,29 @@ export function AISidebar(props: Props) {
   }, [user?.id, location.search]);
 
   /**
-   * One-time migration for legacy browser-only projects.
-   *
-   * Older builds intentionally blocked `ai_projects` behind
-   * VITE_AI_CLOUD_SCHEMA, so users could create a project that existed only in
-   * localStorage while conversations stayed in Postgres with project_id=NULL.
-   * Once the real cloud project callbacks are present, import those rows using
-   * their UUIDs, restore conversation membership, then remove the local copy.
+   * One-time migration for legacy browser-only projects. The same helper is
+   * also used by /projects so users do not have to visit /ai first.
    */
   useEffect(() => {
     if (!user?.id || useLocalProjects || migrationStartedRef.current) return;
-
-    const legacyProjects = listLocalProjects(user.id);
-    if (legacyProjects.length === 0) return;
+    if (listLocalProjects(user.id).length === 0) return;
 
     migrationStartedRef.current = true;
     let cancelled = false;
 
     const migrate = async () => {
-      const projectRows = legacyProjects.map((project) => ({
-        id: project.id,
-        user_id: user.id,
-        name: project.name,
-        instructions: project.instructions,
-        created_at: project.createdAt.toISOString(),
-        updated_at: project.updatedAt.toISOString(),
-      }));
-
-      const projectWrite = await db
-        .from('ai_projects')
-        .upsert(projectRows, { onConflict: 'id' });
-
-      if (projectWrite.error) {
-        console.error('Legacy AI project migration failed:', projectWrite.error);
+      try {
+        const migrated = await migrateLegacyLocalProjectsToCloud(user.id);
+        refreshLocalProjects();
+        if (migrated && !cancelled) {
+          // Parent AI state was loaded before the migration. Reload once so
+          // projects + project_id memberships rehydrate atomically.
+          window.location.reload();
+        }
+      } catch (error) {
+        console.error('Legacy AI project migration failed:', error);
         migrationStartedRef.current = false;
-        return;
       }
-
-      const projectIds = new Set(legacyProjects.map((project) => project.id));
-      const mapping = readConversationProjectMap(user.id);
-      const memberships = Object.entries(mapping).filter(([, projectId]) => projectIds.has(projectId));
-
-      const membershipWrites = await Promise.all(
-        memberships.map(([conversationId, projectId]) =>
-          db
-            .from('ai_conversations')
-            .update({ project_id: projectId, updated_at: new Date().toISOString() })
-            .eq('id', conversationId)
-            .eq('user_id', user.id),
-        ),
-      );
-
-      const membershipError = membershipWrites.find((result) => result.error)?.error;
-      if (membershipError) {
-        console.error('Legacy AI conversation membership migration failed:', membershipError);
-        migrationStartedRef.current = false;
-        return;
-      }
-
-      for (const project of legacyProjects) deleteLocalProject(user.id, project.id);
-      refreshLocalProjects();
-
-      // Parent AI state was loaded before the migration. One reload is the
-      // cleanest way to rehydrate projects + project_id memberships atomically.
-      if (!cancelled) window.location.reload();
     };
 
     void migrate();
