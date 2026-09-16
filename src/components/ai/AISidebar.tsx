@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState, type ComponentProps } from 'react';
+import { useEffect, useMemo, useRef, useState, type ComponentProps } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
 import { useAuth } from '@/contexts/AuthContext';
+import { migrateLegacyLocalProjectsToCloud } from '@/lib/ai/migrateLegacyProjects';
 import {
   clearActiveLocalProject,
   createLocalProject,
@@ -19,15 +20,19 @@ import type { AIConversation, AIProject } from './types';
 type Props = ComponentProps<typeof AISidebarV2>;
 
 /**
- * AI sidebar owns the project navigation surface. Database-backed projects are
- * preferred when available; otherwise the existing local project store keeps
- * the feature fully usable without losing project context.
+ * Project navigation bridge.
+ *
+ * Cloud `ai_projects` is the canonical source. The local project store exists
+ * only as a backwards-compatibility bridge for users who created projects
+ * while the cloud schema was artificially disabled in the web client.
  */
 export function AISidebar(props: Props) {
   const { user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [localProjects, setLocalProjects] = useState<AIProject[]>([]);
+  const [pendingProjectNew, setPendingProjectNew] = useState<string | null>(null);
+  const migrationStartedRef = useRef(false);
 
   const useLocalProjects = Boolean(user?.id) && !props.onCreateProject;
 
@@ -50,9 +55,40 @@ export function AISidebar(props: Props) {
   };
 
   useEffect(() => {
-    if (!useLocalProjects) return;
     refreshLocalProjects();
-  }, [useLocalProjects, user?.id, location.search]);
+  }, [user?.id, location.search]);
+
+  /**
+   * One-time migration for legacy browser-only projects. The same helper is
+   * also used by /projects so users do not have to visit /ai first.
+   */
+  useEffect(() => {
+    if (!user?.id || useLocalProjects || migrationStartedRef.current) return;
+    if (listLocalProjects(user.id).length === 0) return;
+
+    migrationStartedRef.current = true;
+    let cancelled = false;
+
+    const migrate = async () => {
+      try {
+        const migrated = await migrateLegacyLocalProjectsToCloud(user.id);
+        refreshLocalProjects();
+        if (migrated && !cancelled) {
+          // Parent AI state was loaded before the migration. Reload once so
+          // projects + project_id memberships rehydrate atomically.
+          window.location.reload();
+        }
+      } catch (error) {
+        console.error('Legacy AI project migration failed:', error);
+        migrationStartedRef.current = false;
+      }
+    };
+
+    void migrate();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, useLocalProjects]);
 
   const localActiveProjectId = useMemo(() => {
     if (!useLocalProjects || !user?.id) return null;
@@ -60,9 +96,8 @@ export function AISidebar(props: Props) {
     return active?.userId === user.id ? active.project.id : null;
   }, [localProjects, location.search, useLocalProjects, user?.id]);
 
-  // Database-backed project links (/ai?project=<id>) used to activate only the
-  // local fallback store. Apply the URL selection to the real AI project state
-  // as soon as the database project list is available.
+  // `/ai?project=<id>` is the durable project URL. When the database project
+  // list arrives, apply that URL to the real AI workspace state.
   useEffect(() => {
     if (useLocalProjects || !props.onSelectProject) return;
     const projectId = new URLSearchParams(location.search).get('project');
@@ -77,9 +112,8 @@ export function AISidebar(props: Props) {
     useLocalProjects,
   ]);
 
-  // A newly created conversation inside a locally backed project is assigned
-  // to that project as soon as its id exists. This keeps project history stable
-  // even when the production ai_projects migration is not present yet.
+  // Legacy local fallback only. Cloud-backed projects persist membership in
+  // ai_conversations.project_id directly inside AIPageV2.
   useEffect(() => {
     if (!useLocalProjects || !user?.id || !props.activeId || !localActiveProjectId) return;
     if (projectForConversation(user.id, props.activeId) === localActiveProjectId) return;
@@ -101,9 +135,6 @@ export function AISidebar(props: Props) {
 
     syncProjectQuery(projectId);
 
-    // Claude-like behavior: selecting a project keeps the AI workspace open
-    // and immediately opens its most recent conversation. Only a brand-new
-    // project starts with an empty composer.
     if (projectId) {
       const latest = conversations
         .filter((conversation) => conversation.projectId === projectId)
@@ -169,17 +200,42 @@ export function AISidebar(props: Props) {
     refreshLocalProjects();
   };
 
+  const startLocalProjectConversation = (projectId: string) => {
+    if (!user?.id) return;
+    setActiveLocalProject(user.id, projectId);
+    syncProjectQuery(projectId);
+    props.onNew();
+    refreshLocalProjects();
+  };
+
+  const startBackendProjectConversation = (projectId: string) => {
+    if (props.activeProjectId === projectId) {
+      props.onNew();
+      return;
+    }
+    setPendingProjectNew(projectId);
+    selectBackendProject(projectId);
+  };
+
+  // Wait for AIPageV2 to adopt the project before calling its `onNew` closure;
+  // otherwise React's previous render would create a global chat with NULL
+  // project_id.
+  useEffect(() => {
+    if (!pendingProjectNew || props.activeProjectId !== pendingProjectNew) return;
+    setPendingProjectNew(null);
+    props.onNew();
+  }, [pendingProjectNew, props.activeProjectId, props.onNew]);
+
   return (
     <AISidebarV2
       {...props}
       conversations={conversations}
       onSelect={selectConversation}
-      // Focus/session refreshes may re-request history, but existing chat rows
-      // should never flash back to skeletons when the user returns to the app.
       loading={props.loading && conversations.length === 0}
       projects={useLocalProjects ? localProjects : props.projects}
       activeProjectId={useLocalProjects ? localActiveProjectId : props.activeProjectId}
       onSelectProject={useLocalProjects ? selectLocalProject : selectBackendProject}
+      onNewProject={useLocalProjects ? startLocalProjectConversation : startBackendProjectConversation}
       onCreateProject={useLocalProjects ? createLocal : props.onCreateProject}
       onUpdateProject={useLocalProjects ? updateLocal : props.onUpdateProject}
       onDeleteProject={useLocalProjects ? deleteLocal : deleteBackend}
