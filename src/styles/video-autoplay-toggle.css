@@ -1,0 +1,106 @@
+/* YouTube-style autoplay switch for the immersive video player.
+ *
+ * VideoWatchPanel already exposes the saved autoplay state through aria-pressed,
+ * so this remains presentation-only: the Supabase-backed preference and player
+ * behavior stay unchanged while the control gets a clear play/pause affordance.
+ */
+button[aria-label^="Avtomatik ijroni"][aria-pressed] {
+  width: 46px !important;
+  height: 36px !important;
+  padding: 0 !important;
+  background: transparent !important;
+}
+
+button[aria-label^="Avtomatik ijroni"][aria-pressed] > span:first-child {
+  position: relative !important;
+  display: block !important;
+  width: 34px !important;
+  height: 18px !important;
+  border: 1px solid rgb(255 255 255 / 28%);
+  border-radius: 9999px !important;
+  background: rgb(255 255 255 / 18%) !important;
+  box-shadow: inset 0 1px 2px rgb(0 0 0 / 22%);
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+button[aria-label^="Avtomatik ijroni"][aria-pressed="true"] > span:first-child {
+  border-color: hsl(var(--primary) / 0.9);
+  background: hsl(var(--primary) / 0.88) !important;
+  box-shadow:
+    inset 0 1px 2px rgb(0 0 0 / 18%),
+    0 0 0 1px hsl(var(--primary) / 0.08);
+}
+
+button[aria-label^="Avtomatik ijroni"][aria-pressed] > span:first-child > span {
+  position: absolute !important;
+  top: 1px !important;
+  left: 1px !important;
+  display: grid !important;
+  width: 14px !important;
+  height: 14px !important;
+  place-items: center;
+  border-radius: 9999px !important;
+  background: rgb(229 231 235) !important;
+  color: rgb(55 65 81);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 38%);
+  transform: translateX(0) !important;
+  transition:
+    transform 160ms ease,
+    background-color 160ms ease,
+    color 160ms ease;
+}
+
+button[aria-label^="Avtomatik ijroni"][aria-pressed="true"] > span:first-child > span {
+  background: rgb(255 255 255) !important;
+  color: hsl(var(--primary));
+  transform: translateX(16px) !important;
+}
+
+/* Paused autoplay: two dark bars inside the thumb. */
+button[aria-label^="Avtomatik ijroni"][aria-pressed="false"] > span:first-child > span::before {
+  content: "";
+  width: 6px;
+  height: 7px;
+  border-radius: 1px;
+  background: linear-gradient(
+    to right,
+    currentColor 0 2px,
+    transparent 2px 4px,
+    currentColor 4px 6px
+  );
+}
+
+/* Active autoplay: compact play triangle, matching the media control language. */
+button[aria-label^="Avtomatik ijroni"][aria-pressed="true"] > span:first-child > span::before {
+  content: "";
+  width: 0;
+  height: 0;
+  margin-left: 1px;
+  border-top: 3.5px solid transparent;
+  border-bottom: 3.5px solid transparent;
+  border-left: 5.5px solid currentColor;
+}
+
+button[aria-label^="Avtomatik ijroni"][aria-pressed]:hover > span:first-child {
+  border-color: rgb(255 255 255 / 42%);
+}
+
+button[aria-label^="Avtomatik ijroni"][aria-pressed="true"]:hover > span:first-child {
+  border-color: hsl(var(--primary));
+  background: hsl(var(--primary) / 0.96) !important;
+}
+
+button[aria-label^="Avtomatik ijroni"][aria-pressed]:focus-visible {
+  outline: 2px solid rgb(255 255 255 / 78%);
+  outline-offset: 1px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  button[aria-label^="Avtomatik ijroni"][aria-pressed] > span:first-child,
+  button[aria-label^="Avtomatik ijroni"][aria-pressed] > span:first-child > span {
+    transition: none;
+  }
+}

@@ -4,6 +4,7 @@ import App from "./App.tsx";
 import "./index.css";
 import "./styles/native-interactions.css";
 import "./styles/video-watch.css";
+import "./styles/video-autoplay-toggle.css";
 import "./styles/video-feed.css";
 import "./styles/canonical-engagement.css";
 import "./styles/marketplace-create-product.css";
