@@ -1,0 +1,43 @@
+name: Apply account video autoplay persistence
+
+on:
+  push:
+    branches:
+      - fix/video-autoplay-account-persistence
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: ${{ !contains(github.event.head_commit.message, '[video-autoplay-account-fix-applied]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/video-autoplay-account-persistence
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Apply account autoplay patch
+        run: python3 .github/scripts/apply_video_autoplay_account_fix.py
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck:create
+
+      - name: Remove temporary patch tooling and commit
+        run: |
+          rm .github/workflows/apply-video-autoplay-account-fix.yml
+          rm .github/scripts/apply_video_autoplay_account_fix.py
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix: persist video autoplay per account [video-autoplay-account-fix-applied]"
+          git push origin HEAD:fix/video-autoplay-account-persistence
