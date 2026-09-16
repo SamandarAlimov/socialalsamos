@@ -41,12 +41,10 @@ describe('Alsamos AI project context isolation', () => {
       memories: [
         {
           id: 'memory-1',
-          key: 'global',
-          value: 'global private memory',
+          text: 'global private memory',
           kind: 'fact',
           source: 'assistant',
-          createdAt: new Date(),
-          updatedAt: new Date(),
+          createdAt: new Date().toISOString(),
         },
       ],
     });
