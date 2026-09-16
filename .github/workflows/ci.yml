@@ -44,6 +44,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Auth session recovery regression
+        run: npx vitest run src/lib/supabaseJwtRecovery.test.ts
+
       - name: Messages regression tests
         run: npm run test:messages
 
