@@ -1,6 +1,7 @@
 import { createRoot } from "react-dom/client";
 import { HelmetProvider } from "react-helmet-async";
 import App from "./App.tsx";
+import AIE2ESmokePage from "./pages/AIE2ESmokePage";
 import "./index.css";
 import "./styles/native-interactions.css";
 import "./styles/video-watch.css";
@@ -61,18 +62,22 @@ installVideoCommentsPreviewSheetSync();
 const root = createRoot(document.getElementById("root")!);
 
 async function mountApp() {
-  // A suspended browser can resume with an expired access JWT. Recover it before
-  // authenticated hooks mount, otherwise every initial PostgREST request races
-  // with token refresh and the app can appear completely empty.
-  await recoverAuthSessionBeforeMount();
+  const isAiE2ESmoke = window.location.pathname === "/ai-e2e-smoke";
 
-  // Keep recovering on focus/pageshow/online after mount as well. This is not
-  // tied to any OS: mobile and desktop browsers can all suspend refresh timers.
-  installAuthSessionResumeRecovery();
+  if (!isAiE2ESmoke) {
+    // A suspended browser can resume with an expired access JWT. Recover it before
+    // authenticated hooks mount, otherwise every initial PostgREST request races
+    // with token refresh and the app can appear completely empty.
+    await recoverAuthSessionBeforeMount();
+
+    // Keep recovering on focus/pageshow/online after mount as well. This is not
+    // tied to any OS: mobile and desktop browsers can all suspend refresh timers.
+    installAuthSessionResumeRecovery();
+  }
 
   root.render(
     <HelmetProvider>
-      <App />
+      {isAiE2ESmoke ? <AIE2ESmokePage /> : <App />}
     </HelmetProvider>
   );
 }
