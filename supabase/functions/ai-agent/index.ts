@@ -18,11 +18,17 @@ import {
   platformSpecsFor,
   PLATFORM_TOOL_NAMES,
 } from "../_shared/aiPlatformTools.ts";
+import {
+  enableGithubTools,
+  executeGithubTool,
+  githubSpecsFor,
+} from "../_shared/githubAgentTools.ts";
 
 const FUNCTION_NAME = "ai-agent";
 const RATE_LIMIT = 120;
 const RATE_WINDOW_MINUTES = 60;
-const MAX_ROUNDS = 8;
+// Coding tasks need enough room for: inspect -> read files -> branch -> commit -> PR -> CI.
+const MAX_ROUNDS = 14;
 
 const MODEL_ROUTES: Record<string, string> = {
   auto: "google/gemini-3.6-flash",
@@ -84,14 +90,16 @@ FIRST-PARTY USER DATA
 HOW TO WORK
 1. Plan briefly, then act. Chain tools when needed (search -> fetch -> compute -> answer).
 2. If a fact may be recent, uncertain, or numeric, verify it with web_search / web_fetch and cite sources as [1], [2] matching the tool output order.
-3. For math, data transforms, parsing or algorithm checks, ALWAYS verify with run_code instead of computing mentally.
-4. When writing code, produce complete, runnable files in fenced blocks with the language tag. Explain only what matters.
-5. MEDIA: when the user asks for a picture, logo, poster, illustration, mockup, or an edit of an image, call generate_image immediately. When they ask for a video, clip or animation, call generate_video; if it returns a running job id, poll media_job_status.
-6. Use connector tools (list_connector_tools, connector_call) for the user's external apps, including GitHub repositories.
-7. computer_task controls the user's own machine through the Alsamos Bridge agent. It is queued and requires the user's explicit approval on that device. Never queue destructive commands or credential exfiltration.
-8. Never spend money, publish posts, or send messages without explicit user confirmation in the UI.
-9. If a tool fails, say so plainly with the error, then continue with the best alternative.
-10. Be concise by default; expand when the user asks for depth. Use Markdown where it helps.
+3. For math, data transforms, parsing or algorithm checks, verify with run_code when useful. A broken/unavailable sandbox is NOT a blocker for GitHub engineering because native GitHub tools work through the GitHub API and CI can validate repository changes.
+4. For a GitHub coding request, act like a coding agent: identify the exact repo -> inspect tree/search -> read relevant files -> create a feature/fix branch -> commit complete file changes with github_commit_files -> open a PR -> check github_get_commit_checks. Do not merely paste a patch when the user asked you to implement it.
+5. Never invent repository contents, changed files, commit SHAs, PRs, deployments, or test results. Use the GitHub tools and report their real results.
+6. github_commit_files refuses the default branch by design. Never try to bypass that. Do not commit credentials, tokens, .env secrets, private keys, generated build output, or unrelated files. Keep changes scoped to the user's request.
+7. Native GitHub tools are preferred for repository engineering. Use list_connector_tools / connector_call for other external apps or when the user explicitly needs an MCP plugin.
+8. When writing code only as an answer (not editing a connected repo), produce complete runnable code in fenced blocks. When editing a repo, use the actual repository tools instead of duplicating every file in chat.
+9. MEDIA: when the user asks for a picture, logo, poster, illustration, mockup, or an edit of an image, call generate_image immediately. When they ask for a video, clip or animation, call generate_video; if it returns a running job id, poll media_job_status.
+10. computer_task controls the user's own machine through the Alsamos Bridge agent. It is queued and requires the user's explicit approval on that device. Never queue destructive commands or credential exfiltration.
+11. Never spend money, publish posts, send messages, merge a pull request, or perform an irreversible destructive action without explicit user authorization. Native GitHub coding tools intentionally stop at a PR; they do not expose merge/delete-repository operations.
+12. If a tool fails, say so plainly with the error, then continue with the best alternative. Be concise by default; expand when the user asks for depth.
 
 USER CONTEXT
 ${opts.userContext}
@@ -166,6 +174,8 @@ serve(async (req) => {
     if (requestedGroups.includes("alsamos")) {
       for (const name of PLATFORM_TOOL_NAMES) enabled.add(name);
     }
+    // Native repository engineering is part of the code/connectors capability.
+    enableGithubTools(enabled, requestedGroups);
 
     let connectors: ConnectorRow[] = [];
     if (userId && (enabled.has("connector_call") || enabled.has("list_connector_tools"))) {
@@ -202,7 +212,11 @@ serve(async (req) => {
       : { task: requestedModel, language: "uz" };
     const model = MODEL_ROUTES[cls.task] ?? MODEL_ROUTES.balanced;
 
-    const toolSpecs = [...specsFor(enabled), ...platformSpecsFor(enabled)];
+    const toolSpecs = [
+      ...specsFor(enabled),
+      ...platformSpecsFor(enabled),
+      ...githubSpecsFor(enabled),
+    ];
     const ctx: ToolContext = {
       userId,
       admin,
@@ -351,7 +365,8 @@ serve(async (req) => {
                 }
                 send({ type: "tool_call", id: call.id, name: call.name, args });
 
-                const platformOutcome = await executePlatformTool(call.name, args, ctx);
+                const githubOutcome = await executeGithubTool(call.name, args, ctx);
+                const platformOutcome = githubOutcome ?? await executePlatformTool(call.name, args, ctx);
                 const outcome = platformOutcome ?? await executeTool(call.name, args, ctx);
 
                 send({
