@@ -39,9 +39,8 @@ export function AppLayout() {
   }, [isAuthenticated]);
 
   // The authenticated shell has exactly one vertical scroll owner: <main>.
-  // Chrome/Windows can expose document scrolling after keyboard focus/scroll
-  // restoration even when the 100dvh app root itself is overflow-hidden. That
-  // produces two visible scrollbars (document + platform main). Lock the
+  // Desktop browsers can expose document scrolling after keyboard focus/scroll
+  // restoration even when the app root itself is overflow-hidden. Lock the
   // document while AppLayout is mounted and restore the previous styles when
   // leaving the authenticated shell so public/auth pages keep native scrolling.
   useEffect(() => {
@@ -149,7 +148,10 @@ export function AppLayout() {
     <div
       data-platform-shell="true"
       className={cn(
-        'flex h-[100dvh] min-h-0 w-full overflow-hidden bg-background',
+        // h-screen-safe uses 100dvh on modern mobile browsers and falls back to
+        // 100vh where dynamic viewport units are unavailable. This keeps the
+        // shell stable across Android, iOS, Samsung Internet, tablets and PWAs.
+        'flex h-screen-safe min-h-0 w-full overflow-hidden bg-background',
         isMessagesPage &&
           messagesChatOpen &&
           '[&_.chat-shell>.pb-safe.mb-16]:!mb-0',
