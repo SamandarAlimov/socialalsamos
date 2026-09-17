@@ -18,11 +18,16 @@ import {
   platformSpecsFor,
   PLATFORM_TOOL_NAMES,
 } from "../_shared/aiPlatformTools.ts";
+import {
+  executeGitHubTool,
+  githubSpecsFor,
+  GITHUB_TOOL_NAMES,
+} from "../_shared/aiGitHubTools.ts";
 
 const FUNCTION_NAME = "ai-agent";
 const RATE_LIMIT = 120;
 const RATE_WINDOW_MINUTES = 60;
-const MAX_ROUNDS = 8;
+const MAX_ROUNDS = 10;
 
 const MODEL_ROUTES: Record<string, string> = {
   auto: "google/gemini-3.6-flash",
@@ -74,6 +79,19 @@ CAPABILITIES (real tools, use them instead of guessing)
 - Model in use: ${opts.model}
 - Connected plugins: ${opts.connectorNames.join(", ") || "(none)"}
 
+GITHUB CODING AGENT
+- Native github_* tools are first-party tools backed by the user's GitHub connection. Prefer them over a generic connector for repository coding work.
+- You can inspect repositories, create repositories, read/search files, create branches, write/patch/delete files, open or merge pull requests, merge branches, compare refs, and inspect CI.
+- FOLLOW THE USER'S TARGET BRANCH EXACTLY. If they say main/default branch, write to main/default directly when GitHub permits it. If they name another branch, use that branch. Do NOT force a new branch.
+- Create a new branch only when the user explicitly asks for one, asks for a PR workflow, or their request clearly says to keep changes separate.
+- If the user does not specify a branch, resolve and use the repository default branch unless the task itself explicitly requires a PR workflow.
+- github_write_file / github_apply_patch / github_delete_file accept the default branch. GitHub branch protection or token permissions may still reject the write; report that real error rather than inventing a workaround.
+- For an existing file, inspect the relevant file first and prefer github_apply_patch for focused edits. Use github_write_file when creating a file or deliberately replacing the whole file.
+- Only create a repository when the user asks to create one.
+- If the user asks to merge/apply a branch or PR into main (or another target), use github_merge_branch or github_merge_pull_request as appropriate.
+- After repository changes, use github_compare and/or github_ci_status when useful. This repository may use GitHub Actions as the test runner when no remote sandbox is configured.
+- Never claim code was written, committed, merged, tested, or a repository was created until the corresponding tool succeeded.
+
 FIRST-PARTY USER DATA
 - my_search_insights reads ONLY the signed-in user's Alsamos search history. Use it for questions about what they searched most/recently; never guess from memory.
 - my_payment_history reads ONLY the signed-in user's Wallet ledger. Use it for their payment/transfer history, date ranges and counterparties. It is read-only and can never move money.
@@ -82,16 +100,17 @@ FIRST-PARTY USER DATA
 - If AI personalization is disabled, private first-party tools will refuse access; respect that decision.
 
 HOW TO WORK
-1. Plan briefly, then act. Chain tools when needed (search -> fetch -> compute -> answer).
+1. Plan briefly, then act. Chain tools when needed (inspect -> edit -> verify -> answer).
 2. If a fact may be recent, uncertain, or numeric, verify it with web_search / web_fetch and cite sources as [1], [2] matching the tool output order.
-3. For math, data transforms, parsing or algorithm checks, ALWAYS verify with run_code instead of computing mentally.
-4. When writing code, produce complete, runnable files in fenced blocks with the language tag. Explain only what matters.
-5. MEDIA: when the user asks for a picture, logo, poster, illustration, mockup, or an edit of an image, call generate_image immediately. When they ask for a video, clip or animation, call generate_video; if it returns a running job id, poll media_job_status.
-6. Use connector tools (list_connector_tools, connector_call) for the user's external apps, including GitHub repositories.
-7. computer_task controls the user's own machine through the Alsamos Bridge agent. It is queued and requires the user's explicit approval on that device. Never queue destructive commands or credential exfiltration.
-8. Never spend money, publish posts, or send messages without explicit user confirmation in the UI.
-9. If a tool fails, say so plainly with the error, then continue with the best alternative.
-10. Be concise by default; expand when the user asks for depth. Use Markdown where it helps.
+3. For math, data transforms, parsing or algorithm checks, verify with run_code when possible.
+4. For GitHub coding tasks, do not merely print code blocks when the user asked you to change the repository. Use the github_* write tools and then summarize the actual commits/results.
+5. When no external sandbox exists, do not pretend repository-wide shell tests ran locally. Use GitHub Actions/CI when available; restricted run_code is only for self-contained snippets.
+6. MEDIA: when the user asks for a picture, logo, poster, illustration, mockup, or an edit of an image, call generate_image immediately. When they ask for a video, clip or animation, call generate_video; if it returns a running job id, poll media_job_status.
+7. Use connector tools for other external apps and MCP servers.
+8. computer_task controls the user's own machine through the Alsamos Bridge agent. It is queued and requires the user's explicit approval on that device. Never queue destructive commands or credential exfiltration.
+9. Never spend money, publish posts, or send messages without explicit user confirmation in the UI.
+10. If a tool fails, say so plainly with the error, then continue with the best alternative.
+11. Be concise by default; expand when the user asks for depth. Use Markdown where it helps.
 
 USER CONTEXT
 ${opts.userContext}
@@ -103,7 +122,7 @@ async function classify(
   lastUserText: string,
 ): Promise<{ task: string; language: string }> {
   const sys = `Router. Output JSON only: {"task":"fast|balanced|coding|reasoning|vision","language":"BCP-47 code of the user's message"}.
-coding = programming/debugging. reasoning = math, multi-step logic, deep analysis, planning, research. vision = about an image/media. fast = trivial lookups or one-liners. balanced = everything else.`;
+coding = programming/debugging/repository work. reasoning = math, multi-step logic, deep analysis, planning, research. vision = about an image/media. fast = trivial lookups or one-liners. balanced = everything else.`;
   try {
     const { response } = await aiFetch({
       lovableKey,
@@ -163,8 +182,15 @@ serve(async (req) => {
       ? body.toolGroups.map(String)
       : DEFAULT_GROUPS;
     const enabled = toolsFromGroups(requestedGroups);
+
     if (requestedGroups.includes("alsamos")) {
       for (const name of PLATFORM_TOOL_NAMES) enabled.add(name);
+    }
+
+    // Backward compatible: existing clients already send "connectors".
+    // A future UI can send "github" explicitly without another backend change.
+    if (requestedGroups.includes("connectors") || requestedGroups.includes("github")) {
+      for (const name of GITHUB_TOOL_NAMES) enabled.add(name);
     }
 
     let connectors: ConnectorRow[] = [];
@@ -202,7 +228,11 @@ serve(async (req) => {
       : { task: requestedModel, language: "uz" };
     const model = MODEL_ROUTES[cls.task] ?? MODEL_ROUTES.balanced;
 
-    const toolSpecs = [...specsFor(enabled), ...platformSpecsFor(enabled)];
+    const toolSpecs = [
+      ...specsFor(enabled),
+      ...platformSpecsFor(enabled),
+      ...githubSpecsFor(enabled),
+    ];
     const ctx: ToolContext = {
       userId,
       admin,
@@ -351,7 +381,8 @@ serve(async (req) => {
                 }
                 send({ type: "tool_call", id: call.id, name: call.name, args });
 
-                const platformOutcome = await executePlatformTool(call.name, args, ctx);
+                const githubOutcome = await executeGitHubTool(call.name, args, ctx);
+                const platformOutcome = githubOutcome ?? await executePlatformTool(call.name, args, ctx);
                 const outcome = platformOutcome ?? await executeTool(call.name, args, ctx);
 
                 send({
