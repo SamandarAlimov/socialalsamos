@@ -7,7 +7,7 @@ import { AISidebar as AISidebarV2 } from '@/components/ai/AISidebarV2';
 import type { AIConversation, AIMessage, AIProject } from '@/components/ai/types';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
-import { useIsMobile } from '@/hooks/use-mobile';
+import { useAIWorkspaceLayout } from '@/hooks/use-ai-workspace-layout';
 import { projectForConversation, listLocalProjects } from '@/lib/ai/projectsStore';
 import { buildAIWorkspaceHref } from '@/lib/ai/workspaceUrl';
 import { db } from '@/lib/db';
@@ -92,13 +92,13 @@ function isProjectSchemaError(error: any): boolean {
 export default function AIProjectsWorkspacePage() {
   const { user, profile } = useAuth();
   const navigate = useNavigate();
-  const isMobile = useIsMobile();
-  const [sidebarOpen, setSidebarOpen] = useState(!isMobile);
+  const { sidebarOverlay } = useAIWorkspaceLayout();
+  const [sidebarOpen, setSidebarOpen] = useState(!sidebarOverlay);
   const [loading, setLoading] = useState(true);
   const [projects, setProjects] = useState<AIProject[]>([]);
   const [conversations, setConversations] = useState<AIConversation[]>([]);
 
-  useEffect(() => setSidebarOpen(!isMobile), [isMobile]);
+  useEffect(() => setSidebarOpen(!sidebarOverlay), [sidebarOverlay]);
 
   useEffect(() => {
     let cancelled = false;
@@ -171,6 +171,7 @@ export default function AIProjectsWorkspacePage() {
         conversationId: conversation.id,
       }),
     );
+    if (sidebarOverlay) setSidebarOpen(false);
   };
 
   const goToProject = (projectId: string | null) => {
@@ -179,6 +180,7 @@ export default function AIProjectsWorkspacePage() {
       return;
     }
     navigate(buildAIWorkspaceHref('/ai', '', { projectId, conversationId: null }));
+    if (sidebarOverlay) setSidebarOpen(false);
   };
 
   const deleteConversation = async (id: string) => {
@@ -221,34 +223,34 @@ export default function AIProjectsWorkspacePage() {
       <AnimatePresence>
         {sidebarOpen && (
           <>
-            {isMobile && (
+            {sidebarOverlay && (
               <motion.button
                 type="button"
                 aria-label="Yon panelni yopish"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="fixed inset-0 z-40 bg-black/55 backdrop-blur-sm"
+                className="absolute inset-0 z-40 bg-black/45 backdrop-blur-[1px]"
                 onClick={() => setSidebarOpen(false)}
               />
             )}
             <motion.aside
-              initial={{ x: isMobile ? -320 : 0, opacity: isMobile ? 0 : 1 }}
+              initial={{ x: sidebarOverlay ? -320 : 0, opacity: sidebarOverlay ? 0 : 1 }}
               animate={{ x: 0, opacity: 1 }}
               exit={{ x: -320, opacity: 0 }}
               transition={{ type: 'spring', damping: 26, stiffness: 300 }}
               className={cn(
                 'z-50 flex min-h-0 min-w-0 flex-col border-r border-border/50 bg-background',
-                isMobile
-                  ? 'fixed bottom-0 left-0 top-0 w-[min(300px,88vw)]'
-                  : 'relative h-full w-[280px] shrink-0 lg:w-[300px]',
+                sidebarOverlay
+                  ? 'absolute inset-y-0 left-0 w-[min(300px,88%)] shadow-2xl'
+                  : 'relative h-full w-[280px] shrink-0 xl:w-[300px]',
               )}
             >
               <AISidebarV2
                 conversations={sortedConversations}
                 loading={loading}
                 activeId={null}
-                isMobile={isMobile}
+                isMobile={sidebarOverlay}
                 profile={profile}
                 onNew={() => navigate('/ai')}
                 onNewProject={goToProject}
@@ -257,7 +259,10 @@ export default function AIProjectsWorkspacePage() {
                 onRename={renameConversation}
                 onTogglePin={togglePin}
                 onClose={() => setSidebarOpen(false)}
-                onOpenProjects={() => navigate('/ai/projects')}
+                onOpenProjects={() => {
+                  navigate('/ai/projects');
+                  if (sidebarOverlay) setSidebarOpen(false);
+                }}
                 projects={projects}
                 activeProjectId={null}
                 onSelectProject={goToProject}
@@ -272,7 +277,7 @@ export default function AIProjectsWorkspacePage() {
           <Button
             size="icon"
             variant="secondary"
-            className="sticky left-3 top-3 z-30 ml-3 mt-3 hidden h-9 w-9 rounded-xl shadow-sm md:inline-flex"
+            className="sticky left-3 top-3 z-30 ml-3 mt-3 inline-flex h-9 w-9 rounded-xl shadow-sm"
             onClick={() => setSidebarOpen(true)}
             aria-label="Yon panelni ochish"
           >

@@ -79,8 +79,6 @@ export function AIComposer(props: Props) {
       return null;
     }
 
-    // ai_agent_runs was introduced after the generated browser DB types. Keep
-    // this small status-only query isolated until the next type generation.
     const { data, error } = await (supabase as any)
       .from('ai_agent_runs')
       .select('id,status,conversation_id,updated_at')
@@ -144,58 +142,60 @@ export function AIComposer(props: Props) {
   const showRunBanner = Boolean(pendingRun && !props.busy);
 
   return (
-    <div className="w-full">
+    <div className="w-full min-w-0">
       {showRunBanner && pendingRun && (
-        <div className="mx-auto mb-1.5 w-full max-w-3xl px-3 sm:px-4">
-          <div className="flex items-center gap-2 rounded-xl border border-border/60 bg-muted/30 px-3 py-2 text-xs">
+        <div className="mx-auto mb-1.5 w-full max-w-3xl px-2 sm:px-4">
+          <div className="flex min-w-0 flex-wrap items-center gap-2 rounded-xl border border-border/60 bg-muted/30 px-2.5 py-2 text-xs sm:px-3">
             {['queued', 'running'].includes(pendingRun.status) || continuing ? (
               <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-blue-500" />
             ) : (
               <Bot className="h-3.5 w-3.5 shrink-0 text-blue-500" />
             )}
-            <div className="min-w-0 flex-1">
-              <p className="font-medium">{runStatusText(pendingRun.status)}</p>
+            <div className="min-w-[10rem] flex-1 basis-40">
+              <p className="break-words font-medium">{runStatusText(pendingRun.status)}</p>
               <p className="truncate text-[10px] text-muted-foreground">
                 Run {pendingRun.runId.slice(0, 8)} · browser yopilsa ham server checkpointdan davom etadi
               </p>
-              {runError && <p className="mt-0.5 text-[10px] text-destructive">{runError}</p>}
+              {runError && <p className="mt-0.5 break-words text-[10px] text-destructive">{runError}</p>}
             </div>
-            {pendingRun.status === 'awaiting_continue' && (
+            <div className="ml-auto flex max-w-full shrink-0 items-center gap-1.5">
+              {pendingRun.status === 'awaiting_continue' && (
+                <button
+                  type="button"
+                  onClick={() => void continuePending()}
+                  disabled={continuing}
+                  className="flex h-7 shrink-0 items-center gap-1 rounded-lg border bg-background px-2 text-[10px] font-semibold hover:bg-muted disabled:opacity-50"
+                >
+                  {continuing ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                  <span className="hidden min-[380px]:inline">Davom ettirish</span>
+                </button>
+              )}
+              {terminal && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    dismissPending();
+                    window.location.reload();
+                  }}
+                  className="h-7 shrink-0 rounded-lg border bg-background px-2 text-[10px] font-semibold hover:bg-muted"
+                >
+                  <span className="hidden min-[420px]:inline">Natijani </span>yangilash
+                </button>
+              )}
               <button
                 type="button"
-                onClick={() => void continuePending()}
-                disabled={continuing}
-                className="flex h-7 shrink-0 items-center gap-1 rounded-lg border bg-background px-2 text-[10px] font-semibold hover:bg-muted disabled:opacity-50"
+                onClick={dismissPending}
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
+                aria-label="Agent run holatini yashirish"
               >
-                {continuing ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
-                Davom ettirish
+                <X className="h-3.5 w-3.5" />
               </button>
-            )}
-            {terminal && (
-              <button
-                type="button"
-                onClick={() => {
-                  dismissPending();
-                  window.location.reload();
-                }}
-                className="h-7 shrink-0 rounded-lg border bg-background px-2 text-[10px] font-semibold hover:bg-muted"
-              >
-                Natijani yangilash
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={dismissPending}
-              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
-              aria-label="Agent run holatini yashirish"
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
+            </div>
           </div>
         </div>
       )}
 
-      <div className="mx-auto mb-1.5 flex w-full max-w-3xl justify-end px-3 sm:px-4">
+      <div className="mx-auto mb-1.5 flex w-full max-w-3xl justify-end px-2 sm:px-4">
         <div className="inline-flex rounded-full border border-border/60 bg-background/95 p-0.5 shadow-sm backdrop-blur">
           {([
             ['chat', 'Suhbat', MessageCircle],

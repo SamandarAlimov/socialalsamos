@@ -107,26 +107,25 @@ export function AIGithubDialog({ open, onOpenChange, onPickRepo }: AIGithubDialo
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-h-[92dvh] w-[calc(100vw-1rem)] max-w-lg overflow-y-auto p-4 sm:p-6">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg border bg-muted/40">
+          <DialogTitle className="flex min-w-0 items-center gap-2 pr-5">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border bg-muted/40">
               <Github className="h-4 w-4" />
             </span>
-            GitHub
+            <span className="truncate">GitHub</span>
           </DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="break-words text-left leading-relaxed">
             GitHub token Supabase’dagi himoyalangan server connection orqali ishlatiladi. AI model tokenning o‘zini ko‘rmaydi; u faqat ruxsat berilgan GitHub amallarini tool orqali bajaradi.
           </DialogDescription>
         </DialogHeader>
 
         {connected ? (
-          <div className="space-y-3">
-            <div className="flex items-center gap-2 rounded-xl border border-border/60 bg-muted/30 p-3">
-              <ShieldCheck className="h-4 w-4 text-emerald-500" />
-              <span className="text-sm">Ulangan{login ? `: @${login}` : ''}</span>
-              <div className="flex-1" />
-              <Button size="sm" variant="ghost" onClick={handleDisconnect} disabled={loading}>
+          <div className="min-w-0 space-y-3">
+            <div className="flex min-w-0 flex-wrap items-center gap-2 rounded-xl border border-border/60 bg-muted/30 p-3">
+              <ShieldCheck className="h-4 w-4 shrink-0 text-emerald-500" />
+              <span className="min-w-0 flex-1 truncate text-sm">Ulangan{login ? `: @${login}` : ''}</span>
+              <Button size="sm" variant="ghost" onClick={handleDisconnect} disabled={loading} className="shrink-0">
                 <LogOut className="mr-1.5 h-3.5 w-3.5" /> Uzish
               </Button>
             </div>
@@ -135,7 +134,7 @@ export function AIGithubDialog({ open, onOpenChange, onPickRepo }: AIGithubDialo
               Alsamos AI repo o‘qish va qidirish bilan birga, token ruxsat bersa fayl yozish, branch/PR yaratish, merge qilish, CI holatini tekshirish va repository yaratish amallarini ham bajara oladi.
             </div>
 
-            <div className="max-h-64 space-y-1 overflow-y-auto">
+            <div className="max-h-[min(16rem,42dvh)] min-w-0 space-y-1 overflow-y-auto overscroll-contain">
               {loading && repos.length === 0 && (
                 <div className="flex items-center gap-2 p-3 text-sm text-muted-foreground">
                   <Loader2 className="h-4 w-4 animate-spin" /> Repolar yuklanmoqda…
@@ -149,21 +148,21 @@ export function AIGithubDialog({ open, onOpenChange, onPickRepo }: AIGithubDialo
                     onPickRepo?.(repo);
                     onOpenChange(false);
                   }}
-                  className="flex w-full flex-col rounded-lg px-3 py-2 text-left transition-colors hover:bg-muted/60"
+                  className="flex w-full min-w-0 flex-col rounded-lg px-3 py-2 text-left transition-colors hover:bg-muted/60"
                 >
-                  <span className="text-sm font-medium">{repo.fullName}</span>
+                  <span className="max-w-full truncate text-sm font-medium">{repo.fullName}</span>
                   {repo.description && (
-                    <span className="line-clamp-1 text-[11px] text-muted-foreground">{repo.description}</span>
+                    <span className="line-clamp-2 max-w-full break-words text-[11px] text-muted-foreground">{repo.description}</span>
                   )}
                 </button>
               ))}
             </div>
           </div>
         ) : (
-          <div className="space-y-3">
+          <div className="min-w-0 space-y-3">
             <div className="space-y-1.5">
               <Label htmlFor="alsamos-github-pat">Access token</Label>
-              <div className="relative">
+              <div className="relative min-w-0">
                 <Input
                   id="alsamos-github-pat"
                   name="alsamos-github-pat"
@@ -186,7 +185,7 @@ export function AIGithubDialog({ open, onOpenChange, onPickRepo }: AIGithubDialo
                       ? undefined
                       : ({ WebkitTextSecurity: 'disc', textSecurity: 'disc' } as React.CSSProperties)
                   }
-                  className="pr-10 font-mono text-xs"
+                  className="min-w-0 pr-10 font-mono text-xs"
                 />
                 <button
                   type="button"
@@ -197,8 +196,8 @@ export function AIGithubDialog({ open, onOpenChange, onPickRepo }: AIGithubDialo
                   {showToken ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
                 </button>
               </div>
-              {error && <p className="text-[11px] text-destructive">{error}</p>}
-              <p className="text-[11px] leading-relaxed text-muted-foreground">
+              {error && <p className="break-words text-[11px] text-destructive">{error}</p>}
+              <p className="break-words text-[11px] leading-relaxed text-muted-foreground">
                 Tavsiya: faqat kerakli repolar uchun cheklangan fine-grained token ishlating. Kod tahriri uchun Contents read/write, PR oqimi uchun Pull requests read/write, CI ko‘rish uchun Actions read kerak. Yangi repository yaratish uchun Administration read/write ruxsati ham kerak; organization repolari esa org siyosati va token egasining org huquqlariga bog‘liq.
               </p>
             </div>
