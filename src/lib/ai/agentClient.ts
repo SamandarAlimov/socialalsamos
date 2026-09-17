@@ -1,7 +1,6 @@
-// Alsamos AI agent klienti.
-// Browser faqat Supabase Edge endpointlariga murojaat qiladi. Real sandbox yoki
-// boshqa private AI infratuzilmasiga chiqish server-to-server bajariladi; shu
-// bilan browser CORS xatolari va infratuzilma originining clientga sizishi yo'q.
+// Alsamos AI agent client.
+// Chat mode streams one short request. Agent mode uses durable server runs and
+// transparently reconnects to the same run until it reaches a terminal state.
 
 import { supabase } from '@/integrations/supabase/client';
 import type { AgentEvent, AIMode, ModelId, ToolGroupId } from './capabilities';
@@ -19,18 +18,47 @@ export type StreamAgentOptions = {
 };
 
 const FUNCTIONS_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
+const MODE_KEY = 'alsamos.ai.mode';
+const PENDING_KEY = 'alsamos.ai.pending-run';
 
 class AgentUnavailableError extends Error {}
 
-/**
- * Backward-compatible routing contract used by regression tests. Browser code
- * must never choose the private runner directly; code execution is a tool of
- * the Supabase Edge agent and its remote sandbox hop is server-to-server.
- */
 export function shouldPreferServerAgent(
   _options: Pick<StreamAgentOptions, 'messages' | 'model' | 'toolGroups'>,
 ): boolean {
   return false;
+}
+
+function selectedMode(fallback: AIMode): AIMode {
+  try {
+    const stored = localStorage.getItem(MODE_KEY);
+    return stored === 'chat' || stored === 'agent' ? stored : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function savePending(value: { runId: string; eventId: number; status: string; conversationId?: string | null } | null) {
+  try {
+    if (!value) localStorage.removeItem(PENDING_KEY);
+    else localStorage.setItem(PENDING_KEY, JSON.stringify(value));
+  } catch {
+    // storage may be unavailable in private mode
+  }
+}
+
+export function readPendingAgentRun(): {
+  runId: string;
+  eventId: number;
+  status: string;
+  conversationId?: string | null;
+} | null {
+  try {
+    const raw = JSON.parse(localStorage.getItem(PENDING_KEY) || 'null');
+    return raw?.runId ? raw : null;
+  } catch {
+    return null;
+  }
 }
 
 async function authHeaders(): Promise<Record<string, string>> {
@@ -43,7 +71,6 @@ async function authHeaders(): Promise<Record<string, string>> {
   };
 }
 
-/** SSE oqimini satrma-satr o'qib, `data: ` qatorlarini qaytaradi. */
 async function readSse(
   body: ReadableStream<Uint8Array>,
   onLine: (payload: string) => void,
@@ -51,19 +78,16 @@ async function readSse(
   const reader = body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
-
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
     buffer += decoder.decode(value, { stream: true });
-
     let newline: number;
     while ((newline = buffer.indexOf('\n')) !== -1) {
       let line = buffer.slice(0, newline);
       buffer = buffer.slice(newline + 1);
       if (line.endsWith('\r')) line = line.slice(0, -1);
       if (!line.startsWith('data: ')) continue;
-
       const raw = line.slice(6).trim();
       if (!raw || raw === '[DONE]') continue;
       onLine(raw);
@@ -71,27 +95,26 @@ async function readSse(
   }
 }
 
-/** Supabase Edge'dagi to'liq agent: web/image/video/code/connectors/computer. */
-async function streamFromAgent(options: StreamAgentOptions): Promise<void> {
-  const { messages, mode, model, toolGroups, conversationId, context, signal, onEvent } = options;
-
+async function requestAgent(
+  payload: Record<string, unknown>,
+  signal: AbortSignal | undefined,
+  onEvent: (event: AgentEvent) => void,
+): Promise<{ runId: string | null; eventId: number; status: string | null; sawText: boolean; sawMedia: boolean; failure: string | null }> {
   let response: Response;
   try {
     response = await fetch(`${FUNCTIONS_BASE}/ai-agent`, {
       method: 'POST',
       headers: await authHeaders(),
-      body: JSON.stringify({ messages, mode, model, toolGroups, conversationId, context }),
+      body: JSON.stringify(payload),
       signal,
     });
   } catch (error) {
     if (signal?.aborted) throw error;
     throw new AgentUnavailableError('ai-agent mavjud emas');
   }
-
   if ([404, 501, 502, 503, 504].includes(response.status)) {
     throw new AgentUnavailableError(`ai-agent HTTP ${response.status}`);
   }
-
   if (!response.ok || !response.body) {
     let message = `AI xizmatiga ulanib bo'lmadi (HTTP ${response.status}).`;
     try {
@@ -99,58 +122,133 @@ async function streamFromAgent(options: StreamAgentOptions): Promise<void> {
       if (json?.message) message = json.message;
       else if (json?.error) message = json.error;
     } catch {
-      // JSON bo'lmasa umumiy HTTP xabarini saqlaymiz.
+      // keep HTTP message
     }
     throw new Error(message);
   }
 
+  let runId: string | null = response.headers.get('X-AI-Run');
+  let eventId = 0;
+  let status: string | null = null;
   let sawText = false;
-  let sawSuccessfulMedia = false;
-  let lastToolFailure: string | null = null;
+  let sawMedia = false;
+  let failure: string | null = null;
 
   await readSse(response.body, (raw) => {
     try {
       const event = JSON.parse(raw) as AgentEvent;
-
+      const anyEvent = event as AgentEvent & { eventId?: number; runId?: string };
+      if (typeof anyEvent.eventId === 'number') eventId = Math.max(eventId, anyEvent.eventId);
+      if (anyEvent.runId) runId = anyEvent.runId;
       if (event.type === 'delta' && event.text.trim()) sawText = true;
-
+      if (event.type === 'run_state') {
+        status = event.status;
+        runId = event.runId;
+        savePending(
+          ['completed', 'failed', 'cancelled'].includes(event.status)
+            ? null
+            : { runId: event.runId, eventId, status: event.status, conversationId: payload.conversationId as string | null | undefined },
+        );
+      }
       if (event.type === 'tool_result') {
         if (!event.ok) {
-          const summary = event.summary?.trim();
-          lastToolFailure = summary
-            ? `${event.name === 'generate_video' ? 'Video yaratilmadi' : 'Vosita bajarilmadi'}: ${summary}`
+          failure = event.summary?.trim()
+            ? `${event.name === 'generate_video' ? 'Video yaratilmadi' : 'Vosita bajarilmadi'}: ${event.summary.trim()}`
             : `${event.name} bajarilmadi.`;
         } else {
           const data = event.data as Record<string, unknown> | null;
-          if (typeof data?.imageUrl === 'string' || typeof data?.videoUrl === 'string') {
-            sawSuccessfulMedia = true;
-          }
+          if (typeof data?.imageUrl === 'string' || typeof data?.videoUrl === 'string') sawMedia = true;
         }
       }
-
+      // run_state and plan are useful to generic clients, while the current page
+      // can safely ignore them until it has a dedicated Runs panel.
       onEvent(event);
     } catch (error) {
-      if (error instanceof SyntaxError) return;
-      throw error;
+      if (!(error instanceof SyntaxError)) throw error;
     }
   });
 
-  if (!sawText && !sawSuccessfulMedia && lastToolFailure) {
-    onEvent({ type: 'error', message: lastToolFailure });
+  return { runId, eventId, status, sawText, sawMedia, failure };
+}
+
+async function streamDurableAgent(options: StreamAgentOptions): Promise<void> {
+  const prepared = await withAlsamosSearchGrounding(options);
+  let state = await requestAgent(
+    {
+      messages: prepared.messages,
+      mode: 'agent',
+      model: prepared.model,
+      toolGroups: prepared.toolGroups,
+      conversationId: prepared.conversationId,
+      context: prepared.context,
+    },
+    prepared.signal,
+    prepared.onEvent,
+  );
+
+  let sawText = state.sawText;
+  let sawMedia = state.sawMedia;
+  let failure = state.failure;
+  let reconnects = 0;
+
+  while (
+    state.runId &&
+    !prepared.signal?.aborted &&
+    state.status &&
+    !['completed', 'failed', 'cancelled', 'awaiting_continue'].includes(state.status)
+  ) {
+    reconnects += 1;
+    if (reconnects > 40) throw new Error('Agent stream reconnect limitiga yetdi. Run serverda saqlangan.');
+    await new Promise((resolve) => window.setTimeout(resolve, 350));
+    state = await requestAgent(
+      { action: 'resume', runId: state.runId, afterEventId: state.eventId, mode: 'agent', conversationId: prepared.conversationId },
+      prepared.signal,
+      prepared.onEvent,
+    );
+    sawText ||= state.sawText;
+    sawMedia ||= state.sawMedia;
+    failure = state.failure ?? failure;
+  }
+
+  if (!sawText && !sawMedia && failure && state.status !== 'awaiting_continue') {
+    prepared.onEvent({ type: 'error', message: failure });
+  }
+  if (state.status === 'awaiting_continue' && state.runId) {
+    prepared.onEvent({
+      type: 'notice',
+      message: `Agent checkpoint qilindi. Run ${state.runId.slice(0, 8)} uchun davom ettirish mumkin.`,
+      runId: state.runId,
+    });
   }
 }
 
-/** Eng oxirgi zaxira — oddiy Supabase ai-assistant chat oqimi. */
+async function streamDirectChat(options: StreamAgentOptions): Promise<void> {
+  const prepared = await withAlsamosSearchGrounding(options);
+  const state = await requestAgent(
+    {
+      messages: prepared.messages,
+      mode: 'chat',
+      model: prepared.model,
+      toolGroups: prepared.toolGroups,
+      conversationId: prepared.conversationId,
+      context: prepared.context,
+    },
+    prepared.signal,
+    prepared.onEvent,
+  );
+  if (!state.sawText && !state.sawMedia && state.failure) {
+    prepared.onEvent({ type: 'error', message: state.failure });
+  }
+}
+
 async function streamFromAssistant(options: StreamAgentOptions): Promise<void> {
   const { messages, context, signal, onEvent } = options;
-
   const response = await fetch(`${FUNCTIONS_BASE}/ai-assistant`, {
     method: 'POST',
     headers: await authHeaders(),
     body: JSON.stringify({ messages, context }),
     signal,
   });
-
   if (!response.ok || !response.body) {
     let message = `AI xizmatiga ulanib bo'lmadi (HTTP ${response.status}).`;
     try {
@@ -158,19 +256,18 @@ async function streamFromAssistant(options: StreamAgentOptions): Promise<void> {
       if (json?.error) message = json.error;
       else if (json?.message) message = json.message;
     } catch {
-      // JSON bo'lmasa umumiy HTTP xabarini saqlaymiz.
+      // keep default
     }
     throw new Error(message);
   }
-
   onEvent({
     type: 'meta',
     model: response.headers.get('X-AI-Model') ?? 'auto',
     task: response.headers.get('X-AI-Task') ?? 'general',
     language: response.headers.get('X-AI-Language') ?? 'uz',
     tools: [],
+    mode: 'chat',
   });
-
   await readSse(response.body, (raw) => {
     try {
       const json = JSON.parse(raw) as {
@@ -179,24 +276,37 @@ async function streamFromAssistant(options: StreamAgentOptions): Promise<void> {
       const text = json.choices?.[0]?.delta?.content ?? json.choices?.[0]?.message?.content ?? '';
       if (text) onEvent({ type: 'delta', text });
     } catch {
-      // Noto'g'ri SSE bo'lagi keyingi paket bilan davom etadi.
+      // malformed chunk; next packet may complete it
     }
   });
 }
 
-/**
- * Barcha agent vazifalari Supabase Edge agentga boradi. Edge agentning run_code
- * vositasi private remote sandboxga server-to-server chiqadi va shu sabab
- * browser hech qachon api.alsamos.com bilan cross-origin gaplashmaydi.
- */
 export async function streamAgent(options: StreamAgentOptions): Promise<void> {
-  const prepared = await withAlsamosSearchGrounding(options);
-
+  const mode = selectedMode(options.mode);
+  const effective = { ...options, mode };
   try {
-    await streamFromAgent(prepared);
+    if (mode === 'agent') await streamDurableAgent(effective);
+    else await streamDirectChat(effective);
   } catch (error) {
     if (!(error instanceof AgentUnavailableError)) throw error;
-    await streamFromAssistant(prepared);
+    await streamFromAssistant(effective);
+  }
+}
+
+export async function continueAgentRun(
+  runId: string,
+  onEvent: (event: AgentEvent) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  let state = await requestAgent({ action: 'continue', runId, mode: 'agent' }, signal, onEvent);
+  while (
+    state.runId &&
+    !signal?.aborted &&
+    state.status &&
+    !['completed', 'failed', 'cancelled', 'awaiting_continue'].includes(state.status)
+  ) {
+    await new Promise((resolve) => window.setTimeout(resolve, 350));
+    state = await requestAgent({ action: 'resume', runId: state.runId, afterEventId: state.eventId, mode: 'agent' }, signal, onEvent);
   }
 }
 
@@ -225,11 +335,6 @@ async function sandboxError(response: Response): Promise<string> {
   }
 }
 
-/**
- * Artifact panelidagi "Ishga tushirish" ham aynan Supabase code-sandbox orqali
- * ishlaydi. code-sandbox remote runner sozlangan bo'lsa JS/TS/Python/Bashni
- * izolyatsiyada bajaradi; JS uchun restricted Edge fallback ham mavjud.
- */
 export async function runInSandbox(
   code: string,
   timeoutMs = 5000,
@@ -240,9 +345,6 @@ export async function runInSandbox(
     headers: await authHeaders(),
     body: JSON.stringify({ code, timeoutMs, language }),
   });
-
-  if (!response.ok) {
-    throw new Error(`Sandbox xatosi: ${await sandboxError(response)}`);
-  }
+  if (!response.ok) throw new Error(`Sandbox xatosi: ${await sandboxError(response)}`);
   return (await response.json()) as SandboxRun;
 }
