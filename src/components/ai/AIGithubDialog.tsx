@@ -116,7 +116,7 @@ export function AIGithubDialog({ open, onOpenChange, onPickRepo }: AIGithubDialo
             GitHub
           </DialogTitle>
           <DialogDescription>
-            Fine-grained PAT bilan to‘g‘ridan-to‘g‘ri GitHub API’ga ulanadi. Token Alsamos serveriga yuborilmaydi va shu brauzerda saqlanadi.
+            GitHub token Supabase’dagi himoyalangan server connection orqali ishlatiladi. AI model tokenning o‘zini ko‘rmaydi; u faqat ruxsat berilgan GitHub amallarini tool orqali bajaradi.
           </DialogDescription>
         </DialogHeader>
 
@@ -129,6 +129,10 @@ export function AIGithubDialog({ open, onOpenChange, onPickRepo }: AIGithubDialo
               <Button size="sm" variant="ghost" onClick={handleDisconnect} disabled={loading}>
                 <LogOut className="mr-1.5 h-3.5 w-3.5" /> Uzish
               </Button>
+            </div>
+
+            <div className="rounded-xl border border-border/60 bg-muted/20 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
+              Alsamos AI repo o‘qish va qidirish bilan birga, token ruxsat bersa fayl yozish, branch/PR yaratish, merge qilish, CI holatini tekshirish va repository yaratish amallarini ham bajara oladi.
             </div>
 
             <div className="max-h-64 space-y-1 overflow-y-auto">
@@ -194,8 +198,8 @@ export function AIGithubDialog({ open, onOpenChange, onPickRepo }: AIGithubDialo
                 </button>
               </div>
               {error && <p className="text-[11px] text-destructive">{error}</p>}
-              <p className="text-[11px] text-muted-foreground">
-                GitHub → Settings → Developer settings → Personal access tokens → Fine-grained. Ruxsatlar: Metadata (Read), Contents, Issues va Pull requests.
+              <p className="text-[11px] leading-relaxed text-muted-foreground">
+                Tavsiya: faqat kerakli repolar uchun cheklangan token ishlating. Kod tahriri uchun Contents read/write, PR oqimi uchun Pull requests read/write, CI ko‘rish uchun Actions read ruxsatlari kerak bo‘lishi mumkin. Repo yaratish va organization amallari GitHub hisob/org ruxsatlariga ham bog‘liq.
               </p>
             </div>
             <Button
