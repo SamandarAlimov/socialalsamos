@@ -1,5 +1,5 @@
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { Home, Search, Video, MessageCircle, ShoppingBag, Map, PlusSquare, User, Settings, LogOut, Compass, Wallet, Sparkles, LayoutGrid, MoreHorizontal, Moon, Sun, UsersRound, FolderKanban } from 'lucide-react';
+import { Home, Search, Video, MessageCircle, ShoppingBag, Map, PlusSquare, User, Settings, LogOut, Compass, Wallet, Sparkles, LayoutGrid, MoreHorizontal, Moon, Sun, UsersRound } from 'lucide-react';
 import { AlsamosLogo } from '@/components/AlsamosLogo';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
@@ -32,7 +32,6 @@ const navItems: NavItem[] = [
   { icon: Map, labelKey: 'nav.map', path: '/map' },
   { icon: Wallet, labelKey: 'nav.payment', path: '/payment' },
   { icon: Sparkles, labelKey: 'nav.ai', path: '/ai' },
-  { icon: FolderKanban, labelKey: 'nav.projects', path: '/projects' },
   { icon: LayoutGrid, labelKey: 'nav.miniApps', path: '/mini-apps' },
   { icon: PlusSquare, labelKey: 'nav.create', path: '/create' },
 ];
