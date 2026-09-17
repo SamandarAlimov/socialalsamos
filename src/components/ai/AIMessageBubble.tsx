@@ -139,7 +139,7 @@ function AttachmentPreview({ file }: { file: AIAttachmentMeta }) {
     return (
       <div className="w-[min(340px,82vw)] rounded-2xl border border-border/70 bg-card p-3 shadow-sm">
         <div className="mb-2 flex items-center gap-2">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted/70">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted/70">
             <Music2 className="h-4 w-4 text-muted-foreground" />
           </span>
           <div className="min-w-0 flex-1">
@@ -193,7 +193,7 @@ function UserMessageBubble({
             className="max-h-56 min-h-20 w-full resize-y rounded-xl bg-transparent px-2.5 py-2 text-sm leading-relaxed outline-none"
             aria-label="Promptni tahrirlash"
           />
-          <div className="mt-1 flex justify-end gap-1.5">
+          <div className="mt-1 flex flex-wrap justify-end gap-1.5">
             <button
               type="button"
               onClick={() => { setDraft(text); setEditing(false); }}
