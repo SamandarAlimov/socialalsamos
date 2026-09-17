@@ -84,7 +84,7 @@ export function AppLayout() {
   const isCreatePage = location.pathname === '/create';
   const isMessagesPage = location.pathname === '/messages';
   const isVideosPage = location.pathname === '/videos';
-  const isAiPage = location.pathname === '/ai';
+  const isAiPage = location.pathname === '/ai' || location.pathname === '/projects';
   const isAdminPage = location.pathname === '/admin' || location.pathname.startsWith('/admin/');
 
   useEffect(() => {
