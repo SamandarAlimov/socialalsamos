@@ -123,6 +123,21 @@ function isProjectSchemaError(error: any): boolean {
   );
 }
 
+function conversationPreview(conversation: AIConversation): string {
+  const firstUser = conversation.messages.find((message) => message.role === 'user' && message.content.trim());
+  if (!firstUser) return 'Yangi suhbat';
+  const text = firstUser.content.replace(/\s+/g, ' ').trim();
+  return text.length > 110 ? `${text.slice(0, 110)}…` : text;
+}
+
+function conversationDate(value: Date): string {
+  try {
+    return new Intl.DateTimeFormat('uz-UZ', { day: 'numeric', month: 'short' }).format(value);
+  } catch {
+    return value.toLocaleDateString();
+  }
+}
+
 export default function AIPageV2() {
   const { user, profile } = useAuth();
   const { toast } = useToast();
@@ -168,7 +183,24 @@ export default function AIPageV2() {
     [activeProjectId, projects],
   );
 
+  const activeProjectConversations = useMemo(() => {
+    if (!activeProjectId) return [];
+    return conversations
+      .filter((conversation) => conversation.projectId === activeProjectId)
+      .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+  }, [activeProjectId, conversations]);
+
   useEffect(() => setSidebarOpen(!isMobile), [isMobile]);
+
+  // A project deep link is a workspace view, not a standalone detail page. Keep
+  // the AI sidebar visible on desktop so projects and their chats remain in view
+  // just like other project-centric AI products. Manual close still works until
+  // the route changes again.
+  useEffect(() => {
+    if (isMobile) return;
+    const projectId = new URLSearchParams(location.search).get('project');
+    if (projectId) setSidebarOpen(true);
+  }, [isMobile, location.search]);
 
   useEffect(() => {
     try {
@@ -1010,6 +1042,32 @@ export default function AIPageV2() {
     ? conversations.find((conversation) => conversation.id === currentConversationId)?.title || 'Suhbat'
     : 'Yangi suhbat';
 
+  const composer = (
+    <AIComposer
+      value={input}
+      onChange={setInput}
+      onSend={() => send()}
+      onStop={stop}
+      busy={busy}
+      uploading={uploading}
+      attachments={attachments}
+      onPickFiles={uploadFiles}
+      onDropFiles={uploadFiles}
+      onRemoveAttachment={(url) => setAttachments((previous) => previous.filter((attachment) => attachment.url !== url))}
+      model={model}
+      onModelChange={setModel}
+      activeModel={activeModel}
+      toolGroups={toolGroups}
+      onToolGroupsChange={(groups) => {
+        // Only web is user-toggleable. Other capability groups stay on.
+        const webEnabled = groups.includes('web');
+        setToolGroups(ALL_TOOL_GROUPS.filter((group) => group !== 'web' || webEnabled));
+      }}
+      onOpenConnectors={() => setConnectorsOpen(true)}
+      onOpenGithub={() => setGithubOpen(true)}
+    />
+  );
+
   return (
     <div className="flex h-full min-h-0 min-w-0 overflow-hidden bg-background">
       <AnimatePresence>
@@ -1096,56 +1154,94 @@ export default function AIPageV2() {
 
         <ScrollArea ref={scrollAreaRef} className="min-h-0 min-w-0 flex-1 overflow-hidden">
           {messages.length === 0 ? (
-            <div className="flex min-h-[26rem] h-full min-w-0 flex-col items-center justify-center px-4 py-8">
-              <motion.div
-                initial={{ scale: 0.9, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                transition={{ type: 'spring', damping: 18 }}
-                className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-border/70 bg-muted/40"
-              >
-                <Sparkles className="h-6 w-6" />
-              </motion.div>
+            <div className="mx-auto flex min-h-full w-full max-w-4xl flex-col px-4 py-8 sm:px-6">
+              <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center py-8 sm:py-12">
+                <motion.div
+                  initial={{ scale: 0.9, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={{ type: 'spring', damping: 18 }}
+                  className="mb-4 flex h-12 w-12 items-center justify-center self-center rounded-2xl border border-border/70 bg-muted/40"
+                >
+                  {activeProject ? <FolderKanban className="h-5 w-5" /> : <Sparkles className="h-5 w-5" />}
+                </motion.div>
 
-              <h2 className="mb-1.5 max-w-full break-words text-center text-2xl font-semibold sm:text-3xl">
-                {activeProject ? activeProject.name : greetingName ? `Salom, ${greetingName}` : 'Alsamos AI'}
-              </h2>
-              <p className="mb-6 max-w-lg text-center text-sm leading-relaxed text-muted-foreground">
-                {activeProject
-                  ? activeProject.instructions || 'Bu loyiha ichidagi suhbatlar umumiy kontekst bilan ishlaydi.'
-                  : 'Savol, vazifa yoki yaratmoqchi bo‘lgan narsangizni yozing. Kerakli vositani AI o‘zi tanlaydi.'}
-              </p>
+                <h2 className="mb-1.5 max-w-full break-words text-center text-2xl font-semibold sm:text-3xl">
+                  {activeProject ? activeProject.name : greetingName ? `Salom, ${greetingName}` : 'Alsamos AI'}
+                </h2>
+                <p className="mx-auto mb-5 max-w-xl text-center text-sm leading-relaxed text-muted-foreground">
+                  {activeProject
+                    ? activeProject.instructions || 'Bu loyiha ichidagi suhbatlar umumiy kontekst bilan ishlaydi.'
+                    : 'Savol, vazifa yoki yaratmoqchi bo‘lgan narsangizni yozing. Kerakli vositani AI o‘zi tanlaydi.'}
+                </p>
 
-              {forwardedPost && (
-                <div className="mb-5 w-full max-w-2xl overflow-hidden rounded-2xl border border-blue-500/20 bg-card/50">
-                  <div className="flex items-center gap-2 border-b border-blue-500/15 bg-blue-500/5 px-4 py-2.5">
-                    <Sparkles className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                    <span className="text-xs font-semibold text-blue-700 dark:text-blue-300">Post yuborildi</span>
-                    <button type="button" onClick={() => setForwardedPost(null)} className="ml-auto text-muted-foreground hover:text-foreground" aria-label="Yopish">
-                      <X className="h-3.5 w-3.5" />
-                    </button>
+                <div className="w-full">{composer}</div>
+
+                {forwardedPost && (
+                  <div className="mx-auto mt-5 w-full max-w-2xl overflow-hidden rounded-2xl border border-blue-500/20 bg-card/50">
+                    <div className="flex items-center gap-2 border-b border-blue-500/15 bg-blue-500/5 px-4 py-2.5">
+                      <Sparkles className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                      <span className="text-xs font-semibold text-blue-700 dark:text-blue-300">Post yuborildi</span>
+                      <button type="button" onClick={() => setForwardedPost(null)} className="ml-auto text-muted-foreground hover:text-foreground" aria-label="Yopish">
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                    <div className="p-4">
+                      {forwardedPost.mediaUrl && <img src={forwardedPost.mediaUrl} alt="" className="mb-3 max-h-48 w-full rounded-xl object-cover" />}
+                      <p className="mb-1 text-xs text-muted-foreground">@{forwardedPost.authorName}</p>
+                      {forwardedPost.content && <p className="line-clamp-4 break-words text-sm [overflow-wrap:anywhere]">{forwardedPost.content}</p>}
+                    </div>
                   </div>
-                  <div className="p-4">
-                    {forwardedPost.mediaUrl && <img src={forwardedPost.mediaUrl} alt="" className="mb-3 max-h-48 w-full rounded-xl object-cover" />}
-                    <p className="mb-1 text-xs text-muted-foreground">@{forwardedPost.authorName}</p>
-                    {forwardedPost.content && <p className="line-clamp-4 break-words text-sm [overflow-wrap:anywhere]">{forwardedPost.content}</p>}
-                  </div>
-                </div>
-              )}
+                )}
 
-              <div className="grid w-full max-w-2xl grid-cols-2 gap-2">
-                {suggestions.map((suggestion, index) => (
-                  <motion.button
-                    key={suggestion.title}
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: index * 0.035 }}
-                    onClick={() => void send(suggestion.prompt)}
-                    className="group flex min-w-0 items-center gap-2.5 rounded-xl border border-border/60 bg-card/40 p-3 text-left transition-colors hover:bg-muted/45"
-                  >
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border bg-background text-muted-foreground">{suggestion.icon}</span>
-                    <span className="min-w-0 truncate text-[13px] font-medium">{suggestion.title}</span>
-                  </motion.button>
-                ))}
+                {activeProject ? (
+                  <section className="mx-auto mt-8 w-full max-w-2xl">
+                    <div className="mb-2 flex items-center justify-between gap-3 px-1">
+                      <h3 className="text-sm font-semibold">Suhbatlar</h3>
+                      <span className="text-xs text-muted-foreground">{activeProjectConversations.length}</span>
+                    </div>
+                    {activeProjectConversations.length > 0 ? (
+                      <div className="overflow-hidden rounded-2xl border border-border/60 bg-card/25">
+                        {activeProjectConversations.slice(0, 12).map((conversation, index) => (
+                          <button
+                            key={conversation.id}
+                            type="button"
+                            onClick={() => selectConversation(conversation)}
+                            className={cn(
+                              'flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/45',
+                              index > 0 && 'border-t border-border/50',
+                            )}
+                          >
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-sm font-medium">{conversation.title}</p>
+                              <p className="mt-0.5 truncate text-xs text-muted-foreground">{conversationPreview(conversation)}</p>
+                            </div>
+                            <span className="shrink-0 text-[11px] text-muted-foreground">{conversationDate(conversation.updatedAt)}</span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="rounded-2xl border border-dashed border-border/60 px-4 py-8 text-center text-xs text-muted-foreground">
+                        Bu loyihada hali suhbat yo‘q. Yuqoridagi maydondan birinchi suhbatni boshlang.
+                      </div>
+                    )}
+                  </section>
+                ) : (
+                  <div className="mx-auto mt-7 grid w-full max-w-2xl grid-cols-2 gap-2">
+                    {suggestions.map((suggestion, index) => (
+                      <motion.button
+                        key={suggestion.title}
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: index * 0.035 }}
+                        onClick={() => void send(suggestion.prompt)}
+                        className="group flex min-w-0 items-center gap-2.5 rounded-xl border border-border/60 bg-card/40 p-3 text-left transition-colors hover:bg-muted/45"
+                      >
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border bg-background text-muted-foreground">{suggestion.icon}</span>
+                        <span className="min-w-0 truncate text-[13px] font-medium">{suggestion.title}</span>
+                      </motion.button>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           ) : (
@@ -1163,31 +1259,11 @@ export default function AIPageV2() {
           )}
         </ScrollArea>
 
-        <div className="shrink-0 bg-gradient-to-t from-background via-background to-background/0 pt-1">
-          <AIComposer
-            value={input}
-            onChange={setInput}
-            onSend={() => send()}
-            onStop={stop}
-            busy={busy}
-            uploading={uploading}
-            attachments={attachments}
-            onPickFiles={uploadFiles}
-            onDropFiles={uploadFiles}
-            onRemoveAttachment={(url) => setAttachments((previous) => previous.filter((attachment) => attachment.url !== url))}
-            model={model}
-            onModelChange={setModel}
-            activeModel={activeModel}
-            toolGroups={toolGroups}
-            onToolGroupsChange={(groups) => {
-              // Only web is user-toggleable. Other capability groups stay on.
-              const webEnabled = groups.includes('web');
-              setToolGroups(ALL_TOOL_GROUPS.filter((group) => group !== 'web' || webEnabled));
-            }}
-            onOpenConnectors={() => setConnectorsOpen(true)}
-            onOpenGithub={() => setGithubOpen(true)}
-          />
-        </div>
+        {messages.length > 0 && (
+          <div className="shrink-0 bg-gradient-to-t from-background via-background to-background/0 pt-1">
+            {composer}
+          </div>
+        )}
       </div>
 
       <AnimatePresence>
