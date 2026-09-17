@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   ChevronDown,
   ChevronLeft,
@@ -48,6 +47,7 @@ interface Props {
   onRename: (id: string, title: string) => void;
   onTogglePin: (id: string) => void;
   onClose: () => void;
+  onOpenProjects?: () => void;
   onOpenArtifacts?: () => void;
   onOpenConnectors?: () => void;
   onOpenGithub?: () => void;
@@ -105,6 +105,7 @@ export function AISidebar({
   onRename,
   onTogglePin,
   onClose,
+  onOpenProjects,
   onOpenArtifacts,
   onOpenConnectors,
   artifactCount = 0,
@@ -116,7 +117,6 @@ export function AISidebar({
   onDeleteProject,
   onMoveConversation,
 }: Props) {
-  const navigate = useNavigate();
   const [query, setQuery] = useState('');
   const [recentsOpen, setRecentsOpen] = useState(true);
   const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -338,13 +338,12 @@ export function AISidebar({
             <div className="flex min-w-0 items-center gap-1">
               <button
                 type="button"
-                onClick={() => navigate('/projects')}
+                onClick={() => onOpenProjects?.()}
                 className={cn(
-                  'flex min-w-0 flex-1 items-center gap-2.5 overflow-hidden rounded-xl px-2.5 py-2 text-left text-[13px] font-medium transition-colors hover:bg-muted/60',
+                  'flex min-w-0 flex-1 items-center overflow-hidden rounded-xl px-2.5 py-2 text-left text-[13px] font-medium transition-colors hover:bg-muted/60',
                   activeProjectId && 'bg-muted/45',
                 )}
               >
-                <FolderKanban className="h-4 w-4 shrink-0 text-muted-foreground" />
                 <span className="min-w-0 flex-1 truncate">Loyihalar</span>
                 {projects.length > 0 && <span className="shrink-0 text-[10px] text-muted-foreground">{projects.length}</span>}
               </button>
