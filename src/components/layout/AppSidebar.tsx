@@ -55,15 +55,11 @@ export function AppSidebar({ collapsed, onCollapsedChange }: AppSidebarProps) {
 
   useEffect(() => {
     const COLLAPSE_BREAKPOINT = 1100;
-    const isAiWorkspace =
-      location.pathname === '/ai' ||
-      location.pathname.startsWith('/ai/') ||
-      location.pathname === '/projects';
-    const check = () => onCollapsedChange(isAiWorkspace || window.innerWidth < COLLAPSE_BREAKPOINT);
+    const check = () => onCollapsedChange(window.innerWidth < COLLAPSE_BREAKPOINT);
     check();
     window.addEventListener('resize', check);
     return () => window.removeEventListener('resize', check);
-  }, [location.pathname, onCollapsedChange]);
+  }, [onCollapsedChange]);
 
   const { theme, setTheme } = useTheme();
   const { playMessageSound } = useNotificationSound();
