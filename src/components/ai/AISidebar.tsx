@@ -54,7 +54,7 @@ export function AISidebar(props: Props) {
     conversationId: string | null = null,
     replace = true,
   ) => {
-    const target = buildAIWorkspaceHref(location.pathname, location.search, {
+    const target = buildAIWorkspaceHref('/ai', location.search, {
       projectId,
       conversationId,
     });
@@ -351,6 +351,7 @@ export function AISidebar(props: Props) {
       conversations={conversations}
       onNew={startNewConversation}
       onSelect={selectConversation}
+      onOpenProjects={() => navigate('/projects')}
       loading={props.loading && conversations.length === 0}
       projects={useLocalProjects ? localProjects : props.projects}
       activeProjectId={useLocalProjects ? localActiveProjectId : props.activeProjectId}
