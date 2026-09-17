@@ -1,0 +1,123 @@
+name: Apply AI chat UX hotfix
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/ai-chat-ux-hotfix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Patch AI chat interactions
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              if old not in text:
+                  raise SystemExit(f"Expected block not found in {path}: {old[:120]!r}")
+              p.write_text(text.replace(old, new, 1))
+
+          # User message: copy + inline edit.
+          path = 'src/components/ai/AIMessageBubble.tsx'
+          replace_once(path,
+          """import {\n  ExternalLink,""",
+          """import { useState } from 'react';\nimport {\n  Check,\n  Copy,\n  ExternalLink,""")
+          replace_once(path,
+          """  Music2,\n  Video,\n} from 'lucide-react';""",
+          """  Music2,\n  Pencil,\n  Video,\n  X,\n} from 'lucide-react';""")
+
+          old_user = """function UserMessageBubble({ message }: { message: AIMessage }) {\n  const text = cleanUserText(message);\n  const files = message.attachments ?? [];\n\n  return (\n    <div className=\"mb-5 flex min-w-0 flex-col items-end gap-2 overflow-hidden\">\n      {text && (\n        <div className=\"min-w-0 max-w-[88%] overflow-hidden rounded-2xl rounded-br-md bg-foreground px-3.5 py-2.5 text-background shadow-sm sm:max-w-[82%]\">\n          <p className=\"whitespace-pre-wrap break-words text-sm leading-relaxed [overflow-wrap:anywhere]\">{text}</p>\n        </div>\n      )}\n\n      {files.length > 0 && (\n        <div\n          className={cn(\n            'grid max-w-[88%] gap-2 sm:max-w-[82%]',\n            files.length > 1 && 'sm:grid-cols-2',\n          )}\n        >\n          {files.map((file) => <AttachmentPreview key={`${file.url}-${file.name}`} file={file} />)}\n        </div>\n      )}\n    </div>\n  );\n}\n\ninterface Props {\n  message: AIMessage;\n  isStreaming?: boolean;\n  onRegenerate?: () => void;\n}\n\nexport function AIMessageBubble(props: Props) {\n  if (props.message.role === 'user') return <UserMessageBubble message={props.message} />;\n  return <AIMessageBubbleV2 {...props} />;\n}\n"""
+          new_user = """function UserMessageBubble({\n  message,\n  onEdit,\n}: {\n  message: AIMessage;\n  onEdit?: (content: string) => void;\n}) {\n  const text = cleanUserText(message);\n  const files = message.attachments ?? [];\n  const [copied, setCopied] = useState(false);\n  const [editing, setEditing] = useState(false);\n  const [draft, setDraft] = useState(text);\n\n  const copy = () => {\n    void navigator.clipboard.writeText(text || message.content);\n    setCopied(true);\n    window.setTimeout(() => setCopied(false), 1400);\n  };\n\n  const saveEdit = () => {\n    const next = draft.trim();\n    if (!next && files.length === 0) return;\n    onEdit?.(next);\n    setEditing(false);\n  };\n\n  return (\n    <div className=\"group mb-5 flex min-w-0 flex-col items-end gap-2 overflow-hidden\">\n      {editing ? (\n        <div className=\"w-[min(88%,680px)] rounded-2xl border border-border/70 bg-card p-2 shadow-sm sm:w-[min(82%,680px)]\">\n          <textarea\n            value={draft}\n            onChange={(event) => setDraft(event.target.value)}\n            rows={3}\n            autoFocus\n            className=\"max-h-56 min-h-20 w-full resize-y rounded-xl bg-transparent px-2.5 py-2 text-sm leading-relaxed outline-none\"\n            aria-label=\"Promptni tahrirlash\"\n          />\n          <div className=\"mt-1 flex justify-end gap-1.5\">\n            <button\n              type=\"button\"\n              onClick={() => { setDraft(text); setEditing(false); }}\n              className=\"inline-flex h-8 items-center gap-1 rounded-lg px-2.5 text-xs text-muted-foreground hover:bg-muted\"\n            >\n              <X className=\"h-3.5 w-3.5\" /> Bekor qilish\n            </button>\n            <button\n              type=\"button\"\n              onClick={saveEdit}\n              className=\"inline-flex h-8 items-center gap-1 rounded-lg bg-foreground px-2.5 text-xs text-background hover:bg-foreground/90\"\n            >\n              <Check className=\"h-3.5 w-3.5\" /> Saqlash va qayta yuborish\n            </button>\n          </div>\n        </div>\n      ) : text ? (\n        <div className=\"min-w-0 max-w-[88%] overflow-hidden rounded-2xl rounded-br-md bg-foreground px-3.5 py-2.5 text-background shadow-sm sm:max-w-[82%]\">\n          <p className=\"whitespace-pre-wrap break-words text-sm leading-relaxed [overflow-wrap:anywhere]\">{text}</p>\n        </div>\n      ) : null}\n\n      {files.length > 0 && (\n        <div\n          className={cn(\n            'grid max-w-[88%] gap-2 sm:max-w-[82%]',\n            files.length > 1 && 'sm:grid-cols-2',\n          )}\n        >\n          {files.map((file) => <AttachmentPreview key={`${file.url}-${file.name}`} file={file} />)}\n        </div>\n      )}\n\n      {!editing && (text || files.length > 0) && (\n        <div className=\"flex items-center gap-0.5 opacity-100 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100 sm:focus-within:opacity-100\">\n          <button\n            type=\"button\"\n            onClick={copy}\n            className=\"inline-flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground\"\n            aria-label=\"Promptni nusxalash\"\n            title=\"Nusxalash\"\n          >\n            {copied ? <Check className=\"h-3.5 w-3.5 text-emerald-500\" /> : <Copy className=\"h-3.5 w-3.5\" />}\n          </button>\n          {onEdit && (\n            <button\n              type=\"button\"\n              onClick={() => { setDraft(text); setEditing(true); }}\n              className=\"inline-flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground\"\n              aria-label=\"Promptni tahrirlash\"\n              title=\"Tahrirlash\"\n            >\n              <Pencil className=\"h-3.5 w-3.5\" />\n            </button>\n          )}\n        </div>\n      )}\n    </div>\n  );\n}\n\ninterface Props {\n  message: AIMessage;\n  isStreaming?: boolean;\n  onRegenerate?: () => void;\n  onEdit?: (content: string) => void;\n}\n\nexport function AIMessageBubble(props: Props) {\n  if (props.message.role === 'user') {\n    return <UserMessageBubble message={props.message} onEdit={props.onEdit} />;\n  }\n  return <AIMessageBubbleV2 {...props} />;\n}\n"""
+          replace_once(path, old_user, new_user)
+
+          # Assistant message: copy, regenerate, read aloud and source toggle.
+          path = 'src/components/ai/AIMessageBubbleV2.tsx'
+          replace_once(path,
+          """import { useState } from 'react';""",
+          """import { useEffect, useRef, useState } from 'react';""")
+          replace_once(path,
+          """  AlertTriangle,\n  Bot,""",
+          """  AlertTriangle,\n  BookOpen,\n  Bot,""")
+          replace_once(path,
+          """  RotateCcw,\n} from 'lucide-react';""",
+          """  RotateCcw,\n  Volume2,\n  VolumeX,\n} from 'lucide-react';""")
+          replace_once(path,
+          """const shortGithubLabel = (href: string) =>\n  href.replace(/^https?:\\/\\/(?:www\\.)?github\\.com\\//i, '').replace(/\\/$/, '').replace(/\\.git$/i, '');\n""",
+          """const shortGithubLabel = (href: string) =>\n  href.replace(/^https?:\\/\\/(?:www\\.)?github\\.com\\//i, '').replace(/\\/$/, '').replace(/\\.git$/i, '');\n\nfunction speechText(value: string) {\n  return value\n    .replace(/```[\\s\\S]*?```/g, ' kod bloki ')\n    .replace(/\\[([^\\]]+)\\]\\([^)]+\\)/g, '$1')\n    .replace(/`([^`]+)`/g, '$1')\n    .replace(/^#{1,6}\\s+/gm, '')\n    .replace(/^[-*+]\\s+/gm, '')\n    .replace(/[*_~>#]/g, '')\n    .replace(/\\s+/g, ' ')\n    .trim();\n}\n""")
+          replace_once(path,
+          """export function AIMessageBubble({ message, isStreaming, onRegenerate }: Props) {\n  const [copied, setCopied] = useState(false);\n""",
+          """export function AIMessageBubble({ message, isStreaming, onRegenerate }: Props) {\n  const [copied, setCopied] = useState(false);\n  const [speaking, setSpeaking] = useState(false);\n  const [sourcesOpen, setSourcesOpen] = useState(false);\n  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);\n\n  useEffect(() => () => {\n    if (utteranceRef.current && typeof window !== 'undefined' && 'speechSynthesis' in window) {\n      window.speechSynthesis.cancel();\n      utteranceRef.current = null;\n    }\n  }, []);\n\n  const toggleSpeech = () => {\n    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;\n    if (speaking) {\n      window.speechSynthesis.cancel();\n      utteranceRef.current = null;\n      setSpeaking(false);\n      return;\n    }\n\n    window.speechSynthesis.cancel();\n    const utterance = new SpeechSynthesisUtterance(speechText(message.content));\n    utterance.lang = document.documentElement.lang || 'uz-UZ';\n    utterance.rate = 1;\n    utterance.onend = () => { utteranceRef.current = null; setSpeaking(false); };\n    utterance.onerror = () => { utteranceRef.current = null; setSpeaking(false); };\n    utteranceRef.current = utterance;\n    setSpeaking(true);\n    window.speechSynthesis.speak(utterance);\n  };\n""")
+          replace_once(path,
+          """          {message.sources && message.sources.length > 0 && (\n            <div className=\"mt-3 max-w-full overflow-hidden rounded-xl border border-border/50 bg-muted/15 p-2.5\">""",
+          """          {message.sources && message.sources.length > 0 && sourcesOpen && (\n            <div className=\"mt-3 max-w-full overflow-hidden rounded-xl border border-border/50 bg-muted/15 p-2.5\">""")
+
+          old_actions = """          {!message.error && !isStreaming && (\n            <div className=\"mt-2 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100\">\n              <Button\n                size=\"icon\"\n                variant=\"ghost\"\n                className=\"h-7 w-7 rounded-lg\"\n                aria-label=\"Nusxalash\"\n                onClick={() => {\n                  void navigator.clipboard.writeText(message.content);\n                  setCopied(true);\n                  window.setTimeout(() => setCopied(false), 1400);\n                }}\n              >\n                {copied ? <Check className=\"h-3.5 w-3.5 text-emerald-500\" /> : <Copy className=\"h-3.5 w-3.5\" />}\n              </Button>\n              {onRegenerate && (\n                <Button size=\"icon\" variant=\"ghost\" className=\"h-7 w-7 rounded-lg\" aria-label=\"Qayta yaratish\" onClick={onRegenerate}>\n                  <RotateCcw className=\"h-3.5 w-3.5\" />\n                </Button>\n              )}\n              {message.model && <span className=\"ml-1 font-mono text-[10px] text-muted-foreground\">{message.model}</span>}\n            </div>\n          )}\n"""
+          new_actions = """          {!message.error && !isStreaming && (\n            <div className=\"mt-2 flex flex-wrap items-center gap-0.5 opacity-100 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100 sm:focus-within:opacity-100\">\n              <Button\n                size=\"icon\"\n                variant=\"ghost\"\n                className=\"h-7 w-7 rounded-lg\"\n                aria-label=\"Nusxalash\"\n                title=\"Nusxalash\"\n                onClick={() => {\n                  void navigator.clipboard.writeText(message.content);\n                  setCopied(true);\n                  window.setTimeout(() => setCopied(false), 1400);\n                }}\n              >\n                {copied ? <Check className=\"h-3.5 w-3.5 text-emerald-500\" /> : <Copy className=\"h-3.5 w-3.5\" />}\n              </Button>\n              {onRegenerate && (\n                <Button size=\"icon\" variant=\"ghost\" className=\"h-7 w-7 rounded-lg\" aria-label=\"Qayta yaratish\" title=\"Qayta yozish\" onClick={onRegenerate}>\n                  <RotateCcw className=\"h-3.5 w-3.5\" />\n                </Button>\n              )}\n              <Button\n                size=\"icon\"\n                variant=\"ghost\"\n                className=\"h-7 w-7 rounded-lg\"\n                aria-label={speaking ? 'Ovozli o‘qishni to‘xtatish' : 'Ovozli o‘qish'}\n                title={speaking ? 'O‘qishni to‘xtatish' : 'Ovozli o‘qish'}\n                onClick={toggleSpeech}\n              >\n                {speaking ? <VolumeX className=\"h-3.5 w-3.5\" /> : <Volume2 className=\"h-3.5 w-3.5\" />}\n              </Button>\n              {message.sources && message.sources.length > 0 && (\n                <Button\n                  size=\"sm\"\n                  variant={sourcesOpen ? 'secondary' : 'ghost'}\n                  className=\"h-7 gap-1 rounded-lg px-2 text-[10px]\"\n                  aria-label=\"Manbalarni ko‘rsatish\"\n                  aria-pressed={sourcesOpen}\n                  title=\"Manbalar\"\n                  onClick={() => setSourcesOpen((value) => !value)}\n                >\n                  <BookOpen className=\"h-3.5 w-3.5\" />\n                  <span>{message.sources.length}</span>\n                </Button>\n              )}\n              {message.model && <span className=\"ml-1 font-mono text-[10px] text-muted-foreground\">{message.model}</span>}\n            </div>\n          )}\n"""
+          replace_once(path, old_actions, new_actions)
+
+          # Conversation page: edit branch + user-controlled auto-follow.
+          path = 'src/pages/AIPageV2.tsx'
+          replace_once(path,
+          """  Code2,\n  FileText,""",
+          """  ArrowDown,\n  Code2,\n  FileText,""")
+          replace_once(path,
+          """  const [activeModel, setActiveModel] = useState<string | null>(null);\n  const [forwardedPost, setForwardedPost] = useState<{""",
+          """  const [activeModel, setActiveModel] = useState<string | null>(null);\n  const [showScrollToLatest, setShowScrollToLatest] = useState(false);\n  const [forwardedPost, setForwardedPost] = useState<{""")
+          replace_once(path,
+          """  const scrollAreaRef = useRef<HTMLDivElement>(null);\n  const abortRef = useRef<AbortController | null>(null);""",
+          """  const scrollAreaRef = useRef<HTMLDivElement>(null);\n  const autoFollowRef = useRef(true);\n  const abortRef = useRef<AbortController | null>(null);""")
+
+          old_scroll = """  useEffect(() => {\n    const viewport = scrollAreaRef.current?.querySelector('[data-radix-scroll-area-viewport]');\n    if (viewport) viewport.scrollTop = viewport.scrollHeight;\n  }, [isStreaming, messages]);\n"""
+          new_scroll = """  const scrollToLatest = useCallback((behavior: ScrollBehavior = 'smooth') => {\n    const viewport = scrollAreaRef.current?.querySelector<HTMLElement>('[data-radix-scroll-area-viewport]');\n    if (!viewport) return;\n    autoFollowRef.current = true;\n    setShowScrollToLatest(false);\n    viewport.scrollTo({ top: viewport.scrollHeight, behavior });\n  }, []);\n\n  useEffect(() => {\n    const viewport = scrollAreaRef.current?.querySelector<HTMLElement>('[data-radix-scroll-area-viewport]');\n    if (!viewport) return;\n\n    const onScroll = () => {\n      const distance = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;\n      const nearBottom = distance < 96;\n      autoFollowRef.current = nearBottom;\n      setShowScrollToLatest(!nearBottom);\n    };\n\n    onScroll();\n    viewport.addEventListener('scroll', onScroll, { passive: true });\n    return () => viewport.removeEventListener('scroll', onScroll);\n  }, []);\n\n  useEffect(() => {\n    if (!autoFollowRef.current) return;\n    const frame = window.requestAnimationFrame(() => {\n      const viewport = scrollAreaRef.current?.querySelector<HTMLElement>('[data-radix-scroll-area-viewport]');\n      if (viewport) viewport.scrollTop = viewport.scrollHeight;\n    });\n    return () => window.cancelAnimationFrame(frame);\n  }, [messages]);\n"""
+          replace_once(path, old_scroll, new_scroll)
+
+          replace_once(path,
+          """    (projectId: string | null = activeProjectId) => {\n      abortRef.current?.abort();\n      setMessages([]);""",
+          """    (projectId: string | null = activeProjectId) => {\n      abortRef.current?.abort();\n      autoFollowRef.current = true;\n      setShowScrollToLatest(false);\n      setMessages([]);""")
+          replace_once(path,
+          """  const selectConversation = (conversation: AIConversation) => {\n    abortRef.current?.abort();\n    setMessages(conversation.messages);""",
+          """  const selectConversation = (conversation: AIConversation) => {\n    abortRef.current?.abort();\n    autoFollowRef.current = true;\n    setShowScrollToLatest(false);\n    setMessages(conversation.messages);""")
+          replace_once(path,
+          """  const selectProject = (projectId: string | null) => {\n    if (!projectsAvailable) return;\n    abortRef.current?.abort();\n    setActiveProjectId(projectId);""",
+          """  const selectProject = (projectId: string | null) => {\n    if (!projectsAvailable) return;\n    abortRef.current?.abort();\n    autoFollowRef.current = true;\n    setShowScrollToLatest(false);\n    setActiveProjectId(projectId);""")
+          replace_once(path,
+          """    const base = [...messages, userMessage];\n    setMessages(base);""",
+          """    const base = [...messages, userMessage];\n    autoFollowRef.current = true;\n    setShowScrollToLatest(false);\n    setMessages(base);""")
+
+          old_regen = """  const regenerateFrom = async (index: number) => {\n    const base = messages.slice(0, index);\n    if (!base.some((message) => message.role === 'user')) return;\n    setMessages(base);\n    await runAgent(base);\n  };\n"""
+          new_regen = """  const regenerateFrom = async (index: number) => {\n    const base = messages.slice(0, index);\n    if (!base.some((message) => message.role === 'user')) return;\n    autoFollowRef.current = true;\n    setShowScrollToLatest(false);\n    setMessages(base);\n    await runAgent(base);\n  };\n\n  const editUserMessage = async (index: number, nextText: string) => {\n    if (busy) return;\n    const original = messages[index];\n    if (!original || original.role !== 'user') return;\n\n    const attachmentsText = (original.attachments ?? [])\n      .map((attachment) => `[${attachment.type}] ${attachment.name}: ${attachment.url}`)\n      .join('\\n');\n    const clean = nextText.trim();\n    if (!clean && !attachmentsText) return;\n\n    const edited: AIMessage = {\n      ...original,\n      content: clean && attachmentsText ? `${clean}\\n\\n${attachmentsText}` : clean || attachmentsText,\n      timestamp: new Date(),\n    };\n    const base = [...messages.slice(0, index), edited];\n    autoFollowRef.current = true;\n    setShowScrollToLatest(false);\n    setMessages(base);\n    await runAgent(base);\n  };\n"""
+          replace_once(path, old_regen, new_regen)
+
+          replace_once(path,
+          """                  isStreaming={isStreaming && index === messages.length - 1 && message.role === 'assistant'}\n                  onRegenerate={message.role === 'assistant' ? () => regenerateFrom(index) : undefined}\n                />""",
+          """                  isStreaming={isStreaming && index === messages.length - 1 && message.role === 'assistant'}\n                  onRegenerate={message.role === 'assistant' ? () => regenerateFrom(index) : undefined}\n                  onEdit={message.role === 'user' && !isStreaming ? (content) => void editUserMessage(index, content) : undefined}\n                />""")
+          replace_once(path,
+          """        </ScrollArea>\n\n        {messages.length > 0 && (""",
+          """        </ScrollArea>\n\n        {messages.length > 0 && showScrollToLatest && (\n          <Button\n            type=\"button\"\n            size=\"sm\"\n            variant=\"secondary\"\n            onClick={() => scrollToLatest()}\n            className=\"absolute bottom-24 left-1/2 z-30 h-9 -translate-x-1/2 gap-1.5 rounded-full border border-border/70 bg-background/95 px-3 text-xs shadow-lg backdrop-blur sm:bottom-20\"\n            aria-label=\"Eng yangi xabarga tushish\"\n          >\n            <ArrowDown className=\"h-4 w-4\" />\n            <span className=\"hidden sm:inline\">Eng yangi xabar</span>\n          </Button>\n        )}\n\n        {messages.length > 0 && (""")
+
+          # Remove this temporary workflow in the same final commit.
+          Path('.github/workflows/ai-chat-ux-hotfix.yml').unlink()
+          PY
+
+      - name: Commit hotfix
+        shell: bash
+        run: |
+          git config user.name "Alsamos AI"
+          git config user.email "74458526+SamandarAlimov@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "feat(ai): add message actions and respectful scroll follow"
+          git push origin HEAD:main
