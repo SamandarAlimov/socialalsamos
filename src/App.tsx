@@ -58,6 +58,7 @@ import FeedbackPage from "./pages/FeedbackPage";
 import NotificationsPage from "./pages/NotificationsPage";
 import StoryArchivePage from "./pages/StoryArchivePage";
 import AIPage from "./pages/AIPage";
+import ProjectsPage from "./pages/ProjectsPage";
 import OAuthConsent from "./pages/OAuthConsent";
 import ActivityPage from "./pages/ActivityPage";
 import AdsPage from "./pages/AdsPage";
@@ -204,7 +205,7 @@ function AppRoutes() {
         <Route path="/admin/ads-integrity" element={<AdminAdsIntegrityPage />} />
         <Route path="/admin/:section" element={<AdminConsolePage />} />
         <Route path="/story-archive" element={<StoryArchivePage />} />
-        <Route path="/projects" element={<AIPage />} />
+        <Route path="/projects" element={<ProjectsPage />} />
         <Route path="/ai" element={<AIPage />} />
         <Route path="/activity" element={<ActivityPage />} />
         <Route path="/ads" element={<AdsPage />} />
