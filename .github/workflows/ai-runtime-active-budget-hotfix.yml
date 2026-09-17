@@ -1,0 +1,59 @@
+name: AI runtime active-budget hotfix
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/ai-runtime-active-budget-hotfix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Patch durable active-time accounting
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('supabase/functions/_shared/aiAgentRuntime.ts')
+          text = path.read_text(encoding='utf-8')
+          marker = 'async function processRunChunk(admin: SupabaseClient, claimed: AgentRun): Promise<RunStatus> {'
+          if marker not in text:
+              raise SystemExit('processRunChunk marker not found')
+          head, tail = text.split(marker, 1)
+
+          old = '  const absoluteAge = () => Date.now() - new Date(run.created_at).getTime();\n  let roundsThisChunk = 0;'
+          new = '''  // Only actual worker execution consumes the run budget. Time spent with the\n  // browser closed, between chunks, or waiting for the user to press Continue\n  // must not burn a 10-30 minute task budget.\n  const activeBeforeChunk = Math.max(0, Number(run.checkpoint?.activeRunMs) || 0);\n  const activeRuntimeMs = () => activeBeforeChunk + (Date.now() - chunkStarted);\n  const durableCheckpoint = (currentConversation: ChatMessage[]) => ({\n    ...(run.checkpoint ?? {}),\n    conversation: currentConversation,\n    activeRunMs: activeRuntimeMs(),\n  });\n  let roundsThisChunk = 0;'''
+          if old not in tail:
+              raise SystemExit('absoluteAge block not found')
+          tail = tail.replace(old, new, 1)
+          tail = tail.replace('if (absoluteAge() >= run.max_run_ms) {', 'if (activeRuntimeMs() >= run.max_run_ms) {', 1)
+          tail = tail.replace('checkpoint: { conversation: [...conversation, { role: "assistant", content: finalText }] }', 'checkpoint: durableCheckpoint([...conversation, { role: "assistant", content: finalText }])')
+          tail = tail.replace('checkpoint: { conversation }', 'checkpoint: durableCheckpoint(conversation)')
+
+          patched = head + marker + tail
+          if patched == text:
+              raise SystemExit('no changes made')
+          if 'absoluteAge()' in tail:
+              raise SystemExit('absoluteAge reference remains')
+          path.write_text(patched, encoding='utf-8')
+          PY
+
+      - name: Commit patch and remove one-shot workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "Alsamos AI"
+          git config user.email "actions@users.noreply.github.com"
+          git add supabase/functions/_shared/aiAgentRuntime.ts
+          git rm .github/workflows/ai-runtime-active-budget-hotfix.yml
+          git commit -m "fix(ai): count only active worker time in durable budget"
+          git push origin HEAD:main
