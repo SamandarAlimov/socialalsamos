@@ -28,6 +28,29 @@ export function shouldPreferServerAgent(
   return false;
 }
 
+function savePending(value: { runId: string; eventId: number; status: string; conversationId?: string | null } | null) {
+  try {
+    if (!value) localStorage.removeItem(PENDING_KEY);
+    else localStorage.setItem(PENDING_KEY, JSON.stringify(value));
+  } catch {
+    // storage may be unavailable in private mode
+  }
+}
+
+export function readPendingAgentRun(): {
+  runId: string;
+  eventId: number;
+  status: string;
+  conversationId?: string | null;
+} | null {
+  try {
+    const raw = JSON.parse(localStorage.getItem(PENDING_KEY) || 'null');
+    return raw?.runId ? raw : null;
+  } catch {
+    return null;
+  }
+}
+
 async function authHeaders(): Promise<Record<string, string>> {
   const { data } = await supabase.auth.getSession();
   const token = data.session?.access_token ?? import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
