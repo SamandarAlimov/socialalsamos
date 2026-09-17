@@ -5,11 +5,9 @@ const FUNCTION_NAME = "github-connector";
 const RATE_LIMIT = 120;
 const RATE_WINDOW_MINUTES = 60;
 
-// MUHIM: to'liq URL'ni shablon satr ichida yozmaymiz (kompressiya muammosi).
 const API_SCHEME = "https://";
 const API_HOST = "api.github.com";
 const API_BASE = API_SCHEME + API_HOST;
-
 const UA = "Alsamos-AI-Connector";
 
 type GhInit = { method?: string; body?: unknown };
@@ -35,6 +33,10 @@ async function gh(token: string, path: string, init: GhInit = {}) {
     data = text;
   }
   return { ok: res.ok, status: res.status, data };
+}
+
+function repoPath(owner: string, repo: string) {
+  return "/repos/" + encodeURIComponent(owner) + "/" + encodeURIComponent(repo);
 }
 
 serve(async (req) => {
@@ -66,7 +68,8 @@ serve(async (req) => {
       return guardError(req, "INVALID_REQUEST", "action maydoni talab qilinadi.", 400);
     }
 
-    // --- Ulanish: bearer token bilan ---
+    // Ulanish: token GitHub API bilan tekshiriladi va server-side connection sifatida saqlanadi.
+    // AI modelga token matni berilmaydi; native github_* tools faqat shu connection orqali ishlaydi.
     if (action === "connect") {
       const token = String(body?.token ?? "").trim();
       if (!token) {
@@ -77,13 +80,12 @@ serve(async (req) => {
       if (!me.ok) {
         return jsonResponse(
           req,
-          { error: "Token noto'g'ri yoki muddati o'tgan.", code: "FORBIDDEN", status: me.status },
+          { error: "Token noto'g'ri, muddati o'tgan yoki /user ruxsati yo'q.", code: "FORBIDDEN", status: me.status },
           400,
         );
       }
 
       const login = (me.data as { login?: string } | null)?.login ?? null;
-
       const { error } = await admin.from("ai_github_connections").upsert(
         {
           user_id: userId,
@@ -101,13 +103,16 @@ serve(async (req) => {
       return jsonResponse(req, { connected: true, login }, 200);
     }
 
-    // --- Holat ---
     if (action === "status") {
-      const { data } = await admin
+      const { data, error } = await admin
         .from("ai_github_connections")
         .select("login, updated_at")
         .eq("user_id", userId)
         .maybeSingle();
+      if (error) {
+        console.error("github status error", error);
+        return guardError(req, "SERVER_ERROR", "GitHub holatini olib bo'lmadi.", 500);
+      }
       return jsonResponse(
         req,
         { connected: Boolean(data), login: data?.login ?? null, updatedAt: data?.updated_at ?? null },
@@ -115,18 +120,24 @@ serve(async (req) => {
       );
     }
 
-    // --- Uzish ---
     if (action === "disconnect") {
-      await admin.from("ai_github_connections").delete().eq("user_id", userId);
+      const { error } = await admin.from("ai_github_connections").delete().eq("user_id", userId);
+      if (error) {
+        console.error("github disconnect error", error);
+        return guardError(req, "SERVER_ERROR", "GitHub ulanishini o'chirib bo'lmadi.", 500);
+      }
       return jsonResponse(req, { connected: false }, 200);
     }
 
-    // Qolgan amallar uchun saqlangan token kerak.
-    const { data: conn } = await admin
+    const { data: conn, error: connError } = await admin
       .from("ai_github_connections")
       .select("token")
       .eq("user_id", userId)
       .maybeSingle();
+    if (connError) {
+      console.error("github connection read error", connError);
+      return guardError(req, "SERVER_ERROR", "GitHub ulanishini o'qib bo'lmadi.", 500);
+    }
 
     const token = (conn as { token?: string } | null)?.token;
     if (!token) {
@@ -138,13 +149,14 @@ serve(async (req) => {
     }
 
     if (action === "repos") {
-      const page = Number(body?.page ?? 1);
+      const page = Math.max(1, Number(body?.page ?? 1) || 1);
       const r = await gh(
         token,
-        "/user/repos?per_page=30&sort=updated&page=" + encodeURIComponent(String(page)),
+        "/user/repos?per_page=50&sort=updated&affiliation=owner,collaborator,organization_member&page=" +
+          encodeURIComponent(String(page)),
       );
       if (!r.ok) return jsonResponse(req, { error: "GitHub xatosi", status: r.status }, 502);
-      const repos = (r.data as Array<Record<string, unknown>>).map((repo) => ({
+      const repos = (Array.isArray(r.data) ? r.data : []).map((repo: Record<string, unknown>) => ({
         fullName: repo.full_name,
         private: repo.private,
         description: repo.description,
@@ -155,10 +167,59 @@ serve(async (req) => {
       return jsonResponse(req, { repos }, 200);
     }
 
+    if (action === "repo") {
+      const owner = String(body?.owner ?? "").trim();
+      const repo = String(body?.repo ?? "").trim();
+      if (!owner || !repo) {
+        return guardError(req, "INVALID_REQUEST", "owner va repo talab qilinadi.", 400);
+      }
+      const r = await gh(token, repoPath(owner, repo));
+      if (!r.ok) return jsonResponse(req, { error: "Repository topilmadi", status: r.status }, 404);
+      const data = r.data as Record<string, unknown>;
+      return jsonResponse(
+        req,
+        {
+          fullName: data.full_name,
+          description: data.description,
+          defaultBranch: data.default_branch,
+          language: data.language,
+          private: data.private,
+          updatedAt: data.updated_at,
+        },
+        200,
+      );
+    }
+
+    if (action === "tree") {
+      const owner = String(body?.owner ?? "").trim();
+      const repo = String(body?.repo ?? "").trim();
+      if (!owner || !repo) {
+        return guardError(req, "INVALID_REQUEST", "owner va repo talab qilinadi.", 400);
+      }
+
+      let branch = String(body?.ref ?? "").trim();
+      if (!branch) {
+        const meta = await gh(token, repoPath(owner, repo));
+        if (!meta.ok) return jsonResponse(req, { error: "Repository topilmadi", status: meta.status }, 404);
+        branch = String((meta.data as { default_branch?: string } | null)?.default_branch ?? "main");
+      }
+
+      const r = await gh(
+        token,
+        repoPath(owner, repo) + "/git/trees/" + encodeURIComponent(branch) + "?recursive=1",
+      );
+      if (!r.ok) return jsonResponse(req, { error: "Repository tree olinmadi", status: r.status }, 502);
+      const tree = (r.data as { tree?: Array<{ path?: string; type?: string }>; truncated?: boolean } | null) ?? {};
+      const paths = (tree.tree ?? [])
+        .filter((item) => item.type === "blob" && typeof item.path === "string")
+        .map((item) => item.path as string);
+      return jsonResponse(req, { paths, truncated: Boolean(tree.truncated), branch }, 200);
+    }
+
     if (action === "file") {
-      const owner = String(body?.owner ?? "");
-      const repo = String(body?.repo ?? "");
-      const path = String(body?.path ?? "");
+      const owner = String(body?.owner ?? "").trim();
+      const repo = String(body?.repo ?? "").trim();
+      const path = String(body?.path ?? "").trim();
       const ref = body?.ref ? String(body.ref) : null;
       if (!owner || !repo || !path) {
         return guardError(req, "INVALID_REQUEST", "owner, repo va path talab qilinadi.", 400);
@@ -166,7 +227,7 @@ serve(async (req) => {
       const suffix = ref ? "?ref=" + encodeURIComponent(ref) : "";
       const r = await gh(
         token,
-        "/repos/" + owner + "/" + repo + "/contents/" + path.split("/").map(encodeURIComponent).join("/") + suffix,
+        repoPath(owner, repo) + "/contents/" + path.split("/").map(encodeURIComponent).join("/") + suffix,
       );
       if (!r.ok) return jsonResponse(req, { error: "Fayl topilmadi", status: r.status }, 404);
 
@@ -187,7 +248,7 @@ serve(async (req) => {
     if (action === "search_code") {
       const q = String(body?.q ?? "").trim();
       if (!q) return guardError(req, "INVALID_REQUEST", "q talab qilinadi.", 400);
-      const r = await gh(token, "/search/code?per_page=10&q=" + encodeURIComponent(q));
+      const r = await gh(token, "/search/code?per_page=20&q=" + encodeURIComponent(q));
       if (!r.ok) return jsonResponse(req, { error: "Qidiruv xatosi", status: r.status }, 502);
       const items = ((r.data as { items?: Array<Record<string, unknown>> })?.items ?? []).map((i) => ({
         path: i.path,
@@ -198,13 +259,13 @@ serve(async (req) => {
     }
 
     if (action === "create_issue") {
-      const owner = String(body?.owner ?? "");
-      const repo = String(body?.repo ?? "");
+      const owner = String(body?.owner ?? "").trim();
+      const repo = String(body?.repo ?? "").trim();
       const title = String(body?.title ?? "").trim();
       if (!owner || !repo || !title) {
         return guardError(req, "INVALID_REQUEST", "owner, repo va title talab qilinadi.", 400);
       }
-      const r = await gh(token, "/repos/" + owner + "/" + repo + "/issues", {
+      const r = await gh(token, repoPath(owner, repo) + "/issues", {
         method: "POST",
         body: { title, body: String(body?.body ?? "") },
       });
