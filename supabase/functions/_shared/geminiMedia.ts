@@ -232,6 +232,17 @@ export async function uploadGeneratedImage(
 
 export type StartedVideo = { operation: string; model: string };
 
+type VeoDuration = 4 | 6 | 8;
+
+/** Veo 3.1 accepts only 4, 6 or 8 second outputs. Map arbitrary tool input safely. */
+function normalizeVeoDuration(value: number): VeoDuration {
+  const requested = Number.isFinite(value) ? value : 8;
+  const allowed: VeoDuration[] = [4, 6, 8];
+  return allowed.reduce((best, candidate) =>
+    Math.abs(candidate - requested) < Math.abs(best - requested) ? candidate : best
+  , 8);
+}
+
 /** Veo bilan video renderni boshlaydi (uzoq ishlovchi operatsiya). */
 export async function startVideo(opts: {
   prompt: string;
@@ -239,18 +250,20 @@ export async function startVideo(opts: {
   imageUrl?: string | null;
 }): Promise<StartedVideo> {
   const inline = opts.imageUrl ? await toInlineData(opts.imageUrl) : null;
+  const seconds = normalizeVeoDuration(opts.seconds);
   const errors: string[] = [];
 
   for (const model of videoModels()) {
     const instance: Record<string, unknown> = { prompt: opts.prompt };
     if (inline) {
-      instance.image = { bytesBase64Encoded: inline.data, mimeType: inline.mimeType };
+      // Current Veo REST API expects an Image object with inlineData.
+      instance.image = { inlineData: inline };
     }
     try {
       const { response } = await googleFetch(`/v1beta/models/${model}:predictLongRunning`, {
         body: {
           instances: [instance],
-          parameters: { durationSeconds: opts.seconds, aspectRatio: "16:9" },
+          parameters: { durationSeconds: seconds, aspectRatio: "16:9" },
         },
       });
       if (!response.ok) {
