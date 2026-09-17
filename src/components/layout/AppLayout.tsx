@@ -164,11 +164,11 @@ export function AppLayout() {
           '[&_.chat-shell>.pb-safe.mb-16]:!mb-0',
       )}
     >
-      {!isAdminPage && !isAiWorkspace && (
+      {!isAdminPage && (
         <AppSidebar collapsed={sidebarCollapsed} onCollapsedChange={setSidebarCollapsed} />
       )}
 
-      {!isAdminPage && !isAiWorkspace && !hasPostPreview && <button
+      {!isAdminPage && !hasPostPreview && <button
         type="button"
         aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         onClick={() => setSidebarCollapsed((current) => !current)}
