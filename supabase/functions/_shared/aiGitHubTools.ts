@@ -4,6 +4,7 @@
 // connection and orchestrates API calls, so this works without a local sandbox.
 
 import type { ToolContext, ToolOutcome, ToolSpec } from "./aiTools.ts";
+import { extractExplicitRepositoryName, isRepositoryCreationRequest, isSuspiciousGeneratedRepositoryName } from "./aiIntent.ts";
 
 const API_BASE = "https://api.github.com";
 const USER_AGENT = "Alsamos-AI-Coding-Agent";
@@ -49,7 +50,7 @@ export const GITHUB_TOOL_SPECS: Record<string, ToolSpec> = {
     function: {
       name: "github_create_repository",
       description:
-        "Create a GitHub repository for the signed-in user or an organization they can create repositories in. Use only when the user asks to create a repository.",
+        "Create a GitHub repository only when the current user explicitly asks for it. Copy the repository name exactly as the user wrote it; grammar words like named/nomlangan/repo are not names unless explicitly quoted as the desired name. The server validates this before executing.",
       parameters: {
         type: "object",
         properties: {
@@ -414,7 +415,14 @@ function githubError(response: GhResponse, fallback: string): ToolOutcome {
       : typeof response.data === "string"
         ? response.data.slice(0, 500)
         : fallback;
-  return fail(`${fallback} (GitHub HTTP ${response.status}): ${message}`);
+  const details = Array.isArray(response.data?.errors)
+    ? response.data.errors
+        .slice(0, 3)
+        .map((item: any) => item?.message || item?.code || item?.field)
+        .filter(Boolean)
+        .join(", ")
+    : "";
+  return fail(`${fallback} (GitHub HTTP ${response.status}): ${message}${details ? `: ${details}` : ""}`);
 }
 
 async function getConnection(ctx: ToolContext): Promise<GitHubConnection | null> {
@@ -506,10 +514,21 @@ async function listRepositories(args: Record<string, unknown>, ctx: ToolContext)
 }
 
 async function createRepository(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolOutcome> {
+  const userRequest = String(ctx.userRequest ?? "").trim();
+  if (userRequest && !isRepositoryCreationRequest(userRequest)) {
+    return fail("Joriy foydalanuvchi xabari yangi repository yaratishni aniq so'ramaydi. Xavfsizlik uchun hech qanday repo yaratilmadi.");
+  }
+
+  const modelName = String(args.name ?? "").trim();
+  const explicitName = extractExplicitRepositoryName(userRequest);
+  if (!explicitName && isSuspiciousGeneratedRepositoryName(modelName)) {
+    return fail(`Repository nomi noaniq ("${modelName || "bo'sh"}"). Foydalanuvchining aniq repo nomini tool argumentiga ko'chiring; hech qanday repo yaratilmadi.`);
+  }
+  const name = explicitName || modelName;
+  if (!name || name.includes("/")) return fail("Repo name kerak; owner/name emas, faqat name yuboring.");
+
   const connection = await requireConnection(ctx);
   if (isOutcome(connection)) return connection;
-  const name = String(args.name ?? "").trim();
-  if (!name || name.includes("/")) return fail("Repo name kerak; owner/name emas, faqat name yuboring.");
   const owner = String(args.owner ?? "").trim();
   const isOwn = !owner || (connection.login && owner.toLowerCase() === connection.login.toLowerCase());
   const endpoint = isOwn ? "/user/repos" : `/orgs/${encodeURIComponent(owner)}/repos`;
@@ -529,7 +548,12 @@ async function createRepository(args: Record<string, unknown>, ctx: ToolContext)
     default_branch: response.data?.default_branch,
     html_url: response.data?.html_url,
   };
-  return { ok: true, text: `Repository yaratildi: ${repo.full_name}`, data: { repository: repo } };
+  const correctedFrom = explicitName && modelName && explicitName !== modelName ? modelName : null;
+  return {
+    ok: true,
+    text: `Repository yaratildi: ${repo.full_name}`,
+    data: { repository: repo, requested_name: explicitName ?? null, resolved_name: name, corrected_from: correctedFrom },
+  };
 }
 
 async function readFile(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolOutcome> {

@@ -7,7 +7,27 @@
 import { supabase } from '@/integrations/supabase/client';
 
 const FUNCTIONS_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
+const LEGACY_TOKEN_KEY = 'alsamos.github.pat';
 let cachedConnected = false;
+let legacyMigrationAttempted = false;
+
+const readLegacyToken = (): string => {
+  if (typeof window === 'undefined') return '';
+  try {
+    return localStorage.getItem(LEGACY_TOKEN_KEY)?.trim() ?? '';
+  } catch {
+    return '';
+  }
+};
+
+const clearLegacyToken = () => {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.removeItem(LEGACY_TOKEN_KEY);
+  } catch {
+    // Storage may be unavailable in hardened/private browser contexts.
+  }
+};
 
 async function authHeaders(): Promise<Record<string, string>> {
   const { data } = await supabase.auth.getSession();
@@ -70,18 +90,40 @@ export async function connectGithub(token: string): Promise<{ connected: boolean
     token: clean,
   });
   cachedConnected = result.connected;
+  if (result.connected) clearLegacyToken();
   return result;
 }
 
 /** Check the same server-side connection used by the AI coding agent. */
 export async function githubStatus(): Promise<GithubStatus> {
-  const result = await connectorCall<GithubStatus>({ action: 'status' });
+  let result = await connectorCall<GithubStatus>({ action: 'status' });
+
+  // One-time migration for users who connected before the server-side connector existed.
+  if (!result.connected && !legacyMigrationAttempted) {
+    legacyMigrationAttempted = true;
+    const legacyToken = readLegacyToken();
+    if (legacyToken) {
+      try {
+        const migrated = await connectorCall<{ connected: boolean; login: string | null }>({
+          action: 'connect', token: legacyToken,
+        });
+        if (migrated.connected) {
+          clearLegacyToken();
+          result = { connected: true, login: migrated.login };
+        }
+      } catch (error) {
+        console.warn('[ai/github] Legacy GitHub connection migration failed:', error);
+      }
+    }
+  }
+
   cachedConnected = result.connected;
   return result;
 }
 
 export async function disconnectGithub(): Promise<{ connected: boolean }> {
   const result = await connectorCall<{ connected: boolean }>({ action: 'disconnect' });
+  clearLegacyToken();
   cachedConnected = false;
   return result;
 }

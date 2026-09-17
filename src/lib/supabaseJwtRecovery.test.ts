@@ -7,14 +7,16 @@ import {
 } from './supabaseJwtRecovery';
 
 describe('Supabase expired JWT recovery', () => {
-  it('recognizes the PostgREST expired JWT responses seen in production', () => {
+  it('recognizes recoverable PostgREST JWT authentication failures', () => {
     expect(isExpiredSupabaseJwtResponse(401, '{"code":"PGRST303","message":"JWT expired"}')).toBe(true);
     expect(isExpiredSupabaseJwtResponse(401, 'JWT expired')).toBe(true);
+    expect(isExpiredSupabaseJwtResponse(401, '{"code":"PGRST301","message":"Invalid JWT"}')).toBe(true);
   });
 
-  it('does not retry unrelated authorization failures', () => {
+  it('does not retry unrelated authorization failures or missing-auth requests', () => {
     expect(isExpiredSupabaseJwtResponse(403, 'JWT expired')).toBe(false);
-    expect(isExpiredSupabaseJwtResponse(401, '{"message":"permission denied"}')).toBe(false);
+    expect(isExpiredSupabaseJwtResponse(401, '{"code":"42501","message":"permission denied"}')).toBe(false);
+    expect(isExpiredSupabaseJwtResponse(401, '{"code":"PGRST302","message":"missing authorization"}')).toBe(false);
   });
 
   it('deduplicates simultaneous refreshes so one rotated token serves every waiter', async () => {
@@ -24,20 +26,13 @@ describe('Supabase expired JWT recovery', () => {
       await Promise.resolve();
       return 'fresh-access-token';
     };
-
     const [first, second, third] = await Promise.all([
       coordinateSupabaseJwtRefresh(refresh),
       coordinateSupabaseJwtRefresh(refresh),
       coordinateSupabaseJwtRefresh(refresh),
     ]);
-
     expect(refreshCalls).toBe(1);
-    expect([first, second, third]).toEqual([
-      'fresh-access-token',
-      'fresh-access-token',
-      'fresh-access-token',
-    ]);
-
+    expect([first, second, third]).toEqual(['fresh-access-token', 'fresh-access-token', 'fresh-access-token']);
     await coordinateSupabaseJwtRefresh(refresh);
     expect(refreshCalls).toBe(2);
   });

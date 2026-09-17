@@ -42,6 +42,10 @@ export type ToolContext = {
   connectors: ConnectorRow[];
   /** Foydalanuvchi UI da yoqqan vositalar. */
   enabled: Set<string>;
+  /** Current user turn. Mutating tools use it to validate exact intent/literals. */
+  userRequest?: string;
+  /** Successful high-impact mutations are deduplicated within one runtime chunk. */
+  mutationCache?: Map<string, ToolOutcome>;
 };
 
 export type ToolOutcome = {
