@@ -54,8 +54,7 @@ jobs:
             src/lib/ai/githubIntent.test.ts \
             src/lib/ai/githubConnector.ts \
             src/lib/supabaseJwtRecovery.ts \
-            src/lib/supabaseJwtRecovery.test.ts \
-            .github/workflows/ci.yml
+            src/lib/supabaseJwtRecovery.test.ts
           git diff --cached --check
           git commit -m "fix(ai): harden intent fidelity and tool truth"
           git push
