@@ -45,13 +45,13 @@ export function AIProjectDialog({ open, onOpenChange, project, onSave }: Props) 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="max-h-[92dvh] w-[calc(100vw-1rem)] overflow-y-auto p-4 sm:max-w-lg sm:p-6">
         <DialogHeader>
           <div className="mb-1 flex h-9 w-9 items-center justify-center rounded-xl border bg-muted/50">
             <FolderKanban className="h-4 w-4" />
           </div>
           <DialogTitle>{project ? 'Loyihani tahrirlash' : 'Yangi loyiha'}</DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="pr-5">
             Loyiha ko‘rsatmalari shu loyiha ichidagi barcha suhbatlarda umumiy kontekst bo‘lib ishlaydi.
           </DialogDescription>
         </DialogHeader>
@@ -76,21 +76,21 @@ export function AIProjectDialog({ open, onOpenChange, project, onSave }: Props) 
               value={instructions}
               onChange={(event) => setInstructions(event.target.value)}
               placeholder="Stack, arxitektura, brend qoidalari, maqsadlar va doimiy talablarni yozing…"
-              className="min-h-32 resize-y"
+              className="min-h-28 resize-y sm:min-h-32"
               maxLength={12000}
             />
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-[11px] leading-relaxed text-muted-foreground">
               AI yangi suhbat ochilganda ham shu ko‘rsatmalarni eslab ishlaydi.
             </p>
           </div>
         </div>
 
-        <DialogFooter>
-          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={saving}>Bekor qilish</Button>
+        <DialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:gap-0">
+          <Button className="w-full sm:w-auto" variant="ghost" onClick={() => onOpenChange(false)} disabled={saving}>Bekor qilish</Button>
           <Button
             onClick={submit}
             disabled={!name.trim() || saving}
-            className="bg-foreground text-background hover:bg-foreground/90"
+            className="w-full bg-foreground text-background hover:bg-foreground/90 sm:w-auto"
           >
             {saving ? 'Saqlanmoqda…' : project ? 'Saqlash' : 'Loyiha yaratish'}
           </Button>
