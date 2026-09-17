@@ -83,7 +83,10 @@ export function AppLayout() {
   const isCreatePage = location.pathname === '/create';
   const isMessagesPage = location.pathname === '/messages';
   const isVideosPage = location.pathname === '/videos';
-  const isAiPage = location.pathname === '/ai' || location.pathname === '/projects';
+  const isAiWorkspace =
+    location.pathname === '/ai' ||
+    location.pathname.startsWith('/ai/') ||
+    location.pathname === '/projects';
   const isAdminPage = location.pathname === '/admin' || location.pathname.startsWith('/admin/');
 
   useEffect(() => {
@@ -129,14 +132,18 @@ export function AppLayout() {
 
   const mobileChromeMode = getMobileChromeMode(location.pathname);
   const showPrimaryMobileHeader =
-    !isAdminPage && mobileChromeMode === 'primary' && !isMessagesPage && !isVideosPage;
-  const showSecondaryMobileHeader = !isAdminPage && mobileChromeMode === 'secondary';
+    !isAdminPage && !isAiWorkspace && mobileChromeMode === 'primary' && !isMessagesPage && !isVideosPage;
+  const showSecondaryMobileHeader =
+    !isAdminPage && !isAiWorkspace && mobileChromeMode === 'secondary';
   const showBottomNavbar =
-    !isAdminPage && mobileChromeMode === 'primary' && !(isMessagesPage && messagesChatOpen);
+    !isAdminPage &&
+    !isAiWorkspace &&
+    mobileChromeMode === 'primary' &&
+    !(isMessagesPage && messagesChatOpen);
   const hasMobileTopChrome = showPrimaryMobileHeader || showSecondaryMobileHeader;
 
   const fullHeightPage =
-    isCreatePage || isMapPage || isAiPage || isMessagesPage || isVideosPage || isAdminPage;
+    isCreatePage || isMapPage || isAiWorkspace || isMessagesPage || isVideosPage || isAdminPage;
 
   if (isLoading) {
     return <div className="min-h-screen flex items-center justify-center bg-background"><div className="flex flex-col items-center gap-4"><Loader2 className="h-10 w-10 animate-spin text-muted-foreground" /><p className="text-muted-foreground">Loading...</p></div></div>;
@@ -157,11 +164,11 @@ export function AppLayout() {
           '[&_.chat-shell>.pb-safe.mb-16]:!mb-0',
       )}
     >
-      {!isAdminPage && (
+      {!isAdminPage && !isAiWorkspace && (
         <AppSidebar collapsed={sidebarCollapsed} onCollapsedChange={setSidebarCollapsed} />
       )}
 
-      {!isAdminPage && !hasPostPreview && <button
+      {!isAdminPage && !isAiWorkspace && !hasPostPreview && <button
         type="button"
         aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         onClick={() => setSidebarCollapsed((current) => !current)}

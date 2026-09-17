@@ -68,7 +68,7 @@ export function AISidebar(props: Props) {
 
   /**
    * One-time migration for legacy browser-only projects. The same helper is
-   * also used by /projects so users do not have to visit /ai first.
+   * also used by /ai/projects so users do not have to visit /ai first.
    */
   useEffect(() => {
     if (!user?.id || useLocalProjects || migrationStartedRef.current) return;
@@ -351,7 +351,7 @@ export function AISidebar(props: Props) {
       conversations={conversations}
       onNew={startNewConversation}
       onSelect={selectConversation}
-      onOpenProjects={() => navigate('/projects')}
+      onOpenProjects={() => navigate('/ai/projects')}
       loading={props.loading && conversations.length === 0}
       projects={useLocalProjects ? localProjects : props.projects}
       activeProjectId={useLocalProjects ? localActiveProjectId : props.activeProjectId}

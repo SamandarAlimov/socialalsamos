@@ -16,6 +16,13 @@ describe('mobile route chrome', () => {
     expect(getMobileChromeMode('/settings/devices')).toBe('immersive');
   });
 
+  it('lets the complete AI workspace own its chrome', () => {
+    expect(getMobileChromeMode('/ai')).toBe('immersive');
+    expect(getMobileChromeMode('/ai/')).toBe('immersive');
+    expect(getMobileChromeMode('/ai/projects')).toBe('immersive');
+    expect(getMobileChromeMode('/projects')).toBe('immersive');
+  });
+
   it('does not stack shell chrome over pages that already own back/header controls', () => {
     expect(getMobileChromeMode('/web')).toBe('immersive');
     expect(getMobileChromeMode('/post/abc')).toBe('immersive');
@@ -30,7 +37,6 @@ describe('mobile route chrome', () => {
   it('keeps established shell modes for unrelated routes', () => {
     expect(getMobileChromeMode('/home')).toBe('primary');
     expect(getMobileChromeMode('/notifications')).toBe('secondary');
-    expect(getMobileChromeMode('/projects')).toBe('secondary');
     expect(getMobileChromeMode('/create')).toBe('immersive');
   });
 });

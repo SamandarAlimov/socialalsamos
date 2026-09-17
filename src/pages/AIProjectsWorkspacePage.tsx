@@ -257,7 +257,7 @@ export default function AIProjectsWorkspacePage() {
                 onRename={renameConversation}
                 onTogglePin={togglePin}
                 onClose={() => setSidebarOpen(false)}
-                onOpenProjects={() => navigate('/projects')}
+                onOpenProjects={() => navigate('/ai/projects')}
                 projects={projects}
                 activeProjectId={null}
                 onSelectProject={goToProject}
