@@ -821,12 +821,21 @@ async function processRunChunk(admin: SupabaseClient, claimed: AgentRun): Promis
     specs = toolSpecs(enabled);
   }
 
-  const absoluteAge = () => Date.now() - new Date(run.created_at).getTime();
+  // Only actual worker execution consumes the run budget. Time spent with the
+  // browser closed, between chunks, or waiting for the user to press Continue
+  // must not burn a 10-30 minute task budget.
+  const activeBeforeChunk = Math.max(0, Number(run.checkpoint?.activeRunMs) || 0);
+  const activeRuntimeMs = () => activeBeforeChunk + (Date.now() - chunkStarted);
+  const durableCheckpoint = (currentConversation: ChatMessage[]) => ({
+    ...(run.checkpoint ?? {}),
+    conversation: currentConversation,
+    activeRunMs: activeRuntimeMs(),
+  });
   let roundsThisChunk = 0;
 
   while (true) {
-    if (absoluteAge() >= run.max_run_ms) {
-      await admin.from("ai_agent_runs").update({ status: "awaiting_continue", checkpoint: { conversation }, lease_until: null, updated_at: new Date().toISOString() }).eq("id", run.id);
+    if (activeRuntimeMs() >= run.max_run_ms) {
+      await admin.from("ai_agent_runs").update({ status: "awaiting_continue", checkpoint: durableCheckpoint(conversation), lease_until: null, updated_at: new Date().toISOString() }).eq("id", run.id);
       await emit(admin, run.id, "notice", { message: "Agent vaqt budgetiga yetdi. Vazifa checkpoint qilindi va Continue orqali davom ettirilishi mumkin." });
       return "awaiting_continue";
     }
@@ -835,12 +844,12 @@ async function processRunChunk(admin: SupabaseClient, claimed: AgentRun): Promis
       const finalText = await synthesizeFinal(run, conversation, lovableKey, reason);
       await emit(admin, run.id, "notice", { message: "Dynamic execution budget yakunlandi; mavjud natijalar bilan final javob sintez qilindi." });
       await emit(admin, run.id, "delta", { text: finalText });
-      await admin.from("ai_agent_runs").update({ status: "completed", final_text: finalText, checkpoint: { conversation }, lease_until: null, completed_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", run.id);
+      await admin.from("ai_agent_runs").update({ status: "completed", final_text: finalText, checkpoint: durableCheckpoint(conversation), lease_until: null, completed_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", run.id);
       await finalizeConversation(admin, run, finalText);
       return "completed";
     }
     if (Date.now() - chunkStarted >= WORKER_CHUNK_MS || roundsThisChunk >= 6) {
-      await admin.from("ai_agent_runs").update({ status: "queued", checkpoint: { conversation }, lease_until: null, updated_at: new Date().toISOString() }).eq("id", run.id);
+      await admin.from("ai_agent_runs").update({ status: "queued", checkpoint: durableCheckpoint(conversation), lease_until: null, updated_at: new Date().toISOString() }).eq("id", run.id);
       await emit(admin, run.id, "run_state", { status: "queued", resumable: true });
       return "queued";
     }
@@ -873,7 +882,7 @@ async function processRunChunk(admin: SupabaseClient, claimed: AgentRun): Promis
     if (!calls.length) {
       const finalText = assistantText.trim() || "Vazifa yakunlandi.";
       if (finalText) await emit(admin, run.id, "delta", { text: finalText });
-      await admin.from("ai_agent_runs").update({ status: "completed", final_text: finalText, checkpoint: { conversation: [...conversation, { role: "assistant", content: finalText }] }, lease_until: null, completed_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", run.id);
+      await admin.from("ai_agent_runs").update({ status: "completed", final_text: finalText, checkpoint: durableCheckpoint([...conversation, { role: "assistant", content: finalText }]), lease_until: null, completed_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", run.id);
       await finalizeConversation(admin, run, finalText);
       return "completed";
     }
@@ -905,7 +914,7 @@ async function processRunChunk(admin: SupabaseClient, claimed: AgentRun): Promis
       .update({
         round_count: run.round_count,
         tool_call_count: run.tool_call_count,
-        checkpoint: { conversation },
+        checkpoint: durableCheckpoint(conversation),
         lease_until: new Date(Date.now() + WORKER_LEASE_MS).toISOString(),
         updated_at: new Date().toISOString(),
       })
