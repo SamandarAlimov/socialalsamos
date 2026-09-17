@@ -19,7 +19,7 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
-import { useIsMobile } from '@/hooks/use-mobile';
+import { useAIWorkspaceLayout } from '@/hooks/use-ai-workspace-layout';
 import { useFileUpload } from '@/hooks/useFileUpload';
 import { toast as sonnerToast } from 'sonner';
 import { AISidebar } from '@/components/ai/AISidebar';
@@ -77,8 +77,6 @@ const readPrefs = (): { model: ModelId; toolGroups: ToolGroupId[] } => {
   try {
     const parsed = JSON.parse(localStorage.getItem(PREFS_KEY) || '{}');
     const saved = Array.isArray(parsed.toolGroups) ? (parsed.toolGroups as ToolGroupId[]) : null;
-    // Old preferences could silently omit video/image/code groups. Keep only the
-    // deliberate web on/off choice and always restore the rest of the agent.
     const webEnabled = !saved || saved.length === 0 || saved.includes('web');
     return {
       model: (parsed.model as ModelId) || 'auto',
@@ -136,7 +134,7 @@ function conversationDate(value: Date): string {
 export default function AIPageV2() {
   const { user, profile } = useAuth();
   const { toast } = useToast();
-  const isMobile = useIsMobile();
+  const { isMobile, sidebarOverlay, artifactOverlay } = useAIWorkspaceLayout();
   const location = useLocation();
   const navigate = useNavigate();
   const initialPrefs = useMemo(readPrefs, []);
@@ -151,7 +149,7 @@ export default function AIPageV2() {
   const [historyLoading, setHistoryLoading] = useState(true);
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
-  const [sidebarOpen, setSidebarOpen] = useState(!isMobile);
+  const [sidebarOpen, setSidebarOpen] = useState(!sidebarOverlay);
   const [artifactsOpen, setArtifactsOpen] = useState(false);
   const [activeArtifactId, setActiveArtifactId] = useState<string | null>(null);
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
@@ -195,17 +193,13 @@ export default function AIPageV2() {
       .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
   }, [activeProjectId, conversations]);
 
-  useEffect(() => setSidebarOpen(!isMobile), [isMobile]);
+  useEffect(() => setSidebarOpen(!sidebarOverlay), [sidebarOverlay]);
 
-  // A project deep link is a workspace view, not a standalone detail page. Keep
-  // the AI sidebar visible on desktop so projects and their chats remain in view
-  // just like other project-centric AI products. Manual close still works until
-  // the route changes again.
   useEffect(() => {
-    if (isMobile) return;
+    if (sidebarOverlay) return;
     const projectId = new URLSearchParams(location.search).get('project');
     if (projectId) setSidebarOpen(true);
-  }, [isMobile, location.search]);
+  }, [location.search, sidebarOverlay]);
 
   useEffect(() => {
     try {
@@ -531,9 +525,9 @@ export default function AIPageV2() {
       setInput('');
       setAttachments([]);
       setForwardedPost(null);
-      if (isMobile) setSidebarOpen(false);
+      if (sidebarOverlay) setSidebarOpen(false);
     },
-    [activeProjectId, isMobile, projectsAvailable],
+    [activeProjectId, projectsAvailable, sidebarOverlay],
   );
 
   const selectConversation = (conversation: AIConversation) => {
@@ -543,7 +537,7 @@ export default function AIPageV2() {
     setMessages(conversation.messages);
     setCurrentConversationId(conversation.id);
     setActiveProjectId(projectsAvailable ? conversation.projectId || null : null);
-    if (isMobile) setSidebarOpen(false);
+    if (sidebarOverlay) setSidebarOpen(false);
   };
 
   const selectProject = (projectId: string | null) => {
@@ -556,7 +550,7 @@ export default function AIPageV2() {
     setCurrentConversationId(null);
     setInput('');
     setAttachments([]);
-    if (isMobile) setSidebarOpen(false);
+    if (sidebarOverlay) setSidebarOpen(false);
   };
 
   const deleteConversation = async (id: string) => {
@@ -803,9 +797,6 @@ export default function AIPageV2() {
         activeProject,
       });
 
-      // The current deployed full agent did not consume the separate `context`
-      // field consistently. Embed the internal context into the request history
-      // so full agent and fallback both receive identical long-term/project data.
       if (history.length > 0) {
         const index = history.length - 1;
         history[index] = {
@@ -1044,7 +1035,7 @@ export default function AIPageV2() {
       return;
     }
     setArtifactsOpen(true);
-    if (isMobile) setSidebarOpen(false);
+    if (sidebarOverlay) setSidebarOpen(false);
   };
 
   useEffect(() => {
@@ -1079,7 +1070,6 @@ export default function AIPageV2() {
       onModeChange={setMode}
       toolGroups={toolGroups}
       onToolGroupsChange={(groups) => {
-        // Only web is user-toggleable. Other capability groups stay on.
         const webEnabled = groups.includes('web');
         setToolGroups(ALL_TOOL_GROUPS.filter((group) => group !== 'web' || webEnabled));
       }}
@@ -1089,34 +1079,38 @@ export default function AIPageV2() {
   );
 
   return (
-    <div className="flex h-full min-h-0 min-w-0 overflow-hidden bg-background">
+    <div className="relative flex h-full min-h-0 min-w-0 overflow-hidden bg-background">
       <AnimatePresence>
         {sidebarOpen && (
           <>
-            {isMobile && (
-              <motion.div
+            {sidebarOverlay && (
+              <motion.button
+                type="button"
+                aria-label="Yon panelni yopish"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="fixed inset-0 z-40 bg-black/55 backdrop-blur-sm"
+                className="absolute inset-0 z-40 bg-black/45 backdrop-blur-[1px]"
                 onClick={() => setSidebarOpen(false)}
               />
             )}
             <motion.aside
-              initial={{ x: isMobile ? -320 : 0, opacity: isMobile ? 0 : 1 }}
+              initial={{ x: sidebarOverlay ? -320 : 0, opacity: sidebarOverlay ? 0 : 1 }}
               animate={{ x: 0, opacity: 1 }}
               exit={{ x: -320, opacity: 0 }}
               transition={{ type: 'spring', damping: 26, stiffness: 300 }}
               className={cn(
-                'z-50 flex min-h-0 flex-col border-r border-border/50 bg-background',
-                isMobile ? 'fixed bottom-0 left-0 top-0 w-[300px]' : 'relative h-full w-[280px] lg:w-[300px]',
+                'z-50 flex min-h-0 min-w-0 flex-col border-r border-border/50 bg-background',
+                sidebarOverlay
+                  ? 'absolute inset-y-0 left-0 w-[min(300px,88%)] shadow-2xl'
+                  : 'relative h-full w-[280px] shrink-0 xl:w-[300px]',
               )}
             >
               <AISidebar
                 conversations={conversations}
                 loading={historyLoading}
                 activeId={currentConversationId}
-                isMobile={isMobile}
+                isMobile={sidebarOverlay}
                 onNew={() => startNew(activeProjectId)}
                 onSelect={selectConversation}
                 onDelete={deleteConversation}
@@ -1141,7 +1135,7 @@ export default function AIPageV2() {
       </AnimatePresence>
 
       <div className="relative flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-        <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border/40 bg-background/90 px-3 backdrop-blur-xl sm:h-14 sm:px-4">
+        <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border/40 bg-background/90 px-2.5 backdrop-blur-xl sm:h-14 sm:px-4">
           {!sidebarOpen && (
             <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0 rounded-lg" onClick={() => setSidebarOpen(true)} aria-label="Yon panelni ochish">
               <PanelLeft className="h-4 w-4" />
@@ -1162,7 +1156,7 @@ export default function AIPageV2() {
             <Button
               size="sm"
               variant={artifactsOpen ? 'secondary' : 'ghost'}
-              className="h-8 gap-1.5 rounded-lg px-2.5 text-[11px]"
+              className="h-8 shrink-0 gap-1 rounded-lg px-2 text-[11px] sm:gap-1.5 sm:px-2.5"
               onClick={() => setArtifactsOpen((value) => !value)}
             >
               <FileText className="h-3.5 w-3.5" />
@@ -1174,47 +1168,47 @@ export default function AIPageV2() {
 
         <ScrollArea ref={scrollAreaRef} className="min-h-0 min-w-0 flex-1 overflow-hidden">
           {messages.length === 0 ? (
-            <div className="mx-auto flex min-h-full w-full max-w-4xl flex-col px-4 py-8 sm:px-6">
-              <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center py-8 sm:py-12">
+            <div className="mx-auto flex min-h-full w-full max-w-4xl flex-col px-3 py-4 sm:px-5 sm:py-6 lg:px-6 lg:py-8">
+              <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center py-4 sm:py-8 lg:py-10">
                 <motion.div
                   initial={{ scale: 0.9, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
                   transition={{ type: 'spring', damping: 18 }}
-                  className="mb-4 flex h-12 w-12 items-center justify-center self-center rounded-2xl border border-border/70 bg-muted/40"
+                  className="mb-3 flex h-11 w-11 items-center justify-center self-center rounded-2xl border border-border/70 bg-muted/40 sm:mb-4 sm:h-12 sm:w-12"
                 >
                   {activeProject ? <FolderKanban className="h-5 w-5" /> : <Sparkles className="h-5 w-5" />}
                 </motion.div>
 
-                <h2 className="mb-1.5 max-w-full break-words text-center text-2xl font-semibold sm:text-3xl">
+                <h2 className="mb-1.5 max-w-full break-words text-center text-xl font-semibold sm:text-2xl lg:text-3xl">
                   {activeProject ? activeProject.name : greetingName ? `Salom, ${greetingName}` : 'Alsamos AI'}
                 </h2>
-                <p className="mx-auto mb-5 max-w-xl text-center text-sm leading-relaxed text-muted-foreground">
+                <p className="mx-auto mb-4 max-w-xl px-1 text-center text-xs leading-relaxed text-muted-foreground sm:mb-5 sm:text-sm">
                   {activeProject
                     ? activeProject.instructions || 'Bu loyiha ichidagi suhbatlar umumiy kontekst bilan ishlaydi.'
                     : 'Savol, vazifa yoki yaratmoqchi bo‘lgan narsangizni yozing. Kerakli vositani AI o‘zi tanlaydi.'}
                 </p>
 
-                <div className="w-full">{composer}</div>
+                <div className="w-full min-w-0">{composer}</div>
 
                 {forwardedPost && (
-                  <div className="mx-auto mt-5 w-full max-w-2xl overflow-hidden rounded-2xl border border-blue-500/20 bg-card/50">
-                    <div className="flex items-center gap-2 border-b border-blue-500/15 bg-blue-500/5 px-4 py-2.5">
-                      <Sparkles className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                      <span className="text-xs font-semibold text-blue-700 dark:text-blue-300">Post yuborildi</span>
-                      <button type="button" onClick={() => setForwardedPost(null)} className="ml-auto text-muted-foreground hover:text-foreground" aria-label="Yopish">
+                  <div className="mx-auto mt-4 w-full max-w-2xl overflow-hidden rounded-2xl border border-blue-500/20 bg-card/50 sm:mt-5">
+                    <div className="flex min-w-0 items-center gap-2 border-b border-blue-500/15 bg-blue-500/5 px-3 py-2.5 sm:px-4">
+                      <Sparkles className="h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />
+                      <span className="min-w-0 flex-1 truncate text-xs font-semibold text-blue-700 dark:text-blue-300">Post yuborildi</span>
+                      <button type="button" onClick={() => setForwardedPost(null)} className="shrink-0 text-muted-foreground hover:text-foreground" aria-label="Yopish">
                         <X className="h-3.5 w-3.5" />
                       </button>
                     </div>
-                    <div className="p-4">
+                    <div className="p-3 sm:p-4">
                       {forwardedPost.mediaUrl && <img src={forwardedPost.mediaUrl} alt="" className="mb-3 max-h-48 w-full rounded-xl object-cover" />}
-                      <p className="mb-1 text-xs text-muted-foreground">@{forwardedPost.authorName}</p>
+                      <p className="mb-1 truncate text-xs text-muted-foreground">@{forwardedPost.authorName}</p>
                       {forwardedPost.content && <p className="line-clamp-4 break-words text-sm [overflow-wrap:anywhere]">{forwardedPost.content}</p>}
                     </div>
                   </div>
                 )}
 
                 {activeProject ? (
-                  <section className="mx-auto mt-8 w-full max-w-2xl">
+                  <section className="mx-auto mt-6 w-full max-w-2xl sm:mt-8">
                     <div className="mb-2 flex items-center justify-between gap-3 px-1">
                       <h3 className="text-sm font-semibold">Suhbatlar</h3>
                       <span className="text-xs text-muted-foreground">{activeProjectConversations.length}</span>
@@ -1227,7 +1221,7 @@ export default function AIPageV2() {
                             type="button"
                             onClick={() => selectConversation(conversation)}
                             className={cn(
-                              'flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/45',
+                              'flex w-full min-w-0 items-center gap-2.5 px-3 py-3 text-left transition-colors hover:bg-muted/45 sm:gap-3 sm:px-4',
                               index > 0 && 'border-t border-border/50',
                             )}
                           >
@@ -1235,18 +1229,18 @@ export default function AIPageV2() {
                               <p className="truncate text-sm font-medium">{conversation.title}</p>
                               <p className="mt-0.5 truncate text-xs text-muted-foreground">{conversationPreview(conversation)}</p>
                             </div>
-                            <span className="shrink-0 text-[11px] text-muted-foreground">{conversationDate(conversation.updatedAt)}</span>
+                            <span className="hidden shrink-0 text-[11px] text-muted-foreground sm:inline">{conversationDate(conversation.updatedAt)}</span>
                           </button>
                         ))}
                       </div>
                     ) : (
-                      <div className="rounded-2xl border border-dashed border-border/60 px-4 py-8 text-center text-xs text-muted-foreground">
+                      <div className="rounded-2xl border border-dashed border-border/60 px-3 py-7 text-center text-xs text-muted-foreground sm:px-4 sm:py-8">
                         Bu loyihada hali suhbat yo‘q. Yuqoridagi maydondan birinchi suhbatni boshlang.
                       </div>
                     )}
                   </section>
                 ) : (
-                  <div className="mx-auto mt-7 grid w-full max-w-2xl grid-cols-2 gap-2">
+                  <div className="mx-auto mt-5 grid w-full max-w-2xl grid-cols-1 gap-2 sm:mt-7 sm:grid-cols-2">
                     {suggestions.map((suggestion, index) => (
                       <motion.button
                         key={suggestion.title}
@@ -1265,7 +1259,7 @@ export default function AIPageV2() {
               </div>
             </div>
           ) : (
-            <div className="mx-auto w-full min-w-0 max-w-4xl overflow-hidden px-3 py-4 sm:px-5 sm:py-6">
+            <div className="mx-auto w-full min-w-0 max-w-4xl overflow-hidden px-2.5 py-3 sm:px-5 sm:py-6">
               {messages.map((message, index) => (
                 <AIMessageBubble
                   key={message.id}
@@ -1304,18 +1298,23 @@ export default function AIPageV2() {
       <AnimatePresence>
         {showArtifacts && (
           <motion.div
-            initial={{ x: isMobile ? '100%' : 40, opacity: isMobile ? 1 : 0 }}
+            initial={{ x: artifactOverlay ? '100%' : 40, opacity: artifactOverlay ? 1 : 0 }}
             animate={{ x: 0, opacity: 1 }}
-            exit={{ x: isMobile ? '100%' : 40, opacity: isMobile ? 1 : 0 }}
+            exit={{ x: artifactOverlay ? '100%' : 40, opacity: artifactOverlay ? 1 : 0 }}
             transition={{ type: 'spring', damping: 28, stiffness: 320 }}
-            className={cn('z-50', isMobile ? 'fixed inset-0 bg-background' : 'relative h-full shrink-0')}
+            className={cn(
+              'z-[60]',
+              artifactOverlay
+                ? 'absolute inset-0 bg-background shadow-2xl'
+                : 'relative h-full shrink-0',
+            )}
           >
             <AIArtifactPanel
               artifacts={artifacts}
               activeId={activeArtifactId}
               onSelect={setActiveArtifactId}
               onClose={() => setArtifactsOpen(false)}
-              isMobile={isMobile}
+              isMobile={artifactOverlay}
             />
           </motion.div>
         )}
