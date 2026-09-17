@@ -36,6 +36,21 @@ export function getMobileChromeMode(pathname: string): MobileChromeMode {
   // rows seen when a profile is opened from Videos.
   if (path.startsWith('/user/')) return 'immersive';
 
+  // These full-screen/detail surfaces already own a real navigation header or
+  // back affordance. Letting AppLayout add a second shell back row produces the
+  // same duplicate-chrome bug as the AI Projects regression.
+  if (
+    path === '/web' ||
+    path === '/story-archive' ||
+    path === '/activity' ||
+    path.startsWith('/post/') ||
+    path === '/stickers/moderation' ||
+    path === '/mini-apps/new' ||
+    (path.startsWith('/mini-apps/') && path.endsWith('/edit'))
+  ) {
+    return 'immersive';
+  }
+
   return 'secondary';
 }
 
