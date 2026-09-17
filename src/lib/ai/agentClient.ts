@@ -71,6 +71,33 @@ async function authHeaders(): Promise<Record<string, string>> {
   };
 }
 
+async function createProvisionalConversation(
+  messages: StreamAgentOptions['messages'],
+): Promise<string | null> {
+  const { data: sessionData } = await supabase.auth.getSession();
+  const userId = sessionData.session?.user?.id;
+  if (!userId || messages.length === 0) return null;
+  const now = new Date().toISOString();
+  const durableMessages = messages.map((message) => ({
+    id: crypto.randomUUID(),
+    role: message.role,
+    content: message.content,
+    timestamp: now,
+  }));
+  const { data, error } = await supabase
+    .from('ai_conversations')
+    .insert({ user_id: userId, messages: durableMessages as any, context: 'agent-durable' })
+    .select('id')
+    .single();
+  if (error || !data?.id) return null;
+  return String(data.id);
+}
+
+async function removeProvisionalConversation(id: string | null): Promise<void> {
+  if (!id) return;
+  await supabase.from('ai_conversations').delete().eq('id', id);
+}
+
 async function readSse(
   body: ReadableStream<Uint8Array>,
   onLine: (payload: string) => void,
@@ -160,8 +187,6 @@ async function requestAgent(
           if (typeof data?.imageUrl === 'string' || typeof data?.videoUrl === 'string') sawMedia = true;
         }
       }
-      // run_state and plan are useful to generic clients, while the current page
-      // can safely ignore them until it has a dedicated Runs panel.
       onEvent(event);
     } catch (error) {
       if (!(error instanceof SyntaxError)) throw error;
@@ -172,53 +197,67 @@ async function requestAgent(
 }
 
 async function streamDurableAgent(options: StreamAgentOptions): Promise<void> {
-  const prepared = await withAlsamosSearchGrounding(options);
-  let state = await requestAgent(
-    {
-      messages: prepared.messages,
-      mode: 'agent',
-      model: prepared.model,
-      toolGroups: prepared.toolGroups,
-      conversationId: prepared.conversationId,
-      context: prepared.context,
-    },
-    prepared.signal,
-    prepared.onEvent,
-  );
+  // For a brand-new chat we create a small provisional conversation before the
+  // long run starts. If the browser disappears, the background worker can still
+  // attach its final answer to this row. On a normal foreground completion the
+  // provisional row is deleted and AIPage writes its richer message payload as
+  // usual, so existing UI behavior is unchanged.
+  const provisionalId = options.conversationId ? null : await createProvisionalConversation(options.messages);
+  const effectiveConversationId = options.conversationId ?? provisionalId;
+  const prepared = await withAlsamosSearchGrounding({ ...options, conversationId: effectiveConversationId });
+  let completedForeground = false;
 
-  let sawText = state.sawText;
-  let sawMedia = state.sawMedia;
-  let failure = state.failure;
-  let reconnects = 0;
-
-  while (
-    state.runId &&
-    !prepared.signal?.aborted &&
-    state.status &&
-    !['completed', 'failed', 'cancelled', 'awaiting_continue'].includes(state.status)
-  ) {
-    reconnects += 1;
-    if (reconnects > 40) throw new Error('Agent stream reconnect limitiga yetdi. Run serverda saqlangan.');
-    await new Promise((resolve) => window.setTimeout(resolve, 350));
-    state = await requestAgent(
-      { action: 'resume', runId: state.runId, afterEventId: state.eventId, mode: 'agent', conversationId: prepared.conversationId },
+  try {
+    let state = await requestAgent(
+      {
+        messages: prepared.messages,
+        mode: 'agent',
+        model: prepared.model,
+        toolGroups: prepared.toolGroups,
+        conversationId: effectiveConversationId,
+        context: prepared.context,
+      },
       prepared.signal,
       prepared.onEvent,
     );
-    sawText ||= state.sawText;
-    sawMedia ||= state.sawMedia;
-    failure = state.failure ?? failure;
-  }
 
-  if (!sawText && !sawMedia && failure && state.status !== 'awaiting_continue') {
-    prepared.onEvent({ type: 'error', message: failure });
-  }
-  if (state.status === 'awaiting_continue' && state.runId) {
-    prepared.onEvent({
-      type: 'notice',
-      message: `Agent checkpoint qilindi. Run ${state.runId.slice(0, 8)} uchun davom ettirish mumkin.`,
-      runId: state.runId,
-    });
+    let sawText = state.sawText;
+    let sawMedia = state.sawMedia;
+    let failure = state.failure;
+    let reconnects = 0;
+
+    while (
+      state.runId &&
+      !prepared.signal?.aborted &&
+      state.status &&
+      !['completed', 'failed', 'cancelled', 'awaiting_continue'].includes(state.status)
+    ) {
+      reconnects += 1;
+      if (reconnects > 40) throw new Error('Agent stream reconnect limitiga yetdi. Run serverda saqlangan.');
+      await new Promise((resolve) => window.setTimeout(resolve, 350));
+      state = await requestAgent(
+        { action: 'resume', runId: state.runId, afterEventId: state.eventId, mode: 'agent', conversationId: effectiveConversationId },
+        prepared.signal,
+        prepared.onEvent,
+      );
+      sawText ||= state.sawText;
+      sawMedia ||= state.sawMedia;
+      failure = state.failure ?? failure;
+    }
+
+    if (!sawText && !sawMedia && failure && state.status !== 'awaiting_continue') {
+      prepared.onEvent({ type: 'error', message: failure });
+    }
+    if (state.status === 'awaiting_continue' && state.runId) {
+      prepared.onEvent({
+        type: 'notice',
+        message: `Agent checkpoint qilindi. Run ${state.runId.slice(0, 8)} uchun davom ettirish mumkin.`,
+        runId: state.runId,
+      });
+    }
+    completedForeground = state.status === 'completed' && !prepared.signal?.aborted;
+  } finally {
+    if (completedForeground) await removeProvisionalConversation(provisionalId);
   }
 }
 
