@@ -1,0 +1,91 @@
+name: Apply durable AI runtime patch
+
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/ai-durable-runtime-patch.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Patch AI page and Supabase config
+        shell: python
+        run: |
+          from pathlib import Path
+
+          page = Path('src/pages/AIPageV2.tsx')
+          text = page.read_text(encoding='utf-8')
+
+          old = "const runAgent = async (baseMessages: AIMessage[]) => {"
+          new = "const runAgent = async (baseMessages: AIMessage[], conversationIdOverride?: string | null) => {"
+          assert old in text, 'runAgent signature not found'
+          text = text.replace(old, new, 1)
+
+          old = "conversationId: currentConversationId,"
+          new = "conversationId: conversationIdOverride ?? currentConversationId,"
+          assert old in text, 'stream conversationId not found'
+          text = text.replace(old, new, 1)
+
+          old = """    setMessages(base);
+    setInput('');
+    setAttachments([]);
+    await runAgent(base);
+"""
+          new = """    setMessages(base);
+    setInput('');
+    setAttachments([]);
+    const savedId = await saveConversation(base);
+    await runAgent(base, savedId);
+"""
+          assert old in text, 'send runAgent block not found'
+          text = text.replace(old, new, 1)
+
+          old = """    setMessages(base);
+    await runAgent(base);
+"""
+          new = """    setMessages(base);
+    const savedId = await saveConversation(base);
+    await runAgent(base, savedId);
+"""
+          count = text.count(old)
+          assert count >= 2, f'expected regenerate/edit blocks, found {count}'
+          text = text.replace(old, new, 2)
+          page.write_text(text, encoding='utf-8')
+
+          config = Path('supabase/config.toml')
+          cfg = config.read_text(encoding='utf-8')
+          marker = "[functions.ai-agent]\nverify_jwt = true\n"
+          addition = marker + "\n# Internal durable worker: gateway accepts the project anon JWT, then the\n# function additionally validates a per-run high-entropy dispatch token.\n[functions.ai-agent-worker]\nverify_jwt = true\n"
+          assert marker in cfg, 'ai-agent config marker not found'
+          if '[functions.ai-agent-worker]' not in cfg:
+              cfg = cfg.replace(marker, addition, 1)
+          config.write_text(cfg, encoding='utf-8')
+
+          # Self-delete: this one-shot patch workflow must not remain in the repo.
+          Path('.github/workflows/ai-durable-runtime-patch.yml').unlink()
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: AI regression and typecheck
+        run: |
+          npx vitest run src/lib/ai/agentClient.test.ts src/lib/ai/projectWorkspace.test.ts src/lib/ai/workspaceUrl.test.ts src/lib/aiArtifacts.test.ts
+          npm run typecheck:create
+          npm run typecheck:api
+          npm run build
+
+      - name: Commit patch
+        run: |
+          git config user.name "Alsamos AI"
+          git config user.email "74458526+SamandarAlimov@users.noreply.github.com"
+          git add -A
+          git commit -m "feat(ai): persist durable runs across disconnects"
+          git push origin HEAD:main
