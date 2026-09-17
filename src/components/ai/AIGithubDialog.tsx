@@ -199,7 +199,7 @@ export function AIGithubDialog({ open, onOpenChange, onPickRepo }: AIGithubDialo
               </div>
               {error && <p className="text-[11px] text-destructive">{error}</p>}
               <p className="text-[11px] leading-relaxed text-muted-foreground">
-                Tavsiya: faqat kerakli repolar uchun cheklangan token ishlating. Kod tahriri uchun Contents read/write, PR oqimi uchun Pull requests read/write, CI ko‘rish uchun Actions read ruxsatlari kerak bo‘lishi mumkin. Repo yaratish va organization amallari GitHub hisob/org ruxsatlariga ham bog‘liq.
+                Tavsiya: faqat kerakli repolar uchun cheklangan fine-grained token ishlating. Kod tahriri uchun Contents read/write, PR oqimi uchun Pull requests read/write, CI ko‘rish uchun Actions read kerak. Yangi repository yaratish uchun Administration read/write ruxsati ham kerak; organization repolari esa org siyosati va token egasining org huquqlariga bog‘liq.
               </p>
             </div>
             <Button
