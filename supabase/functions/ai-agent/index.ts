@@ -371,31 +371,33 @@ serve(async (req) => {
               })),
             });
 
-            const results = await Promise.all(
-              calls.map(async (call) => {
-                let args: Record<string, unknown> = {};
-                try {
-                  args = call.args ? JSON.parse(call.args) : {};
-                } catch (_) {
-                  args = {};
-                }
-                send({ type: "tool_call", id: call.id, name: call.name, args });
+            // Tool calls are intentionally executed in model order. GitHub write operations
+            // against the same branch can race if parallelized, causing lost/conflicting commits.
+            // Sequential execution also keeps Edge Function memory spikes lower.
+            const results: Array<{ call: PendingCall; outcome: Awaited<ReturnType<typeof executeTool>> }> = [];
+            for (const call of calls) {
+              let args: Record<string, unknown> = {};
+              try {
+                args = call.args ? JSON.parse(call.args) : {};
+              } catch (_) {
+                args = {};
+              }
+              send({ type: "tool_call", id: call.id, name: call.name, args });
 
-                const githubOutcome = await executeGitHubTool(call.name, args, ctx);
-                const platformOutcome = githubOutcome ?? await executePlatformTool(call.name, args, ctx);
-                const outcome = platformOutcome ?? await executeTool(call.name, args, ctx);
+              const githubOutcome = await executeGitHubTool(call.name, args, ctx);
+              const platformOutcome = githubOutcome ?? await executePlatformTool(call.name, args, ctx);
+              const outcome = platformOutcome ?? await executeTool(call.name, args, ctx);
 
-                send({
-                  type: "tool_result",
-                  id: call.id,
-                  name: call.name,
-                  ok: outcome.ok,
-                  summary: outcome.text.slice(0, 600),
-                  data: outcome.data ?? null,
-                });
-                return { call, outcome };
-              }),
-            );
+              send({
+                type: "tool_result",
+                id: call.id,
+                name: call.name,
+                ok: outcome.ok,
+                summary: outcome.text.slice(0, 600),
+                data: outcome.data ?? null,
+              });
+              results.push({ call, outcome });
+            }
 
             for (const { call, outcome } of results) {
               conversation.push({
