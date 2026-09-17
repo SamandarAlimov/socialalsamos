@@ -21,6 +21,13 @@ export function getMobileChromeMode(pathname: string): MobileChromeMode {
   if (PRIMARY_ROUTES.has(path)) return 'primary';
   if (IMMERSIVE_ROUTES.has(path)) return 'immersive';
 
+  // AI owns its complete workspace chrome on both chat and project surfaces.
+  // The legacy /projects route is immersive too while it redirects so the
+  // platform shell cannot flash around the AI workspace.
+  if (path === '/ai' || path.startsWith('/ai/') || path === '/projects') {
+    return 'immersive';
+  }
+
   // Settings landing and detail pages render their own titles/back controls.
   // Adding the shell MobileBackHeader here creates the duplicate top "Orqaga"
   // row on mobile and also adds unnecessary top padding.
@@ -64,7 +71,7 @@ export function getMobileBackFallback(pathname: string): string {
   if (path.startsWith('/mini-apps/') && path !== '/mini-apps') return '/mini-apps';
   if (path.startsWith('/stickers/') && path !== '/stickers') return '/stickers';
   if (path === '/story-archive' || path === '/activity') return '/profile';
-  if (path === '/projects') return '/ai';
+  if (path === '/ai/projects' || path === '/projects') return '/ai';
   return '/home';
 }
 
