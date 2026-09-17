@@ -1,13 +1,11 @@
 import { useCallback, useEffect, useState, type ComponentProps } from 'react';
-import { Bot, Loader2, MessageCircle, RefreshCw, X } from 'lucide-react';
+import { Bot, Loader2, RefreshCw, X } from 'lucide-react';
 import { AIComposer as AIComposerV2 } from './AIComposerV2';
 import type { ComposerAttachment } from './AIComposerV2';
-import type { AIMode, AgentEvent } from '@/lib/ai/capabilities';
+import type { AgentEvent } from '@/lib/ai/capabilities';
 import { continueAgentRun } from '@/lib/ai/agentClient';
 import { supabase } from '@/integrations/supabase/client';
-import { cn } from '@/lib/utils';
 
-const MODE_KEY = 'alsamos.ai.mode';
 const PENDING_KEY = 'alsamos.ai.pending-run';
 
 type Props = ComponentProps<typeof AIComposerV2>;
@@ -17,15 +15,6 @@ type PendingRun = {
   status: string;
   conversationId?: string | null;
 };
-
-function initialMode(): AIMode {
-  try {
-    const value = localStorage.getItem(MODE_KEY);
-    return value === 'chat' || value === 'agent' ? value : 'agent';
-  } catch {
-    return 'agent';
-  }
-}
 
 function readPendingRun(): PendingRun | null {
   try {
@@ -53,23 +42,16 @@ function runStatusText(status: string): string {
 }
 
 export function AIComposer(props: Props) {
-  const [internalMode, setInternalMode] = useState<AIMode>(initialMode);
-  const mode = props.mode ?? internalMode;
-  const changeMode = useCallback((nextMode: AIMode) => {
-    setInternalMode(nextMode);
-    props.onModeChange?.(nextMode);
-  }, [props.onModeChange]);
   const [pendingRun, setPendingRun] = useState<PendingRun | null>(readPendingRun);
   const [continuing, setContinuing] = useState(false);
   const [runError, setRunError] = useState<string | null>(null);
 
+  // Chat/Agent is an implementation detail, not a user setting. Keep the
+  // capable agent runtime selected automatically and let orchestration decide
+  // which tools are actually needed for each request.
   useEffect(() => {
-    try {
-      localStorage.setItem(MODE_KEY, mode);
-    } catch {
-      // ignore storage failures
-    }
-  }, [mode]);
+    if (props.mode !== 'agent') props.onModeChange?.('agent');
+  }, [props.mode, props.onModeChange]);
 
   const refreshPendingRun = useCallback(async () => {
     const local = readPendingRun();
@@ -142,7 +124,7 @@ export function AIComposer(props: Props) {
   const showRunBanner = Boolean(pendingRun && !props.busy);
 
   return (
-    <div className="w-full min-w-0">
+    <div className="w-full min-w-0 [&_textarea]:!rounded-none [&_textarea]:!border-0 [&_textarea]:!bg-transparent [&_textarea]:!shadow-none [&_textarea]:focus-visible:!outline-none [&_textarea]:focus-visible:!ring-0 [&_textarea]:focus-visible:!ring-offset-0 [&>div>div>p:last-child]:hidden">
       {showRunBanner && pendingRun && (
         <div className="mx-auto mb-1.5 w-full max-w-3xl px-2 sm:px-4">
           <div className="flex min-w-0 flex-wrap items-center gap-2 rounded-xl border border-border/60 bg-muted/30 px-2.5 py-2 text-xs sm:px-3">
@@ -195,35 +177,7 @@ export function AIComposer(props: Props) {
         </div>
       )}
 
-      <div className="mx-auto mb-1.5 flex w-full max-w-3xl justify-end px-2 sm:px-4">
-        <div className="inline-flex rounded-full border border-border/60 bg-background/95 p-0.5 shadow-sm backdrop-blur">
-          {([
-            ['chat', 'Suhbat', MessageCircle],
-            ['agent', 'Agent', Bot],
-          ] as const).map(([id, label, Icon]) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => changeMode(id)}
-              className={cn(
-                'flex h-7 items-center gap-1.5 rounded-full px-2.5 text-[11px] font-medium transition-colors',
-                mode === id
-                  ? 'bg-foreground text-background'
-                  : 'text-muted-foreground hover:bg-muted hover:text-foreground',
-              )}
-              title={
-                id === 'agent'
-                  ? 'Ko‘p qadamli durable vazifa: plan, tools, checkpoint va background davom etish'
-                  : 'Tez suhbat: minimal tool budget va qisqa orchestration'
-              }
-            >
-              <Icon className="h-3.5 w-3.5" />
-              {label}
-            </button>
-          ))}
-        </div>
-      </div>
-      <AIComposerV2 {...props} mode={mode} onModeChange={changeMode} />
+      <AIComposerV2 {...props} mode="agent" onModeChange={undefined} />
     </div>
   );
 }
