@@ -1,21 +1,34 @@
-# Backend scaffold
+# Alsamos backend
 
-Status: structure only; implementation has not started.
+Status: **implementation started on the isolated target backend**.
 
-This directory implements the file layout planned in [backend.md](../backend.md) for `SamandarAlimov/socialalsamos`. Empty source, configuration, SQL, fixture and test files are intentional placeholders. They are not working endpoints, valid deployment configurations or passing tests. In particular, `go.mod` and `go.sum` are reserved files; no Go version or dependencies have been selected yet.
+The existing production application still uses its current Supabase paths. Nothing in this directory is connected to production until migration, parity, security and reconciliation gates are completed.
 
-See [STRUCTURE.md](STRUCTURE.md) for the complete file tree and [scaffold-manifest.json](scaffold-manifest.json) for the exact inventory. The manifest is the completeness boundary for this scaffolding step; implementation may require additional files later.
+## Implemented foundation
 
-No production connections, migrations, deployments, package installation or frontend edits are part of this scaffold. Existing Supabase paths remain authoritative.
+- Go API process with graceful shutdown.
+- Strict environment/address validation.
+- `/healthz` and fail-closed `/readyz` HTTP endpoints.
+- Request IDs, security headers, panic recovery and request body limits.
+- Integer-minor-unit money type; financial code does not use floating point for money.
+- Double-entry journal validation and reversal construction.
+- Initial Sharia contract guards for deferred sale, Mudarabah, Musharakah and Wakalah investment structures.
+- Unit tests for the implemented packages.
+- Finance database design SQL kept outside executable migrations until the deployed Supabase schema and both migration streams are reconciled.
 
-## Implementation order
+## Build boundary
 
-1. Inventory and baseline contracts.
-2. Platform foundation and authentication.
-3. Social/account and messaging parity.
-4. Calls, live and media.
-5. Commercial and ecosystem domains.
-6. Integration, security, load and migration verification.
-7. Controlled client integration and separately reviewed cutover.
+The historical scaffold intentionally contains many empty `.go` placeholders for future domains. An empty Go source file is not compilable, so `go test ./...` is not yet the acceptance command for the whole scaffold. `make ci` deliberately tests and builds only packages that have crossed from placeholder to implementation.
 
-Each domain owns its handlers, service, repository, models, validation, authorization and events. Domain-specific files reserve the named feature boundaries. Domain tests live under that domain; cross-domain scenarios live in `tests/`. SQL statements belong in `db/queries/<domain>/`. Do not implement arbitrary cross-domain table writes in handlers.
+As each domain is implemented, it is added to `IMPLEMENTED_PACKAGES`; once all Go placeholders are converted or removed, CI will switch to `go test ./...` and `go vet ./...`.
+
+## Commands
+
+```bash
+cd backend
+make test
+make vet
+make build
+```
+
+See [STRUCTURE.md](STRUCTURE.md) for the reserved backend tree and [../backend.md](../backend.md) for the migration/parity blueprint.

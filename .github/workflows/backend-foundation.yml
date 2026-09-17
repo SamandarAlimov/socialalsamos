@@ -1,0 +1,31 @@
+name: Backend foundation
+
+on:
+  push:
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend-foundation.yml'
+  pull_request:
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend-foundation.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+      - name: Setup Go
+        uses: actions/setup-go@v7.0.0
+        with:
+          go-version: '1.27.1'
+          cache: false
+      - name: Verify implemented backend packages
+        run: make ci
