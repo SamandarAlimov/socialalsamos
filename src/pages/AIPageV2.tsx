@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
+  ArrowDown,
   Code2,
   FileText,
   FolderKanban,
@@ -165,6 +166,7 @@ export default function AIPageV2() {
   const [model, setModel] = useState<ModelId>(initialPrefs.model);
   const [toolGroups, setToolGroups] = useState<ToolGroupId[]>(initialPrefs.toolGroups);
   const [activeModel, setActiveModel] = useState<string | null>(null);
+  const [showScrollToLatest, setShowScrollToLatest] = useState(false);
   const [forwardedPost, setForwardedPost] = useState<{
     id: string;
     content?: string;
@@ -173,6 +175,7 @@ export default function AIPageV2() {
   } | null>(null);
 
   const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const autoFollowRef = useRef(true);
   const abortRef = useRef<AbortController | null>(null);
   const mediaPollsRef = useRef<Map<string, boolean>>(new Map());
   const { uploadFileOrThrow, uploading, getFileType } = useFileUpload();
@@ -474,14 +477,44 @@ export default function AIPageV2() {
     navigate(location.pathname, { replace: true, state: {} });
   }, [location.pathname, location.state, navigate]);
 
+  const scrollToLatest = useCallback((behavior: ScrollBehavior = 'smooth') => {
+    const viewport = scrollAreaRef.current?.querySelector<HTMLElement>('[data-radix-scroll-area-viewport]');
+    if (!viewport) return;
+    autoFollowRef.current = true;
+    setShowScrollToLatest(false);
+    viewport.scrollTo({ top: viewport.scrollHeight, behavior });
+  }, []);
+
   useEffect(() => {
-    const viewport = scrollAreaRef.current?.querySelector('[data-radix-scroll-area-viewport]');
-    if (viewport) viewport.scrollTop = viewport.scrollHeight;
-  }, [isStreaming, messages]);
+    const viewport = scrollAreaRef.current?.querySelector<HTMLElement>('[data-radix-scroll-area-viewport]');
+    if (!viewport) return;
+
+    const onScroll = () => {
+      const distance = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
+      const nearBottom = distance < 96;
+      autoFollowRef.current = nearBottom;
+      setShowScrollToLatest(!nearBottom);
+    };
+
+    onScroll();
+    viewport.addEventListener('scroll', onScroll, { passive: true });
+    return () => viewport.removeEventListener('scroll', onScroll);
+  }, []);
+
+  useEffect(() => {
+    if (!autoFollowRef.current) return;
+    const frame = window.requestAnimationFrame(() => {
+      const viewport = scrollAreaRef.current?.querySelector<HTMLElement>('[data-radix-scroll-area-viewport]');
+      if (viewport) viewport.scrollTop = viewport.scrollHeight;
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [messages]);
 
   const startNew = useCallback(
     (projectId: string | null = activeProjectId) => {
       abortRef.current?.abort();
+      autoFollowRef.current = true;
+      setShowScrollToLatest(false);
       setMessages([]);
       setCurrentConversationId(null);
       setActiveProjectId(projectsAvailable ? projectId : null);
@@ -495,6 +528,8 @@ export default function AIPageV2() {
 
   const selectConversation = (conversation: AIConversation) => {
     abortRef.current?.abort();
+    autoFollowRef.current = true;
+    setShowScrollToLatest(false);
     setMessages(conversation.messages);
     setCurrentConversationId(conversation.id);
     setActiveProjectId(projectsAvailable ? conversation.projectId || null : null);
@@ -504,6 +539,8 @@ export default function AIPageV2() {
   const selectProject = (projectId: string | null) => {
     if (!projectsAvailable) return;
     abortRef.current?.abort();
+    autoFollowRef.current = true;
+    setShowScrollToLatest(false);
     setActiveProjectId(projectId);
     setMessages([]);
     setCurrentConversationId(null);
@@ -969,6 +1006,8 @@ export default function AIPageV2() {
       timestamp: new Date(),
     };
     const base = [...messages, userMessage];
+    autoFollowRef.current = true;
+    setShowScrollToLatest(false);
     setMessages(base);
     setInput('');
     setAttachments([]);
@@ -978,6 +1017,31 @@ export default function AIPageV2() {
   const regenerateFrom = async (index: number) => {
     const base = messages.slice(0, index);
     if (!base.some((message) => message.role === 'user')) return;
+    autoFollowRef.current = true;
+    setShowScrollToLatest(false);
+    setMessages(base);
+    await runAgent(base);
+  };
+
+  const editUserMessage = async (index: number, nextText: string) => {
+    if (busy) return;
+    const original = messages[index];
+    if (!original || original.role !== 'user') return;
+
+    const attachmentsText = (original.attachments ?? [])
+      .map((attachment) => `[${attachment.type}] ${attachment.name}: ${attachment.url}`)
+      .join('\n');
+    const clean = nextText.trim();
+    if (!clean && !attachmentsText) return;
+
+    const edited: AIMessage = {
+      ...original,
+      content: clean && attachmentsText ? `${clean}\n\n${attachmentsText}` : clean || attachmentsText,
+      timestamp: new Date(),
+    };
+    const base = [...messages.slice(0, index), edited];
+    autoFollowRef.current = true;
+    setShowScrollToLatest(false);
     setMessages(base);
     await runAgent(base);
   };
@@ -1252,12 +1316,27 @@ export default function AIPageV2() {
                   message={message}
                   isStreaming={isStreaming && index === messages.length - 1 && message.role === 'assistant'}
                   onRegenerate={message.role === 'assistant' ? () => regenerateFrom(index) : undefined}
+                  onEdit={message.role === 'user' && !isStreaming ? (content) => void editUserMessage(index, content) : undefined}
                 />
               ))}
               {isStreaming && messages[messages.length - 1]?.role === 'user' && <AIThinkingBubble label={statusLabel} />}
             </div>
           )}
         </ScrollArea>
+
+        {messages.length > 0 && showScrollToLatest && (
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            onClick={() => scrollToLatest()}
+            className="absolute bottom-24 left-1/2 z-30 h-9 -translate-x-1/2 gap-1.5 rounded-full border border-border/70 bg-background/95 px-3 text-xs shadow-lg backdrop-blur sm:bottom-20"
+            aria-label="Eng yangi xabarga tushish"
+          >
+            <ArrowDown className="h-4 w-4" />
+            <span className="hidden sm:inline">Eng yangi xabar</span>
+          </Button>
+        )}
 
         {messages.length > 0 && (
           <div className="shrink-0 bg-gradient-to-t from-background via-background to-background/0 pt-1">

@@ -1,11 +1,16 @@
+import { useState } from 'react';
 import {
+  Check,
+  Copy,
   ExternalLink,
   FileArchive,
   FileCode2,
   FileText,
   Image as ImageIcon,
   Music2,
+  Pencil,
   Video,
+  X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { AIAttachmentMeta, AIMessage } from './types';
@@ -150,17 +155,66 @@ function AttachmentPreview({ file }: { file: AIAttachmentMeta }) {
   return <FileMeta file={file} />;
 }
 
-function UserMessageBubble({ message }: { message: AIMessage }) {
+function UserMessageBubble({
+  message,
+  onEdit,
+}: {
+  message: AIMessage;
+  onEdit?: (content: string) => void;
+}) {
   const text = cleanUserText(message);
   const files = message.attachments ?? [];
+  const [copied, setCopied] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(text);
+
+  const copy = () => {
+    void navigator.clipboard.writeText(text || message.content);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1400);
+  };
+
+  const saveEdit = () => {
+    const next = draft.trim();
+    if (!next && files.length === 0) return;
+    onEdit?.(next);
+    setEditing(false);
+  };
 
   return (
-    <div className="mb-5 flex min-w-0 flex-col items-end gap-2 overflow-hidden">
-      {text && (
+    <div className="group mb-5 flex min-w-0 flex-col items-end gap-2 overflow-hidden">
+      {editing ? (
+        <div className="w-[min(88%,680px)] rounded-2xl border border-border/70 bg-card p-2 shadow-sm sm:w-[min(82%,680px)]">
+          <textarea
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            rows={3}
+            autoFocus
+            className="max-h-56 min-h-20 w-full resize-y rounded-xl bg-transparent px-2.5 py-2 text-sm leading-relaxed outline-none"
+            aria-label="Promptni tahrirlash"
+          />
+          <div className="mt-1 flex justify-end gap-1.5">
+            <button
+              type="button"
+              onClick={() => { setDraft(text); setEditing(false); }}
+              className="inline-flex h-8 items-center gap-1 rounded-lg px-2.5 text-xs text-muted-foreground hover:bg-muted"
+            >
+              <X className="h-3.5 w-3.5" /> Bekor qilish
+            </button>
+            <button
+              type="button"
+              onClick={saveEdit}
+              className="inline-flex h-8 items-center gap-1 rounded-lg bg-foreground px-2.5 text-xs text-background hover:bg-foreground/90"
+            >
+              <Check className="h-3.5 w-3.5" /> Saqlash va qayta yuborish
+            </button>
+          </div>
+        </div>
+      ) : text ? (
         <div className="min-w-0 max-w-[88%] overflow-hidden rounded-2xl rounded-br-md bg-foreground px-3.5 py-2.5 text-background shadow-sm sm:max-w-[82%]">
           <p className="whitespace-pre-wrap break-words text-sm leading-relaxed [overflow-wrap:anywhere]">{text}</p>
         </div>
-      )}
+      ) : null}
 
       {files.length > 0 && (
         <div
@@ -172,6 +226,31 @@ function UserMessageBubble({ message }: { message: AIMessage }) {
           {files.map((file) => <AttachmentPreview key={`${file.url}-${file.name}`} file={file} />)}
         </div>
       )}
+
+      {!editing && (text || files.length > 0) && (
+        <div className="flex items-center gap-0.5 opacity-100 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100 sm:focus-within:opacity-100">
+          <button
+            type="button"
+            onClick={copy}
+            className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
+            aria-label="Promptni nusxalash"
+            title="Nusxalash"
+          >
+            {copied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+          </button>
+          {onEdit && (
+            <button
+              type="button"
+              onClick={() => { setDraft(text); setEditing(true); }}
+              className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
+              aria-label="Promptni tahrirlash"
+              title="Tahrirlash"
+            >
+              <Pencil className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -180,10 +259,13 @@ interface Props {
   message: AIMessage;
   isStreaming?: boolean;
   onRegenerate?: () => void;
+  onEdit?: (content: string) => void;
 }
 
 export function AIMessageBubble(props: Props) {
-  if (props.message.role === 'user') return <UserMessageBubble message={props.message} />;
+  if (props.message.role === 'user') {
+    return <UserMessageBubble message={props.message} onEdit={props.onEdit} />;
+  }
   return <AIMessageBubbleV2 {...props} />;
 }
 

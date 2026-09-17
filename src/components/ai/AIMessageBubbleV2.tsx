@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import {
   AlertTriangle,
+  BookOpen,
   Bot,
   Check,
   Copy,
@@ -13,6 +14,8 @@ import {
   Paperclip,
   Play,
   RotateCcw,
+  Volume2,
+  VolumeX,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
@@ -24,6 +27,18 @@ const GH_SPLIT_RE = /(https?:\/\/(?:www\.)?github\.com\/[A-Za-z0-9_.\-/#?=&%]+)/
 const isGithubUrl = (value: string) => /^https?:\/\/(?:www\.)?github\.com\//i.test(value);
 const shortGithubLabel = (href: string) =>
   href.replace(/^https?:\/\/(?:www\.)?github\.com\//i, '').replace(/\/$/, '').replace(/\.git$/i, '');
+
+function speechText(value: string) {
+  return value
+    .replace(/```[\s\S]*?```/g, ' kod bloki ')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/^[-*+]\s+/gm, '')
+    .replace(/[*_~>#]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
 
 function GithubChip({ href, children, onUserBubble }: { href: string; children?: React.ReactNode; onUserBubble?: boolean }) {
   return (
@@ -169,6 +184,36 @@ interface Props {
 
 export function AIMessageBubble({ message, isStreaming, onRegenerate }: Props) {
   const [copied, setCopied] = useState(false);
+  const [speaking, setSpeaking] = useState(false);
+  const [sourcesOpen, setSourcesOpen] = useState(false);
+  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+
+  useEffect(() => () => {
+    if (utteranceRef.current && typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+      utteranceRef.current = null;
+    }
+  }, []);
+
+  const toggleSpeech = () => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+    if (speaking) {
+      window.speechSynthesis.cancel();
+      utteranceRef.current = null;
+      setSpeaking(false);
+      return;
+    }
+
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(speechText(message.content));
+    utterance.lang = document.documentElement.lang || 'uz-UZ';
+    utterance.rate = 1;
+    utterance.onend = () => { utteranceRef.current = null; setSpeaking(false); };
+    utterance.onerror = () => { utteranceRef.current = null; setSpeaking(false); };
+    utteranceRef.current = utterance;
+    setSpeaking(true);
+    window.speechSynthesis.speak(utterance);
+  };
 
   if (message.role === 'user') {
     return (
@@ -278,7 +323,7 @@ export function AIMessageBubble({ message, isStreaming, onRegenerate }: Props) {
           {images.map((url) => <ImageCard key={url} url={url} id={message.id} />)}
           {videos.map((url) => <VideoCard key={url} url={url} />)}
 
-          {message.sources && message.sources.length > 0 && (
+          {message.sources && message.sources.length > 0 && sourcesOpen && (
             <div className="mt-3 max-w-full overflow-hidden rounded-xl border border-border/50 bg-muted/15 p-2.5">
               <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Manbalar</p>
               <ol className="space-y-1">
@@ -305,12 +350,13 @@ export function AIMessageBubble({ message, isStreaming, onRegenerate }: Props) {
           )}
 
           {!message.error && !isStreaming && (
-            <div className="mt-2 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+            <div className="mt-2 flex flex-wrap items-center gap-0.5 opacity-100 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100 sm:focus-within:opacity-100">
               <Button
                 size="icon"
                 variant="ghost"
                 className="h-7 w-7 rounded-lg"
                 aria-label="Nusxalash"
+                title="Nusxalash"
                 onClick={() => {
                   void navigator.clipboard.writeText(message.content);
                   setCopied(true);
@@ -320,8 +366,32 @@ export function AIMessageBubble({ message, isStreaming, onRegenerate }: Props) {
                 {copied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
               </Button>
               {onRegenerate && (
-                <Button size="icon" variant="ghost" className="h-7 w-7 rounded-lg" aria-label="Qayta yaratish" onClick={onRegenerate}>
+                <Button size="icon" variant="ghost" className="h-7 w-7 rounded-lg" aria-label="Qayta yaratish" title="Qayta yozish" onClick={onRegenerate}>
                   <RotateCcw className="h-3.5 w-3.5" />
+                </Button>
+              )}
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-7 w-7 rounded-lg"
+                aria-label={speaking ? 'Ovozli o‘qishni to‘xtatish' : 'Ovozli o‘qish'}
+                title={speaking ? 'O‘qishni to‘xtatish' : 'Ovozli o‘qish'}
+                onClick={toggleSpeech}
+              >
+                {speaking ? <VolumeX className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
+              </Button>
+              {message.sources && message.sources.length > 0 && (
+                <Button
+                  size="sm"
+                  variant={sourcesOpen ? 'secondary' : 'ghost'}
+                  className="h-7 gap-1 rounded-lg px-2 text-[10px]"
+                  aria-label="Manbalarni ko‘rsatish"
+                  aria-pressed={sourcesOpen}
+                  title="Manbalar"
+                  onClick={() => setSourcesOpen((value) => !value)}
+                >
+                  <BookOpen className="h-3.5 w-3.5" />
+                  <span>{message.sources.length}</span>
                 </Button>
               )}
               {message.model && <span className="ml-1 font-mono text-[10px] text-muted-foreground">{message.model}</span>}
