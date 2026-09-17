@@ -35,17 +35,17 @@ export function AIModelPicker({
           variant="ghost"
           size="sm"
           className={cn(
-            'h-8 gap-1.5 rounded-full border border-border/60 bg-background px-2.5 text-xs font-medium',
+            'h-8 max-w-[42vw] gap-1 rounded-full border border-border/60 bg-background px-2 text-xs font-medium sm:max-w-none sm:gap-1.5 sm:px-2.5',
             className,
           )}
-          aria-label="AI modelini tanlash"
+          aria-label={`AI modelini tanlash: ${current.label}`}
         >
-          <Sparkles className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
-          <span>{current.label}</span>
-          <ChevronDown className="h-3.5 w-3.5 opacity-60" />
+          <Sparkles className="h-3.5 w-3.5 shrink-0 text-blue-600 dark:text-blue-400" />
+          <span className="hidden min-[390px]:inline min-w-0 truncate">{current.label}</span>
+          <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-60" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-72">
+      <DropdownMenuContent align="end" className="w-[min(18rem,calc(100vw-1rem))]">
         <DropdownMenuLabel className="text-xs text-muted-foreground">Model tanlovi</DropdownMenuLabel>
         <DropdownMenuSeparator />
         {MODEL_OPTIONS.map((option) => (
@@ -61,10 +61,10 @@ export function AIModelPicker({
               )}
             />
             <span className="min-w-0 flex-1">
-              <span className="flex items-center gap-2 text-sm font-medium">
-                {option.label}
+              <span className="flex min-w-0 flex-wrap items-center gap-2 text-sm font-medium">
+                <span className="truncate">{option.label}</span>
                 {option.badge && (
-                  <span className="rounded-full bg-blue-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-blue-600 dark:text-blue-400">
+                  <span className="shrink-0 rounded-full bg-blue-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-blue-600 dark:text-blue-400">
                     {option.badge}
                   </span>
                 )}
@@ -76,7 +76,7 @@ export function AIModelPicker({
         {activeModel && (
           <>
             <DropdownMenuSeparator />
-            <div className="px-2 py-1.5 text-[11px] text-muted-foreground">
+            <div className="break-all px-2 py-1.5 text-[11px] text-muted-foreground">
               Oxirgi javob: <span className="font-mono">{activeModel}</span>
             </div>
           </>
