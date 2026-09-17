@@ -1,13 +1,7 @@
-// Alsamos AI — umumiy imkoniyatlar kontrakti (web + Flutter uchun yagona manba).
-//
-// MUHIM: bu fayl `alsamos-superapp` reposidagi
-// `lib/features/ai/domain/ai_capabilities.dart` bilan 1:1 mos bo'lishi shart.
-// O'zgartirish kiritilsa, ikkala repoda ham yangilanadi
-// (qarang: docs/AI_PLATFORM_SPEC.md).
+// Alsamos AI — shared capability contract (web + Flutter should stay aligned).
 
-export const AI_CONTRACT_VERSION = "1.0.0";
+export const AI_CONTRACT_VERSION = "1.1.0";
 
-/** Backendga yuboriladigan imkoniyat guruhlari. */
 export type ToolGroupId =
   | "web"
   | "image"
@@ -21,19 +15,12 @@ export type ToolGroup = {
   id: ToolGroupId;
   label: string;
   description: string;
-  /** Lucide (web) / Material (Flutter) ikonka nomi. */
   icon: string;
-  /** Standart holatda yoqilganmi. */
   defaultOn: boolean;
-  /** Foydalanuvchi tasdig'ini talab qiladimi. */
   sensitive?: boolean;
-  /** Shu guruhga tegishli server vositalari. */
   tools: string[];
 };
 
-// Standart holatda deyarli hamma narsa YOQILGAN: AI o'zi qaysi vositani
-// ishlatishni tanlaydi. Foydalanuvchi "rasm yarat" deb yozsa, avval biror
-// tugmani bosishi shart emas. Faqat "computer" guruhi tasdiq talab qiladi.
 export const TOOL_GROUPS: ToolGroup[] = [
   {
     id: "web",
@@ -63,7 +50,7 @@ export const TOOL_GROUPS: ToolGroup[] = [
   {
     id: "video",
     label: "Video generatsiyasi",
-    description: "Matn yoki rasm asosida qisqa video yaratish (1-3 daqiqa render)",
+    description: "Matn yoki rasm asosida qisqa video yaratish",
     icon: "video",
     defaultOn: true,
     tools: ["generate_video", "media_job_status"],
@@ -80,7 +67,7 @@ export const TOOL_GROUPS: ToolGroup[] = [
     id: "connectors",
     label: "Konnektorlar va GitHub",
     description:
-      "Native GitHub coding agent hamda ulangan MCP pluginlar: repo yaratish/o'qish/yozish, branch, PR, merge, CI va boshqa servislar",
+      "Native GitHub coding agent hamda ulangan MCP pluginlar: repo yaratish/o'qish/yozish, atomic multi-file commit, branch, PR, merge, CI va boshqa servislar",
     icon: "plug",
     defaultOn: true,
     tools: [
@@ -93,6 +80,7 @@ export const TOOL_GROUPS: ToolGroup[] = [
       "github_write_file",
       "github_apply_patch",
       "github_delete_file",
+      "github_atomic_commit",
       "github_open_pull_request",
       "github_get_pull_request",
       "github_merge_pull_request",
@@ -115,11 +103,10 @@ export const TOOL_GROUPS: ToolGroup[] = [
   },
 ];
 
-export const DEFAULT_TOOL_GROUPS: ToolGroupId[] = TOOL_GROUPS.filter((g) => g.defaultOn).map(
-  (g) => g.id,
+export const DEFAULT_TOOL_GROUPS: ToolGroupId[] = TOOL_GROUPS.filter((group) => group.defaultOn).map(
+  (group) => group.id,
 );
 
-/** Model tanlovi (server MODEL_ROUTES bilan mos). */
 export type ModelId = "auto" | "fast" | "balanced" | "coding" | "reasoning" | "vision";
 
 export type ModelOption = {
@@ -133,25 +120,23 @@ export const MODEL_OPTIONS: ModelOption[] = [
   { id: "auto", label: "Avto", hint: "Savolga qarab eng mos modelni tanlaydi", badge: "Tavsiya" },
   { id: "fast", label: "Tezkor", hint: "Qisqa savollar uchun eng tez javob" },
   { id: "balanced", label: "Muvozanat", hint: "Kundalik vazifalar uchun" },
-  { id: "coding", label: "Kod", hint: "Dasturlash, debug va refaktoring" },
-  { id: "reasoning", label: "Chuqur fikrlash", hint: "Matematika, tahlil, reja tuzish" },
+  { id: "coding", label: "Kod", hint: "Kuchli Pro-family coding routing, repo va debug uchun" },
+  { id: "reasoning", label: "Chuqur fikrlash", hint: "Matematika, tahlil, reja va research" },
   { id: "vision", label: "Vizual", hint: "Rasm va media tahlili" },
 ];
 
-/** UI rejimi. */
 export type AIMode = "chat" | "agent";
 
 export const MODE_OPTIONS: Array<{ id: AIMode; label: string; hint: string }> = [
-  { id: "chat", label: "Suhbat", hint: "Tez javob, vositalar faqat kerak bo'lganda" },
-  { id: "agent", label: "Agent", hint: "Ko'p qadamli vazifalar: qidiradi, kod yozadi, bajaradi" },
+  { id: "chat", label: "Suhbat", hint: "Tez javob; minimal tool budget va qisqa orchestration" },
+  { id: "agent", label: "Agent", hint: "Durable vazifa; plan, checkpoint, background davom etish va ko'p qadamli ish" },
 ];
 
-// ------------------------------------------------------- SSE hodisa sxemasi
-
 export type AgentEvent =
-  | { type: "meta"; model: string; task: string; language: string; tools: string[] }
-  | { type: "delta"; text: string }
-  | { type: "tool_call"; id: string; name: string; args: Record<string, unknown> }
+  | { type: "meta"; model: string; task: string; language: string; tools: string[]; mode?: AIMode; keyPool?: string }
+  | { type: "plan"; steps: string[]; runId?: string; eventId?: number }
+  | { type: "delta"; text: string; runId?: string; eventId?: number }
+  | { type: "tool_call"; id: string; name: string; args: Record<string, unknown>; runId?: string; eventId?: number }
   | {
       type: "tool_result";
       id: string;
@@ -159,9 +144,12 @@ export type AgentEvent =
       ok: boolean;
       summary: string;
       data: Record<string, unknown> | null;
+      runId?: string;
+      eventId?: number;
     }
-  | { type: "notice"; message: string }
-  | { type: "error"; message: string };
+  | { type: "notice"; message: string; runId?: string; eventId?: number }
+  | { type: "run_state"; runId: string; status: string; eventId?: number; resumable?: boolean; canContinue?: boolean }
+  | { type: "error"; message: string; runId?: string; eventId?: number };
 
 export type AgentRequest = {
   messages: Array<{ role: "user" | "assistant"; content: string }>;
@@ -171,7 +159,6 @@ export type AgentRequest = {
   conversationId?: string | null;
 };
 
-/** Vosita nomi -> foydalanuvchiga ko'rinadigan yorliq (UI timeline uchun). */
 export const TOOL_LABELS: Record<string, string> = {
   web_search: "Internetda qidirmoqda",
   web_fetch: "Sahifani o'qimoqda",
@@ -191,6 +178,7 @@ export const TOOL_LABELS: Record<string, string> = {
   github_write_file: "GitHub fayliga yozmoqda",
   github_apply_patch: "GitHub kodini tahrirlamoqda",
   github_delete_file: "GitHub faylini o'chirmoqda",
+  github_atomic_commit: "GitHub'da atomic multi-file commit qilmoqda",
   github_open_pull_request: "Pull request ochmoqda",
   github_get_pull_request: "Pull request holatini tekshirmoqda",
   github_merge_pull_request: "Pull requestni merge qilmoqda",
@@ -208,6 +196,5 @@ export function toolLabel(name: string): string {
 }
 
 export function groupsForMode(mode: AIMode, selected: ToolGroupId[]): ToolGroupId[] {
-  // Suhbat rejimida ham vositalar mavjud, lekin "computer" faqat agent rejimida.
-  return mode === "agent" ? selected : selected.filter((g) => g !== "computer");
+  return mode === "agent" ? selected : selected.filter((group) => group !== "computer");
 }
