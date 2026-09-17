@@ -34,43 +34,28 @@ double_confirm_changes = true
 # =====================================================================
 
 # --- Alsamos identity auth ------------------------------------------------
-# Signup has no session yet. account-signup validates all fields, rate-limits
-# by hashed IP and creates a confirmed Auth user with the service role. Phone is
-# stored but deliberately remains unverified until an OTP provider is added.
 [functions.account-signup]
 verify_jwt = false
 
-# These endpoints must be reachable before a session exists, so Supabase JWT
-# verification is disabled and authorisation is performed inside the function
-# (password + rate limit, single-use ticket, or manual JWT verification).
 [functions.account-login]
 verify_jwt = false
 
 [functions.account-session]
 verify_jwt = false
 
-# account-create accepts either a login ticket or a session JWT,
-# account-revoke verifies the caller's JWT manually via admin.getUser().
 [functions.account-create]
 verify_jwt = false
 
 [functions.account-revoke]
 verify_jwt = false
 
-# account-2fa: "verify_login" runs during login (no session yet) and is
-# protected by a purpose-bound single-use ticket + rate limiting; every other
-# action verifies the session JWT manually via admin.getUser().
 [functions.account-2fa]
 verify_jwt = false
 
-# account-devices verifies the caller's JWT manually via admin.getUser()
-# and checks that each device belongs to the caller's identity.
 [functions.account-devices]
 verify_jwt = false
 
 # --- Realtime signalling --------------------------------------------------
-# WebSocket upgrade requests cannot carry an Authorization header, so the
-# token is passed as a query parameter and validated inside the function.
 [functions.webrtc-signaling]
 verify_jwt = false
 
@@ -78,12 +63,15 @@ verify_jwt = false
 verify_jwt = false
 
 # --- AI endpoints ---------------------------------------------------------
-# Paid AI/code endpoints require a valid Supabase JWT at the platform boundary.
-# They also keep their in-function guard/rate-limit checks as defense in depth.
 [functions.ai-assistant]
 verify_jwt = true
 
 [functions.ai-agent]
+verify_jwt = true
+
+# Durable worker is called server-to-server with the project anon JWT and also
+# validates a high-entropy per-run dispatch token inside the function.
+[functions.ai-agent-worker]
 verify_jwt = true
 
 [functions.code-sandbox]
@@ -99,8 +87,6 @@ verify_jwt = true
 verify_jwt = true
 
 # --- Proxies / third party ------------------------------------------------
-# mini-app-proxy must keep a strict host allowlist (SSRF) and giphy-search must
-# never expose the upstream API key.
 [functions.mini-app-proxy]
 verify_jwt = false
 
@@ -108,14 +94,9 @@ verify_jwt = false
 verify_jwt = false
 
 # --- Scheduled jobs ------------------------------------------------------
-# Invoked by cron, not by a user: they must require a shared secret header
-# (CRON_SECRET) instead of a JWT.
 [functions.send-scheduled-messages]
 verify_jwt = false
 
-# publish-scheduled-posts turns posts with status='scheduled' into published
-# posts by calling publish_due_scheduled_posts(). Cron sends no JWT, so the
-# function checks CRON_SECRET itself and logs rejected calls to function_usage.
 [functions.publish-scheduled-posts]
 verify_jwt = false
 
@@ -123,16 +104,10 @@ verify_jwt = false
 verify_jwt = false
 
 # --- Public API surface ---------------------------------------------------
-# api-gateway authenticates with an API key (public.api_keys), not a JWT.
 [functions.api-gateway]
 verify_jwt = false
 
 # --- OAuth2 / OpenID Connect ---------------------------------------------
-# Required by the specs to be reachable without a Supabase JWT:
-#   * openid-configuration and oauth-userinfo are spec endpoints,
-#   * oauth-token / oauth-revoke authenticate the CLIENT (id + secret),
-#   * oauth-authorize authenticates the END USER with a session cookie/JWT
-#     inside the function and shows the consent + account picker.
 [functions.oauth-authorize]
 verify_jwt = false
 
@@ -152,23 +127,17 @@ verify_jwt = false
 verify_jwt = false
 
 # --- Cross-domain SSO ----------------------------------------------------
-# sso-session exchanges a short-lived token between *.alsamos.com apps.
 [functions.sso-session]
 verify_jwt = false
 
 # --- Public transport realtime --------------------------------------------
-# Public read gateway for map clients. Upstream GTFS/GTFS-RT credentials stay
-# in Supabase secrets; the function exposes only normalized transport data.
 [functions.transit-realtime]
 verify_jwt = false
 
 # --- First-party Global Search crawler --------------------------------------
-# Search results are built from Alsamos' own crawler/index. The crawler is
-# called by a scheduler/admin process and authenticates with CRAWLER_SECRET.
 [functions.web-crawler]
 verify_jwt = false
 
 # --- Realtime Global Search ------------------------------------------------
-# Public search endpoint. Provider credentials stay in Supabase secrets.
 [functions.global-search]
 verify_jwt = false
