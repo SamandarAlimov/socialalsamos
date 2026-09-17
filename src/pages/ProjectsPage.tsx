@@ -126,9 +126,6 @@ export default function ProjectsPage() {
 
     setLoading(true);
     try {
-      // Older builds could create projects only in this browser. Migrate them
-      // before reading the cloud list so /projects works correctly even when it
-      // is the first AI route the user opens after this fix ships.
       try {
         await migrateLegacyLocalProjectsToCloud(user.id);
       } catch (migrationError) {
@@ -334,7 +331,7 @@ export default function ProjectsPage() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-5xl px-4 pb-24 pt-10 sm:px-6 lg:px-8 lg:pt-20">
+    <div className="mx-auto w-full max-w-5xl px-3 pb-20 pt-5 sm:px-5 sm:pt-8 lg:px-7 lg:pb-24 lg:pt-12">
       <AIProjectDialog
         open={dialogOpen}
         onOpenChange={setDialogOpen}
@@ -342,31 +339,31 @@ export default function ProjectsPage() {
         onSave={save}
       />
 
-      <header className="mb-8 flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+      <header className="mb-6 flex min-w-0 flex-col gap-4 lg:mb-8 lg:flex-row lg:items-center lg:justify-between">
         <div className="min-w-0">
-          <h1 className="text-3xl font-semibold tracking-tight">Loyihalar</h1>
+          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Loyihalar</h1>
           <p className="mt-1 text-xs text-muted-foreground">
             {backendMode === 'database' ? 'Hisobingiz bilan sinxronlangan' : 'Shu qurilmada saqlanmoqda'}
           </p>
         </div>
 
-        <div className="flex w-full items-center gap-2 sm:w-auto">
-          <div className="relative min-w-0 flex-1 sm:w-64 sm:flex-none">
+        <div className="flex w-full min-w-0 items-center gap-2 lg:w-auto">
+          <div className="relative min-w-0 flex-1 lg:w-64 lg:flex-none">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Loyihalarni qidirish"
-              className="h-10 rounded-xl pl-9"
+              className="h-10 min-w-0 rounded-xl pl-9"
               autoComplete="off"
               aria-label="Loyihalarni qidirish"
             />
           </div>
           <Button
             onClick={openCreate}
-            className="h-10 shrink-0 gap-1.5 rounded-xl bg-foreground px-4 text-background hover:bg-foreground/90"
+            className="h-10 shrink-0 gap-1.5 rounded-xl bg-foreground px-3 text-background hover:bg-foreground/90 sm:px-4"
           >
-            <Plus className="h-4 w-4" /> Yangi
+            <Plus className="h-4 w-4" /> <span className="hidden min-[360px]:inline">Yangi</span>
           </Button>
         </div>
       </header>
@@ -380,12 +377,12 @@ export default function ProjectsPage() {
         </button>
       </div>
 
-      <div className="grid grid-cols-[minmax(0,1fr)_auto_36px] items-center gap-3 border-b border-border/60 px-2 py-3 text-xs text-muted-foreground">
+      <div className="grid grid-cols-[minmax(0,1fr)_36px] items-center gap-2 border-b border-border/60 px-2 py-3 text-xs text-muted-foreground sm:grid-cols-[minmax(0,1fr)_auto_36px] sm:gap-3">
         <span>Nomi</span>
         <button
           type="button"
           onClick={() => setSortNewest((value) => !value)}
-          className="flex items-center gap-1 rounded-md px-1 py-0.5 hover:text-foreground"
+          className="hidden items-center gap-1 rounded-md px-1 py-0.5 hover:text-foreground sm:flex"
           aria-label="Yangilangan vaqt bo‘yicha saralash"
         >
           O‘zgartirilgan <ArrowUpDown className="h-3 w-3" />
@@ -398,7 +395,7 @@ export default function ProjectsPage() {
           <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Yuklanmoqda…
         </div>
       ) : filtered.length === 0 ? (
-        <div className="py-20 text-center">
+        <div className="px-2 py-16 text-center sm:py-20">
           <FolderKanban className="mx-auto mb-3 h-9 w-9 text-muted-foreground" />
           <p className="font-medium">{query ? 'Loyiha topilmadi' : 'Hozircha loyiha yo‘q'}</p>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -427,21 +424,21 @@ export default function ProjectsPage() {
                   openProject(project);
                 }
               }}
-              className="group grid cursor-pointer grid-cols-[minmax(0,1fr)_auto_36px] items-center gap-3 border-b border-border/50 px-2 py-4 transition-colors hover:bg-muted/35 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+              className="group grid cursor-pointer grid-cols-[minmax(0,1fr)_36px] items-center gap-2 border-b border-border/50 px-2 py-3.5 transition-colors hover:bg-muted/35 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 sm:grid-cols-[minmax(0,1fr)_auto_36px] sm:gap-3 sm:py-4"
             >
-              <div className="flex min-w-0 items-center gap-3">
+              <div className="flex min-w-0 items-center gap-2.5 sm:gap-3">
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-border/70 bg-muted/35">
                   <FolderKanban className="h-4 w-4" />
                 </span>
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium" title={project.name}>{project.name}</p>
-                  <p className="mt-0.5 text-xs text-muted-foreground">
-                    {counts[project.id] || 0} suhbat
+                  <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                    {counts[project.id] || 0} suhbat <span className="sm:hidden">· {modifiedLabel(project.updatedAt)}</span>
                   </p>
                 </div>
               </div>
 
-              <span className="whitespace-nowrap text-xs text-muted-foreground">
+              <span className="hidden whitespace-nowrap text-xs text-muted-foreground sm:block">
                 {modifiedLabel(project.updatedAt)}
               </span>
 
@@ -450,7 +447,7 @@ export default function ProjectsPage() {
                   <Button
                     size="icon"
                     variant="ghost"
-                    className="h-8 w-8 rounded-lg opacity-60 group-hover:opacity-100"
+                    className="h-8 w-8 rounded-lg opacity-70 group-hover:opacity-100"
                     aria-label="Loyiha amallari"
                     onClick={(event) => event.stopPropagation()}
                   >
