@@ -18,7 +18,6 @@ export type StreamAgentOptions = {
 };
 
 const FUNCTIONS_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
-const MODE_KEY = 'alsamos.ai.mode';
 const PENDING_KEY = 'alsamos.ai.pending-run';
 
 class AgentUnavailableError extends Error {}
@@ -27,38 +26,6 @@ export function shouldPreferServerAgent(
   _options: Pick<StreamAgentOptions, 'messages' | 'model' | 'toolGroups'>,
 ): boolean {
   return false;
-}
-
-function selectedMode(fallback: AIMode): AIMode {
-  try {
-    const stored = localStorage.getItem(MODE_KEY);
-    return stored === 'chat' || stored === 'agent' ? stored : fallback;
-  } catch {
-    return fallback;
-  }
-}
-
-function savePending(value: { runId: string; eventId: number; status: string; conversationId?: string | null } | null) {
-  try {
-    if (!value) localStorage.removeItem(PENDING_KEY);
-    else localStorage.setItem(PENDING_KEY, JSON.stringify(value));
-  } catch {
-    // storage may be unavailable in private mode
-  }
-}
-
-export function readPendingAgentRun(): {
-  runId: string;
-  eventId: number;
-  status: string;
-  conversationId?: string | null;
-} | null {
-  try {
-    const raw = JSON.parse(localStorage.getItem(PENDING_KEY) || 'null');
-    return raw?.runId ? raw : null;
-  } catch {
-    return null;
-  }
 }
 
 async function authHeaders(): Promise<Record<string, string>> {
@@ -321,7 +288,7 @@ async function streamFromAssistant(options: StreamAgentOptions): Promise<void> {
 }
 
 export async function streamAgent(options: StreamAgentOptions): Promise<void> {
-  const mode = selectedMode(options.mode);
+  const mode = options.mode;
   const effective = { ...options, mode };
   try {
     if (mode === 'agent') await streamDurableAgent(effective);

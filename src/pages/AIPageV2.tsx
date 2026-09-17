@@ -38,20 +38,14 @@ import type {
 import { extractArtifacts } from '@/lib/aiArtifacts';
 import { streamAgent } from '@/lib/ai/agentClient';
 import { buildRepoContext, detectRepoRefs, githubReady, githubRepoUrl } from '@/lib/ai/githubContext';
-import {
-  canRunGithubActions,
-  detectGithubAction,
-  githubActionLabel,
-  githubActionsBlock,
-  runGithubAction,
-} from '@/lib/ai/githubActions';
 import { buildBrainContext } from '@/lib/ai/brain';
 import { captureMemories, syncMemories } from '@/lib/ai/memory';
-import { toolLabel, type ModelId, type ToolGroupId } from '@/lib/ai/capabilities';
+import { toolLabel, type AIMode, type ModelId, type ToolGroupId } from '@/lib/ai/capabilities';
 
 const PIN_KEY = 'alsamos.ai.pinned';
 const TITLE_KEY = 'alsamos.ai.titles';
 const PREFS_KEY = 'alsamos.ai.prefs';
+const MODE_KEY = 'alsamos.ai.mode';
 
 const ALL_TOOL_GROUPS: ToolGroupId[] = [
   'web',
@@ -164,6 +158,14 @@ export default function AIPageV2() {
   const [connectorsOpen, setConnectorsOpen] = useState(false);
   const [githubOpen, setGithubOpen] = useState(false);
   const [model, setModel] = useState<ModelId>(initialPrefs.model);
+  const [mode, setMode] = useState<AIMode>(() => {
+    try {
+      const saved = localStorage.getItem(MODE_KEY);
+      return saved === 'chat' ? 'chat' : 'agent';
+    } catch {
+      return 'agent';
+    }
+  });
   const [toolGroups, setToolGroups] = useState<ToolGroupId[]>(initialPrefs.toolGroups);
   const [activeModel, setActiveModel] = useState<string | null>(null);
   const [showScrollToLatest, setShowScrollToLatest] = useState(false);
@@ -212,6 +214,14 @@ export default function AIPageV2() {
       // ignore
     }
   }, [model, toolGroups]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(MODE_KEY, mode);
+    } catch {
+      // ignore
+    }
+  }, [mode]);
 
   useEffect(() => {
     if (!user) return;
@@ -713,7 +723,7 @@ export default function AIPageV2() {
         sources: sources.length ? [...sources] : undefined,
         tools: tools.length ? tools.map((tool) => ({ ...tool })) : undefined,
         model: usedModel ?? undefined,
-        mode: 'agent',
+        mode,
         notice,
         timestamp: new Date(),
       };
@@ -786,68 +796,12 @@ export default function AIPageV2() {
         }
       }
 
-      const action = lastUser
-        ? detectGithubAction(
-            lastUser.content,
-            repoRefs[0] ? { owner: repoRefs[0].owner, repo: repoRefs[0].repo } : null,
-          )
-        : null;
-
-      if (action && history.length > 0) {
-        const index = history.length - 1;
-        if (!canRunGithubActions()) {
-          history[index] = {
-            ...history[index],
-            content: `${history[index].content}\n\n[GITHUB ACTION NOT RUN]\nGitHub write access is not connected. Explain this briefly and continue with the best alternative.`,
-          };
-        } else {
-          const toolId = crypto.randomUUID();
-          const label = githubActionLabel(action);
-          tools.push({
-            id: toolId,
-            name: 'github_action',
-            label,
-            status: 'running',
-            args: action as any,
-            startedAt: Date.now(),
-          });
-          setStatusLabel(`${label}…`);
-          flush();
-          try {
-            const result = await runGithubAction(action);
-            const entry = tools.find((tool) => tool.id === toolId);
-            if (entry) {
-              entry.status = 'done';
-              entry.summary = result.summary;
-              entry.finishedAt = Date.now();
-            }
-            if (result.url && !sources.some((source) => source.url === result.url)) {
-              sources.push({ title: result.summary.slice(0, 60), url: result.url });
-            }
-            history[index] = {
-              ...history[index],
-              content: `${history[index].content}\n\n[GITHUB ACTION COMPLETED]\n${result.summary}${result.url ? `\nURL: ${result.url}` : ''}`,
-            };
-          } catch (error: any) {
-            const entry = tools.find((tool) => tool.id === toolId);
-            if (entry) {
-              entry.status = 'error';
-              entry.summary = error?.message || 'Amal bajarilmadi.';
-              entry.finishedAt = Date.now();
-            }
-          }
-        }
-      }
-
-      const brainContext = [
-        buildBrainContext({
-          userText: lastUser?.content ?? '',
-          conversations,
-          currentConversationId,
-          activeProject,
-        }),
-        githubActionsBlock(),
-      ].join('\n\n');
+      const brainContext = buildBrainContext({
+        userText: lastUser?.content ?? '',
+        conversations,
+        currentConversationId,
+        activeProject,
+      });
 
       // The current deployed full agent did not consume the separate `context`
       // field consistently. Embed the internal context into the request history
@@ -862,7 +816,7 @@ export default function AIPageV2() {
 
       await streamAgent({
         messages: history,
-        mode: 'agent',
+        mode,
         model,
         toolGroups,
         conversationId: currentConversationId,
@@ -1121,6 +1075,8 @@ export default function AIPageV2() {
       model={model}
       onModelChange={setModel}
       activeModel={activeModel}
+      mode={mode}
+      onModeChange={setMode}
       toolGroups={toolGroups}
       onToolGroupsChange={(groups) => {
         // Only web is user-toggleable. Other capability groups stay on.

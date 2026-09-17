@@ -53,7 +53,12 @@ function runStatusText(status: string): string {
 }
 
 export function AIComposer(props: Props) {
-  const [mode, setMode] = useState<AIMode>(initialMode);
+  const [internalMode, setInternalMode] = useState<AIMode>(initialMode);
+  const mode = props.mode ?? internalMode;
+  const changeMode = useCallback((nextMode: AIMode) => {
+    setInternalMode(nextMode);
+    props.onModeChange?.(nextMode);
+  }, [props.onModeChange]);
   const [pendingRun, setPendingRun] = useState<PendingRun | null>(readPendingRun);
   const [continuing, setContinuing] = useState(false);
   const [runError, setRunError] = useState<string | null>(null);
@@ -199,7 +204,7 @@ export function AIComposer(props: Props) {
             <button
               key={id}
               type="button"
-              onClick={() => setMode(id)}
+              onClick={() => changeMode(id)}
               className={cn(
                 'flex h-7 items-center gap-1.5 rounded-full px-2.5 text-[11px] font-medium transition-colors',
                 mode === id
@@ -218,7 +223,7 @@ export function AIComposer(props: Props) {
           ))}
         </div>
       </div>
-      <AIComposerV2 {...props} mode={mode} onModeChange={setMode} />
+      <AIComposerV2 {...props} mode={mode} onModeChange={changeMode} />
     </div>
   );
 }
