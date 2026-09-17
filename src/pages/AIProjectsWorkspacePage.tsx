@@ -272,9 +272,9 @@ export default function AIProjectsWorkspacePage() {
           <Button
             size="icon"
             variant="secondary"
-            className="sticky left-3 top-3 z-30 ml-3 mt-3 h-9 w-9 rounded-xl shadow-sm"
+            className="sticky left-3 top-3 z-30 ml-3 mt-3 hidden h-9 w-9 rounded-xl shadow-sm md:inline-flex"
             onClick={() => setSidebarOpen(true)}
-            aria-label="AI yon panelini ochish"
+            aria-label="Yon panelni ochish"
           >
             <PanelLeft className="h-4 w-4" />
           </Button>
