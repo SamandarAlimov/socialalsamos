@@ -17,8 +17,9 @@ jobs:
           fetch-depth: 0
 
       - name: Patch AI page and Supabase config
-        shell: python
+        shell: bash
         run: |
+          python3 - <<'PY'
           from pathlib import Path
 
           page = Path('src/pages/AIPageV2.tsx')
@@ -69,8 +70,8 @@ jobs:
               cfg = cfg.replace(marker, addition, 1)
           config.write_text(cfg, encoding='utf-8')
 
-          # Self-delete: this one-shot patch workflow must not remain in the repo.
           Path('.github/workflows/ai-durable-runtime-patch.yml').unlink()
+          PY
 
       - name: Install dependencies
         run: npm ci
