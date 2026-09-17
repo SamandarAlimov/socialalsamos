@@ -1,5 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
 import type { AgentEvent, ToolGroupId } from './capabilities';
+import { githubStatus } from './githubConnector';
 
 type AgentMessage = { role: 'user' | 'assistant'; content: string };
 
@@ -29,6 +30,33 @@ type SearchPayload = {
 
 const LIVE_WEB_INTENT = /\b(search|look\s*up|find\s+(?:on\s+)?(?:the\s+)?web|internet|latest|current|today|tonight|news|headline|price|weather|forecast|score|result|release|version|market|stock|exchange\s+rate|who\s+is|what\s+is|qidir|izla|internetdan|veb|so['’]nggi|oxirgi|bugun|hozir|yangilik|narx|ob[- ]?havo|kurs|natija|kim\s+bu|nima\s+bu|найд|поиск|интернет|последн|сегодня|сейчас|новост|цена|погод|курс|кто\s+это|что\s+это)\b/i;
 const IMAGE_INTENT = /\b(image|images|photo|photos|picture|pictures|rasm|rasmlar|foto|surat|изображ|фото|картин)\b/i;
+
+let githubConnectionSynced = false;
+let githubConnectionSyncInFlight: Promise<void> | null = null;
+
+/**
+ * Older Alsamos versions could leave a GitHub PAT in browser storage while the
+ * native coding agent now reads only the protected server-side connection.
+ * Before the first connector-enabled AI request, give githubStatus() one chance
+ * to migrate that legacy token. A transient auth/network error is retryable on
+ * the next request; an ordinary disconnected state is cached for this page load.
+ */
+async function syncGithubConnectionBeforeRequest(toolGroups: ToolGroupId[]): Promise<void> {
+  if (!toolGroups.includes('connectors') || githubConnectionSynced) return;
+  if (!githubConnectionSyncInFlight) {
+    githubConnectionSyncInFlight = githubStatus()
+      .then(() => {
+        githubConnectionSynced = true;
+      })
+      .catch((error) => {
+        console.warn('[ai/github] Pre-request connection sync failed:', error);
+      })
+      .finally(() => {
+        githubConnectionSyncInFlight = null;
+      });
+  }
+  await githubConnectionSyncInFlight;
+}
 
 function stripInternalContext(value: string): string {
   return value
@@ -139,6 +167,8 @@ function appendEvidence(messages: AgentMessage[], payload: SearchPayload): Agent
 }
 
 export async function withAlsamosSearchGrounding<T extends GroundableAgentOptions>(options: T): Promise<T> {
+  await syncGithubConnectionBeforeRequest(options.toolGroups);
+
   const originalQuery = latestUserMessage(options.messages);
   if (!originalQuery || !options.toolGroups.includes('web') || !LIVE_WEB_INTENT.test(originalQuery)) {
     return options;
