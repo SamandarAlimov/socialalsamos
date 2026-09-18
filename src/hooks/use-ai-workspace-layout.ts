@@ -8,7 +8,6 @@ type AIWorkspaceLayout = {
 };
 
 const MOBILE_BREAKPOINT = 768;
-const SIDEBAR_DOCK_BREAKPOINT = 1200;
 const ARTIFACT_DOCK_BREAKPOINT = 1600;
 
 function readLayout(): AIWorkspaceLayout {
@@ -24,8 +23,8 @@ function readLayout(): AIWorkspaceLayout {
   const width = window.innerWidth;
   return {
     isMobile: width < MOBILE_BREAKPOINT,
-    isCompact: width < SIDEBAR_DOCK_BREAKPOINT,
-    sidebarOverlay: width < SIDEBAR_DOCK_BREAKPOINT,
+    isCompact: width < 1200,
+    sidebarOverlay: width < MOBILE_BREAKPOINT,
     artifactOverlay: width < ARTIFACT_DOCK_BREAKPOINT,
   };
 }
@@ -33,11 +32,10 @@ function readLayout(): AIWorkspaceLayout {
 /**
  * AI workspace-specific responsive contract.
  *
- * The shared platform sidebar remains controlled by AppLayout. Inside the AI
- * workspace we avoid docking a second navigation rail until there is enough
- * horizontal room, and we keep the artifact canvas as an overlay on ordinary
- * laptop/tablet widths so the chat never collapses into an unusably narrow
- * column.
+ * The shared platform sidebar remains controlled by AppLayout. The AI sidebar
+ * overlays only on phones; tablet and desktop widths keep a docked rail so a
+ * collapsed sidebar still leaves navigation icons visible. The artifact canvas
+ * remains an overlay on ordinary laptop/tablet widths so chat keeps usable room.
  */
 export function useAIWorkspaceLayout(): AIWorkspaceLayout {
   const [layout, setLayout] = React.useState<AIWorkspaceLayout>(readLayout);
