@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Eye, EyeOff, Github, Loader2, LogOut, ShieldCheck } from 'lucide-react';
+import { ExternalLink, Eye, EyeOff, Github, Loader2, LogOut, ShieldCheck } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -24,6 +24,8 @@ interface AIGithubDialogProps {
   onOpenChange: (open: boolean) => void;
   onPickRepo?: (repo: GithubRepo) => void;
 }
+
+const GITHUB_FINE_GRAINED_TOKEN_URL = 'https://github.com/settings/personal-access-tokens/new';
 
 export function AIGithubDialog({ open, onOpenChange, onPickRepo }: AIGithubDialogProps) {
   const { toast } = useToast();
@@ -197,9 +199,48 @@ export function AIGithubDialog({ open, onOpenChange, onPickRepo }: AIGithubDialo
                 </button>
               </div>
               {error && <p className="break-words text-[11px] text-destructive">{error}</p>}
-              <p className="break-words text-[11px] leading-relaxed text-muted-foreground">
-                Tavsiya: faqat kerakli repolar uchun cheklangan fine-grained token ishlating. Kod tahriri uchun Contents read/write, PR oqimi uchun Pull requests read/write, CI ko‘rish uchun Actions read kerak. Yangi repository yaratish uchun Administration read/write ruxsati ham kerak; organization repolari esa org siyosati va token egasining org huquqlariga bog‘liq.
-              </p>
+              <div className="space-y-2 rounded-xl border border-border/60 bg-muted/20 p-3 text-[11px] leading-relaxed text-muted-foreground">
+                <p>
+                  GitHub hali ulanmagan bo‘lsa, avval fine-grained personal access token yarating. Tokenni chatga
+                  yubormang — faqat shu oynadagi <span className="font-medium text-foreground">Access token</span>{' '}
+                  maydoniga kiriting.
+                </p>
+                <ol className="list-decimal space-y-1 pl-4">
+                  <li>
+                    GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate
+                    new token.
+                  </li>
+                  <li>
+                    Resource owner sifatida ishlaydigan shaxsiy akkaunt yoki organization’ni tanlang.
+                  </li>
+                  <li>
+                    Alsamos AI barcha repolarda ishlashi kerak bo‘lsa Repository access → All repositories; aks holda
+                    Only select repositories orqali faqat kerakli repolarni tanlang.
+                  </li>
+                  <li>
+                    To‘liq coding oqimi uchun Repository permissions: Administration — Read and write; Contents —
+                    Read and write; Pull requests — Read and write; Workflows — Read and write; Actions — Read-only;
+                    Commit statuses — Read-only. GitHub Metadata read huquqini avtomatik qo‘shadi.
+                  </li>
+                  <li>
+                    Organization tokenlari administrator tasdig‘ini talab qilishi mumkin. Token yaratilgach uni
+                    nusxalang, shu yerga joylang va Ulash tugmasini bosing.
+                  </li>
+                </ol>
+                <p>
+                  Barcha GitHub ruxsatlarini ko‘r-ko‘rona yoqish shart emas: kerakli repo va yuqoridagi permissionlar
+                  Alsamos AI uchun yetarli va xavfsizroq.
+                </p>
+                <a
+                  href={GITHUB_FINE_GRAINED_TOKEN_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1.5 font-medium text-foreground underline-offset-4 hover:underline"
+                >
+                  Fine-grained token yaratish
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              </div>
             </div>
             <Button
               onClick={() => void handleConnect()}

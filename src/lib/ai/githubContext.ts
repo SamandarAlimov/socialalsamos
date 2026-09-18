@@ -193,7 +193,9 @@ export type RepoContext = {
 export async function buildRepoContext(ref: RepoRef): Promise<RepoContext> {
   const status = await githubStatus();
   if (!status.connected) {
-    throw new Error('GitHub ulanmagan. Konnektorlar bo‘limidan GitHub ulanishini tekshiring.');
+    throw new Error(
+      'GitHub hali ulanmagan. AI oynasidagi GitHub tugmasini ochib fine-grained tokenni Access token maydoniga kiriting. Tokenni chatga yubormang.',
+    );
   }
 
   const [meta, tree] = await Promise.all([
