@@ -44,6 +44,8 @@ export type ToolContext = {
   enabled: Set<string>;
   /** Current user turn. Mutating tools use it to validate exact intent/literals. */
   userRequest?: string;
+  /** True only when the authenticated native GitHub connector is available. */
+  githubConnected?: boolean;
   /** Successful high-impact mutations are deduplicated within one runtime chunk. */
   mutationCache?: Map<string, ToolOutcome>;
 };
@@ -67,7 +69,7 @@ export const TOOL_SPECS: Record<string, ToolSpec> = {
     function: {
       name: "web_search",
       description:
-        "Search the public web for current information, news, prices, documentation. Use whenever the answer depends on facts that may have changed or that you are unsure about.",
+        "Search the public web for current external information, news, prices, documentation, releases, or security advisories. Do not use this to read or discover the contents/state of a GitHub repository when native github_* tools are available.",
       parameters: {
         type: "object",
         properties: {
@@ -84,7 +86,7 @@ export const TOOL_SPECS: Record<string, ToolSpec> = {
     function: {
       name: "web_fetch",
       description:
-        "Open a specific public URL and read its text content. Use after web_search when you need the full page, or when the user gives you a link.",
+        "Open a specific public URL and read its text content. Use for public web pages, not for github.com/raw.githubusercontent.com/api.github.com repository content when native github_* tools are available.",
       parameters: {
         type: "object",
         properties: { url: str("Absolute http(s) URL.") },
