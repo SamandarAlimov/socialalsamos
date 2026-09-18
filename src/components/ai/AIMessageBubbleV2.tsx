@@ -4,7 +4,6 @@ import remarkGfm from 'remark-gfm';
 import {
   AlertTriangle,
   BookOpen,
-  Bot,
   Check,
   Copy,
   Download,
@@ -248,12 +247,7 @@ export function AIMessageBubble({ message, isStreaming, onRegenerate }: Props) {
 
   return (
     <div className="group mb-6 w-full min-w-0 max-w-full overflow-x-hidden">
-      <div className="flex min-w-0 max-w-full items-start gap-2.5 sm:gap-3">
-        <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-border/70 bg-muted/45">
-          <Bot className="h-4 w-4 text-foreground/80" />
-        </div>
-
-        <div className="w-0 min-w-0 max-w-full flex-1 overflow-hidden">
+      <div className="min-w-0 max-w-full overflow-hidden">
           {message.tools && message.tools.length > 0 && <AIToolTimeline events={message.tools} />}
 
           {message.error ? (
@@ -397,7 +391,6 @@ export function AIMessageBubble({ message, isStreaming, onRegenerate }: Props) {
               {message.model && <span className="ml-1 font-mono text-[10px] text-muted-foreground">{message.model}</span>}
             </div>
           )}
-        </div>
       </div>
     </div>
   );
@@ -405,11 +398,8 @@ export function AIMessageBubble({ message, isStreaming, onRegenerate }: Props) {
 
 export function AIThinkingBubble({ label }: { label: string }) {
   return (
-    <div className="mb-6 flex min-w-0 max-w-full items-start gap-2.5 overflow-x-hidden sm:gap-3">
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-border/70 bg-muted/45">
-        <Bot className="h-4 w-4 text-foreground/80" />
-      </div>
-      <div className="rounded-2xl border border-border/50 bg-muted/20 px-3.5 py-2.5">
+    <div className="mb-6 min-w-0 max-w-full overflow-x-hidden">
+      <div className="w-fit max-w-full rounded-2xl border border-border/50 bg-muted/20 px-3.5 py-2.5">
         <div className="flex items-center gap-3">
           <div className="flex gap-1">
             {[0, 150, 300].map((delay) => (
