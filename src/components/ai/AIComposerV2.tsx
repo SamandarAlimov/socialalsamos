@@ -363,7 +363,8 @@ export function AIComposer({
             }}
             placeholder={PLACEHOLDERS[placeholderIndex]}
             rows={1}
-            className="max-h-[30vh] min-h-[30px] resize-none border-0 bg-transparent px-2.5 py-1.5 text-[14px] leading-[1.35] shadow-none focus-visible:ring-0 sm:text-sm"
+            className="max-h-[30vh] min-h-[30px] resize-none !rounded-none !border-0 bg-transparent px-2.5 py-1.5 text-[14px] leading-[1.35] !shadow-none !outline-none !ring-0 !ring-offset-0 focus:!border-0 focus:!outline-none focus:!ring-0 focus:!ring-offset-0 focus-visible:!border-0 focus-visible:!outline-none focus-visible:!ring-0 focus-visible:!ring-offset-0 sm:text-sm"
+            style={{ border: 0, outline: 'none', boxShadow: 'none' }}
             aria-label="AI ga xabar"
           />
 
