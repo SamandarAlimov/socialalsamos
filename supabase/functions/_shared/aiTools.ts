@@ -69,7 +69,7 @@ export const TOOL_SPECS: Record<string, ToolSpec> = {
     function: {
       name: "web_search",
       description:
-        "Search the public web for current external information, news, prices, documentation, releases, or security advisories. Do not use this to read or discover the contents/state of a GitHub repository when native github_* tools are available.",
+        "Search the public web for current external information, news, prices, documentation, releases, security advisories, and repository discovery (for example trending/popular GitHub projects when the exact repo is unknown). Once a specific repository is identified, prefer github_* read tools for its code/state and do not duplicate a successful native read.",
       parameters: {
         type: "object",
         properties: {
@@ -86,7 +86,7 @@ export const TOOL_SPECS: Record<string, ToolSpec> = {
     function: {
       name: "web_fetch",
       description:
-        "Open a specific public URL and read its text content. Use for public web pages, not for github.com/raw.githubusercontent.com/api.github.com repository content when native github_* tools are available.",
+        "Open a specific public URL and read its text content. For GitHub, prefer github_* repository-native reads first; public github.com/raw.githubusercontent.com content is allowed as a read-only fallback when repository-native public reads cannot provide the needed content.",
       parameters: {
         type: "object",
         properties: { url: str("Absolute http(s) URL.") },
@@ -149,7 +149,7 @@ export const TOOL_SPECS: Record<string, ToolSpec> = {
     function: {
       name: "run_code",
       description:
-        "Execute code in an isolated Ubuntu Docker sandbox when configured, otherwise JavaScript in a restricted Deno fallback. Use for calculations, data transforms, algorithm checks and verifying code you wrote.",
+        "Execute code in an isolated Ubuntu Docker sandbox when configured, otherwise JavaScript in a restricted Deno fallback. Use for calculations, data transforms, algorithm checks and verifying code you wrote. When a full PUBLIC GitHub repository is needed for broad read-only analysis, bash may shallow-clone it into the temporary sandbox if network access is available; do not treat that clone as persistent user storage.",
       parameters: {
         type: "object",
         properties: {
