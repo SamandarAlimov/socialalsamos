@@ -273,45 +273,38 @@ export default function AIProjectsWorkspacePage() {
       </AnimatePresence>
 
       <div className="relative min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain alsamos-scrollbar">
-        {isMobile ? (
-          <div className="sticky top-0 z-30 flex h-12 items-center gap-2 border-b border-border/40 bg-background/95 px-2.5 backdrop-blur-xl">
-            <Button
-              size="icon"
-              variant="ghost"
-              className="h-8 w-8 shrink-0 rounded-lg"
-              onClick={() => navigate('/home')}
-              aria-label="AI yordamchidan chiqish"
-              title="Bosh sahifaga qaytish"
-            >
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
+        {sidebarOverlay ? (
+          <div className="sticky top-0 z-30 flex h-12 w-full min-w-0 items-center gap-2 border-b border-border/40 bg-background/95 px-2.5 backdrop-blur-xl sm:h-14 sm:px-4">
+            {isMobile && (
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-8 w-8 shrink-0 rounded-lg"
+                onClick={() => navigate('/home')}
+                aria-label="AI yordamchidan chiqish"
+                title="Bosh sahifaga qaytish"
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
+            )}
             {!sidebarOpen && (
               <Button
                 size="icon"
                 variant="ghost"
                 className="h-8 w-8 shrink-0 rounded-lg"
                 onClick={() => setSidebarOpen(true)}
-                aria-label="Yon panelni ochish"
+                aria-label="AI yon panelini ochish"
+                title="AI yon panelini ochish"
               >
                 <PanelLeft className="h-4 w-4" />
               </Button>
             )}
             <span className="min-w-0 flex-1 truncate text-sm font-semibold">AI loyihalari</span>
           </div>
-        ) : (
-          !sidebarOpen && (
-            <Button
-              size="icon"
-              variant="secondary"
-              className="sticky left-3 top-3 z-30 ml-3 mt-3 inline-flex h-9 w-9 rounded-xl shadow-sm"
-              onClick={() => setSidebarOpen(true)}
-              aria-label="Yon panelni ochish"
-            >
-              <PanelLeft className="h-4 w-4" />
-            </Button>
-          )
-        )}
-        <ProjectsPage />
+        ) : null}
+        <div className="w-full min-w-0 overflow-x-hidden">
+          <ProjectsPage />
+        </div>
       </div>
     </div>
   );
