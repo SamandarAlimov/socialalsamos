@@ -23,6 +23,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
+import { formatAIListDate } from '@/lib/ai/dateFormat';
 import { migrateLegacyLocalProjectsToCloud } from '@/lib/ai/migrateLegacyProjects';
 import {
   countConversationsByProject,
@@ -31,6 +32,7 @@ import {
   listLocalProjects,
   updateLocalProject,
 } from '@/lib/ai/projectsStore';
+import { buildAIWorkspaceHref } from '@/lib/ai/workspaceUrl';
 import { db } from '@/lib/db';
 
 type ProjectBackendMode = 'database' | 'local';
@@ -76,13 +78,7 @@ function countDatabaseProjects(rows: Array<{ project_id?: string | null }>): Rec
 }
 
 function modifiedLabel(date: Date): string {
-  const now = new Date();
-  const sameYear = date.getFullYear() === now.getFullYear();
-  return new Intl.DateTimeFormat('uz-UZ', {
-    day: 'numeric',
-    month: 'short',
-    ...(sameYear ? {} : { year: 'numeric' as const }),
-  }).format(date);
+  return formatAIListDate(date);
 }
 
 export default function ProjectsPage() {
@@ -327,7 +323,12 @@ export default function ProjectsPage() {
   };
 
   const openProject = (project: AIProject) => {
-    navigate(`/ai?project=${encodeURIComponent(project.id)}`);
+    navigate(
+      buildAIWorkspaceHref('/ai', '', {
+        projectId: project.id,
+        conversationId: null,
+      }),
+    );
   };
 
   return (
