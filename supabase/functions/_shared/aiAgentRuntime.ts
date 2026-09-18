@@ -941,7 +941,7 @@ async function streamRun(
             send({ type: "run_state", runId, status, eventId: cursor, resumable: status === "awaiting_continue", canContinue: status === "awaiting_continue" });
             break;
           }
-          await new Promise((resolve) => setTimeout(resolve, 450));
+          await new Promise((resolve) => setTimeout(resolve, 250));
         }
       } catch (error) {
         send({ type: "error", message: error instanceof Error ? error.message : "Agent stream xatosi.", runId });
@@ -1242,7 +1242,7 @@ async function streamWorkerModelRound(
     if (!pendingText) return;
     const elapsed = Date.now() - lastTextEmitAt;
     const hasNaturalBoundary = /(?:\n|[.!?]\s)$/.test(pendingText);
-    if (!force && pendingText.length < 96 && elapsed < 140 && !hasNaturalBoundary) return;
+    if (!force && pendingText.length < 64 && elapsed < 90 && !hasNaturalBoundary) return;
 
     const text = pendingText;
     pendingText = "";
