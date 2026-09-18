@@ -415,12 +415,22 @@ function targetsGitHubRepository(text: string): boolean {
   const intent = originalUserIntent(text);
   if (/https?:\/\/(?:www\.)?github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+/i.test(intent)) return true;
 
-  const mentionsGithub = /\bgithub\b/i.test(intent);
-  const mentionsRepo = /\b(?:repo|repository|repozitor|repozitoriy|репозитор)/i.test(intent);
+  const mentionsGithub = /(?:@github\b|\bgithub(?:da|ga|dan|ni|ning|im|imga|imda|imdan|ing|ingga|ingda|ingdan)?\b)/i.test(intent);
+  const mentionsRepo = /\b(?:repo|repository|repozitor|repozitoriy|репозитор)(?:ga|da|dan|ni|ning|lar|larni|larda)?\b/i.test(intent);
   if (mentionsGithub && mentionsRepo) return true;
   if (!mentionsGithub && !mentionsRepo) return false;
 
   return hasLikelyBareRepoRef(intent);
+}
+
+function requestsGitHubWork(text: string): boolean {
+  const intent = originalUserIntent(text);
+  if (targetsGitHubRepository(intent)) return true;
+
+  const mentionsGithub = /(?:@github\b|\bgithub(?:da|ga|dan|ni|ning|im|imga|imda|imdan|ing|ingga|ingda|ingdan)?\b)/i.test(intent);
+  if (!mentionsGithub) return false;
+
+  return /(?:\b(?:commit|branch|pull\s*request|merge|push|clone|fork|issue|actions?|workflow|repository|repo|file|code)\b|\b(?:fayl|kod|branch|tarmoq|repozitoriy|repo|commit|pr)(?:ni|ga|da|dan|lar|larni)?\b|\b(?:yarat|och|yoz|tahrir|o['’]?qi|audit|tekshir|merge|push|commit|clone|ulab|ishla)(?:ish|ishni|ib|ing|aman|amiz|moq)?\b)/i.test(intent);
 }
 
 function explicitlyNeedsExternalWeb(text: string): boolean {
@@ -456,10 +466,11 @@ function effectiveToolsForRequest(
 ): Set<string> {
   const enabled = new Set(baseEnabled);
   const githubTargeted = targetsGitHubRepository(userText);
+  const githubWorkRequested = requestsGitHubWork(userText);
 
   // GitHub repository state must come from the user's native connection, not
   // from public-web fallbacks. This also avoids misleading 404s for private repos.
-  if (githubTargeted && !explicitlyNeedsExternalWeb(userText)) {
+  if (githubWorkRequested && !explicitlyNeedsExternalWeb(userText)) {
     enabled.delete("web_search");
     enabled.delete("web_fetch");
   }
@@ -467,7 +478,7 @@ function effectiveToolsForRequest(
   // When GitHub is disconnected, do not expose github_* execution tools for a
   // GitHub-targeted turn. The model receives explicit connection instructions
   // in the system prompt and should guide the user to connect first.
-  if (githubTargeted && !githubConnected) {
+  if (githubWorkRequested && !githubConnected) {
     for (const name of ALL_GITHUB_EXECUTION_TOOLS) enabled.delete(name);
   }
 
