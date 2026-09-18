@@ -13,6 +13,7 @@ import {
   X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { tokenizeHttpUrls } from '@/lib/ai/links';
 import type { AIAttachmentMeta, AIMessage } from './types';
 import {
   AIMessageBubble as AIMessageBubbleV2,
@@ -54,6 +55,24 @@ function cleanUserText(message: AIMessage) {
     .join('\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
+}
+
+function linkifyUserText(text: string) {
+  return tokenizeHttpUrls(text).map((token, index) => {
+    if (token.type === 'text') return <span key={`text-${index}`}>{token.value}</span>;
+
+    return (
+      <a
+        key={`url-${index}`}
+        href={token.value}
+        target="_blank"
+        rel="noreferrer noopener"
+        className="break-all text-blue-300 underline-offset-2 hover:text-blue-200 hover:underline dark:text-blue-600 dark:hover:text-blue-700"
+      >
+        {token.value}
+      </a>
+    );
+  });
 }
 
 function FileMeta({ file }: { file: AIAttachmentMeta }) {
@@ -212,7 +231,7 @@ function UserMessageBubble({
         </div>
       ) : text ? (
         <div className="min-w-0 max-w-[88%] overflow-hidden rounded-2xl rounded-br-md bg-foreground px-3.5 py-2.5 text-background shadow-sm sm:max-w-[82%]">
-          <p className="whitespace-pre-wrap break-words text-sm leading-relaxed [overflow-wrap:anywhere]">{text}</p>
+          <p className="whitespace-pre-wrap break-words text-sm leading-relaxed [overflow-wrap:anywhere]">{linkifyUserText(text)}</p>
         </div>
       ) : null}
 
@@ -228,7 +247,7 @@ function UserMessageBubble({
       )}
 
       {!editing && (text || files.length > 0) && (
-        <div className="flex items-center gap-0.5 opacity-100 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100 sm:focus-within:opacity-100">
+        <div className="flex items-center gap-0.5 text-muted-foreground">
           <button
             type="button"
             onClick={copy}
