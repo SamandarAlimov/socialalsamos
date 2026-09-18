@@ -186,7 +186,7 @@ export function AISidebar({
           aria-label="AI yon panelini kengaytirish"
           title="AI yon panelini kengaytirish"
         >
-          <PanelLeftOpen className="h-[18px] w-[18px]" />
+          <PanelLeftOpen className="h-5 w-5" />
         </Button>
 
         <div className="my-2 h-px w-8 shrink-0 bg-border/60" />
@@ -201,7 +201,7 @@ export function AISidebar({
             aria-label="Yangi suhbat"
             title="Yangi suhbat"
           >
-            <Plus className="h-[18px] w-[18px]" />
+            <Plus className="h-5 w-5" />
           </Button>
 
           <Button
@@ -213,7 +213,7 @@ export function AISidebar({
             aria-label="Loyihalar"
             title="Loyihalar"
           >
-            <FolderKanban className="h-[18px] w-[18px]" />
+            <FolderKanban className="h-5 w-5" />
           </Button>
 
           {onOpenArtifacts && (
@@ -226,7 +226,7 @@ export function AISidebar({
               aria-label="Artefaktlar"
               title={artifactCount > 0 ? `Artefaktlar (${artifactCount})` : 'Artefaktlar'}
             >
-              <FileCode2 className="h-[18px] w-[18px]" />
+              <FileCode2 className="h-5 w-5" />
               {artifactCount > 0 && (
                 <span className="absolute right-1 top-1 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-foreground px-0.5 text-[8px] font-semibold text-background">
                   {artifactCount > 9 ? '9+' : artifactCount}
@@ -245,7 +245,7 @@ export function AISidebar({
               aria-label="Konnektorlar"
               title="Konnektorlar"
             >
-              <Plug className="h-[18px] w-[18px]" />
+              <Plug className="h-5 w-5" />
             </Button>
           )}
 
@@ -258,7 +258,7 @@ export function AISidebar({
             aria-label="Suhbatlar tarixini ochish"
             title="Suhbatlar"
           >
-            <History className="h-[18px] w-[18px]" />
+            <History className="h-5 w-5" />
           </Button>
         </nav>
       </div>
@@ -366,7 +366,7 @@ export function AISidebar({
       )}
     >
       <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-border/60 bg-background">
-        {conversation.pinned ? <Pin className="h-3.5 w-3.5" /> : <MessageSquare className="h-3.5 w-3.5" />}
+        {conversation.pinned ? <Pin className="h-4 w-4" /> : <MessageSquare className="h-4 w-4" />}
       </span>
 
       <div className="w-0 min-w-0 flex-1 overflow-hidden pr-0.5">
@@ -471,7 +471,7 @@ export function AISidebar({
                   onClick={openCreateProject}
                   aria-label="Yangi loyiha"
                 >
-                  <Plus className="h-3.5 w-3.5" />
+                  <Plus className="h-4 w-4" />
                 </Button>
               )}
             </div>
@@ -493,7 +493,7 @@ export function AISidebar({
                         onClick={() => onSelectProject?.(project.id)}
                         className="flex w-0 min-w-0 flex-1 items-center gap-2 overflow-hidden px-2 py-1.5 text-left text-xs"
                       >
-                        <FolderKanban className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                        <FolderKanban className="h-4 w-4 shrink-0 text-muted-foreground" />
                         <span className="min-w-0 flex-1 truncate font-medium">{project.name}</span>
                       </button>
 
@@ -509,7 +509,7 @@ export function AISidebar({
                         aria-label={`${project.name} loyihasida yangi suhbat`}
                         title="Loyihada yangi suhbat"
                       >
-                        <Plus className="h-3.5 w-3.5" />
+                        <Plus className="h-4 w-4" />
                       </Button>
 
                       {(onUpdateProject || onDeleteProject) && (
