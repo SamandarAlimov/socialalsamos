@@ -331,7 +331,7 @@ export default function ProjectsPage() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-5xl px-3 pb-20 pt-5 sm:px-5 sm:pt-8 lg:px-7 lg:pb-24 lg:pt-12">
+    <div className="mx-auto w-full min-w-0 max-w-6xl overflow-x-hidden px-3 pb-20 pt-5 sm:px-5 sm:pt-8 lg:px-7 lg:pb-24 lg:pt-10 xl:px-8">
       <AIProjectDialog
         open={dialogOpen}
         onOpenChange={setDialogOpen}
@@ -339,7 +339,7 @@ export default function ProjectsPage() {
         onSave={save}
       />
 
-      <header className="mb-6 flex min-w-0 flex-col gap-4 lg:mb-8 lg:flex-row lg:items-center lg:justify-between">
+      <header className="mb-6 flex min-w-0 max-w-full flex-col gap-4 md:flex-row md:items-center md:justify-between lg:mb-8">
         <div className="min-w-0">
           <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Loyihalar</h1>
           <p className="mt-1 text-xs text-muted-foreground">
@@ -347,8 +347,8 @@ export default function ProjectsPage() {
           </p>
         </div>
 
-        <div className="flex w-full min-w-0 items-center gap-2 lg:w-auto">
-          <div className="relative min-w-0 flex-1 lg:w-64 lg:flex-none">
+        <div className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 md:w-auto">
+          <div className="relative min-w-0 md:w-64">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               value={query}
@@ -377,12 +377,12 @@ export default function ProjectsPage() {
         </button>
       </div>
 
-      <div className="grid grid-cols-[minmax(0,1fr)_36px] items-center gap-2 border-b border-border/60 px-2 py-3 text-xs text-muted-foreground sm:grid-cols-[minmax(0,1fr)_auto_36px] sm:gap-3">
+      <div className="grid min-w-0 max-w-full grid-cols-[minmax(0,1fr)_36px] items-center gap-2 overflow-hidden border-b border-border/60 px-2 py-3 text-xs text-muted-foreground md:grid-cols-[minmax(0,1fr)_auto_36px] md:gap-3">
         <span>Nomi</span>
         <button
           type="button"
           onClick={() => setSortNewest((value) => !value)}
-          className="hidden items-center gap-1 rounded-md px-1 py-0.5 hover:text-foreground sm:flex"
+          className="hidden items-center gap-1 rounded-md px-1 py-0.5 hover:text-foreground md:flex"
           aria-label="Yangilangan vaqt bo‘yicha saralash"
         >
           O‘zgartirilgan <ArrowUpDown className="h-3 w-3" />
@@ -424,7 +424,7 @@ export default function ProjectsPage() {
                   openProject(project);
                 }
               }}
-              className="group grid cursor-pointer grid-cols-[minmax(0,1fr)_36px] items-center gap-2 border-b border-border/50 px-2 py-3.5 transition-colors hover:bg-muted/35 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 sm:grid-cols-[minmax(0,1fr)_auto_36px] sm:gap-3 sm:py-4"
+              className="group grid min-w-0 max-w-full cursor-pointer grid-cols-[minmax(0,1fr)_36px] items-center gap-2 overflow-hidden border-b border-border/50 px-2 py-3.5 transition-colors hover:bg-muted/35 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 md:grid-cols-[minmax(0,1fr)_auto_36px] md:gap-3 md:py-4"
             >
               <div className="flex min-w-0 items-center gap-2.5 sm:gap-3">
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-border/70 bg-muted/35">
@@ -433,12 +433,12 @@ export default function ProjectsPage() {
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium" title={project.name}>{project.name}</p>
                   <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                    {counts[project.id] || 0} suhbat <span className="sm:hidden">· {modifiedLabel(project.updatedAt)}</span>
+                    {counts[project.id] || 0} suhbat <span className="md:hidden">· {modifiedLabel(project.updatedAt)}</span>
                   </p>
                 </div>
               </div>
 
-              <span className="hidden whitespace-nowrap text-xs text-muted-foreground sm:block">
+              <span className="hidden whitespace-nowrap text-xs text-muted-foreground md:block">
                 {modifiedLabel(project.updatedAt)}
               </span>
 
