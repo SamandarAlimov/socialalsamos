@@ -33,7 +33,8 @@ import { useToast } from '@/hooks/use-toast';
 import { useVoiceInput } from '@/hooks/useVoiceInput';
 import { AIModelPicker } from './AIModelPicker';
 import { AIGithubDialog } from './AIGithubDialog';
-import { detectRepoLinks, githubRepoUrl } from '@/lib/ai/githubContext';
+import { githubRepoUrl } from '@/lib/ai/githubContext';
+import { detectHttpUrls } from '@/lib/ai/links';
 import type { AIMode, ModelId, ToolGroupId } from '@/lib/ai/capabilities';
 
 const PLACEHOLDERS = [
@@ -140,7 +141,7 @@ export function AIComposer({
     [promptHistory],
   );
   const webEnabled = toolGroups ? toolGroups.includes('web') : true;
-  const repoLinks = useMemo(() => detectRepoLinks(value), [value]);
+  const inputUrls = useMemo(() => detectHttpUrls(value), [value]);
 
   useEffect(() => {
     if (value) return;
@@ -332,20 +333,25 @@ export function AIComposer({
             dragging ? 'border-blue-500/60 bg-blue-500/5' : 'border-border/70',
           )}
         >
-          {repoLinks.length > 0 && (
+          {inputUrls.length > 0 && (
             <div className="flex flex-wrap gap-1.5 px-1.5 pt-1.5">
-              {repoLinks.map((repo) => (
-                <a
-                  key={repo.fullName}
-                  href={repo.url}
-                  target="_blank"
-                  rel="noreferrer noopener"
-                  className="flex max-w-full items-center gap-1 rounded-lg border border-blue-500/25 bg-blue-500/8 px-2 py-1 text-[11px] font-medium text-blue-600 dark:text-blue-400"
-                >
-                  <Github className="h-3.5 w-3.5 shrink-0" />
-                  <span className="truncate">{repo.fullName}</span>
-                </a>
-              ))}
+              {inputUrls.map((url) => {
+                const isGithub = /^https?:\/\/(?:www\.)?github\.com\//i.test(url);
+                const Icon = isGithub ? Github : Globe;
+                return (
+                  <a
+                    key={url}
+                    href={url}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    className="flex max-w-full items-center gap-1 rounded-lg border border-blue-500/25 bg-blue-500/8 px-2 py-1 text-[11px] font-medium text-blue-600 underline-offset-2 hover:bg-blue-500/12 hover:underline dark:text-blue-400"
+                    title={url}
+                  >
+                    <Icon className="h-3.5 w-3.5 shrink-0" />
+                    <span className="max-w-[min(68vw,520px)] truncate">{url}</span>
+                  </a>
+                );
+              })}
             </div>
           )}
 
