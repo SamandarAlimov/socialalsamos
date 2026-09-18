@@ -97,6 +97,7 @@ interface AIComposerProps {
   onOpenConnectors?: () => void;
   onOpenGithub?: () => void;
   onOpenPlugins?: () => void;
+  promptHistory?: string[];
 }
 
 export function AIComposer({
@@ -118,6 +119,7 @@ export function AIComposer({
   onOpenConnectors,
   onOpenGithub,
   onOpenPlugins,
+  promptHistory = [],
 }: AIComposerProps) {
   const { toast } = useToast();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -130,7 +132,13 @@ export function AIComposer({
   const [slashOpen, setSlashOpen] = useState(false);
   const [githubOpen, setGithubOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [historyIndex, setHistoryIndex] = useState<number | null>(null);
+  const historyDraftRef = useRef('');
 
+  const normalizedPromptHistory = useMemo(
+    () => promptHistory.map((prompt) => prompt.trim()).filter(Boolean),
+    [promptHistory],
+  );
   const webEnabled = toolGroups ? toolGroups.includes('web') : true;
   const repoLinks = useMemo(() => detectRepoLinks(value), [value]);
 
@@ -164,6 +172,57 @@ export function AIComposer({
       toast({ title: 'Ovozli kiritish', description: voice.error, variant: 'destructive' });
     }
   }, [toast, voice.error]);
+
+  useEffect(() => {
+    setHistoryIndex(null);
+    historyDraftRef.current = '';
+  }, [normalizedPromptHistory]);
+
+  const applyHistoryValue = (nextValue: string) => {
+    onChange(nextValue);
+    setSlashOpen(false);
+    window.requestAnimationFrame(() => {
+      const textarea = textareaRef.current;
+      if (!textarea) return;
+      textarea.focus();
+      textarea.setSelectionRange(nextValue.length, nextValue.length);
+    });
+  };
+
+  const browsePromptHistory = (direction: 'older' | 'newer') => {
+    if (normalizedPromptHistory.length === 0) return false;
+
+    if (direction === 'older') {
+      if (historyIndex === null && value.trim() !== '') return false;
+
+      if (historyIndex === null) {
+        historyDraftRef.current = value;
+      }
+
+      const nextIndex =
+        historyIndex === null
+          ? normalizedPromptHistory.length - 1
+          : Math.max(0, historyIndex - 1);
+
+      setHistoryIndex(nextIndex);
+      applyHistoryValue(normalizedPromptHistory[nextIndex]);
+      return true;
+    }
+
+    if (historyIndex === null) return false;
+
+    const nextIndex = historyIndex + 1;
+    if (nextIndex >= normalizedPromptHistory.length) {
+      const draft = historyDraftRef.current;
+      setHistoryIndex(null);
+      applyHistoryValue(draft);
+      return true;
+    }
+
+    setHistoryIndex(nextIndex);
+    applyHistoryValue(normalizedPromptHistory[nextIndex]);
+    return true;
+  };
 
   const slashMatches = useMemo(() => {
     if (!slashOpen) return [];
@@ -347,18 +406,46 @@ export function AIComposer({
             ref={textareaRef}
             value={value}
             onChange={(event) => {
+              setHistoryIndex(null);
+              historyDraftRef.current = '';
               onChange(event.target.value);
               setSlashOpen(event.target.value.trimStart().startsWith('/'));
             }}
             onKeyDown={(event) => {
-              if (event.key === 'Escape') setSlashOpen(false);
+              const plainArrow =
+                !event.altKey &&
+                !event.ctrlKey &&
+                !event.metaKey &&
+                !event.shiftKey &&
+                !event.nativeEvent.isComposing;
+
+              if (plainArrow && event.key === 'ArrowUp' && browsePromptHistory('older')) {
+                event.preventDefault();
+                return;
+              }
+
+              if (plainArrow && event.key === 'ArrowDown' && browsePromptHistory('newer')) {
+                event.preventDefault();
+                return;
+              }
+
+              if (event.key === 'Escape') {
+                setSlashOpen(false);
+                setHistoryIndex(null);
+                historyDraftRef.current = '';
+              }
+
               if (event.key === 'Enter' && !event.shiftKey) {
                 event.preventDefault();
                 if (slashMatches.length > 0) {
                   applyCommand(slashMatches[0].cmd);
                   return;
                 }
-                if (canSend) onSend();
+                if (canSend) {
+                  setHistoryIndex(null);
+                  historyDraftRef.current = '';
+                  onSend();
+                }
               }
             }}
             placeholder={PLACEHOLDERS[placeholderIndex]}
