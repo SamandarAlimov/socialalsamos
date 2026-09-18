@@ -430,11 +430,8 @@ export function AISidebar({
     <div className="flex h-full w-full min-w-0 flex-col overflow-hidden bg-background">
       <div className="shrink-0 space-y-2.5 p-3 pb-2">
         <div className="flex min-w-0 items-center justify-between gap-2">
-          <div className="flex min-w-0 items-center gap-2.5 overflow-hidden">
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-border/70 bg-muted/50">
-              <MessageSquare className="h-4 w-4" />
-            </span>
-            <span className="truncate text-sm font-semibold">Alsamos AI</span>
+          <div className="min-w-0 overflow-hidden px-1">
+            <span className="block truncate text-sm font-semibold">Alsamos AI</span>
           </div>
           <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0 rounded-lg" onClick={onClose} aria-label="Yon panelni yopish">
             {isMobile ? <ChevronLeft className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
