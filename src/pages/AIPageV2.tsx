@@ -38,7 +38,7 @@ import type {
 } from '@/components/ai/types';
 import { extractArtifacts } from '@/lib/aiArtifacts';
 import { generateConversationTitle, streamAgent } from '@/lib/ai/agentClient';
-import { buildRepoContext, detectRepoRefs, githubRepoUrl } from '@/lib/ai/githubContext';
+import { buildRepoContext, detectRepoRefs, githubReady, githubRepoUrl } from '@/lib/ai/githubContext';
 import { buildBrainContext } from '@/lib/ai/brain';
 import { captureMemories, syncMemories } from '@/lib/ai/memory';
 import { toolLabel, type AIMode, type ModelId, type ToolGroupId } from '@/lib/ai/capabilities';
@@ -954,8 +954,13 @@ export default function AIPageV2() {
 
       const lastUser = [...baseMessages].reverse().find((message) => message.role === 'user');
       const repoRefs = lastUser ? detectRepoRefs(lastUser.content) : [];
+      // Browser-side repo prefetch is only for the user's authenticated GitHub
+      // connection. Public repos remain readable by the server agent even when
+      // no account is connected, so do not show a misleading "GitHub ulanmagan"
+      // failure before the agent gets a chance to use public GitHub access.
+      const nativeGithubReady = repoRefs.length > 0 ? await githubReady() : false;
 
-      if (repoRefs.length > 0 && history.length > 0) {
+      if (repoRefs.length > 0 && history.length > 0 && nativeGithubReady) {
         for (const ref of repoRefs.slice(0, 2)) {
           const toolId = crypto.randomUUID();
           tools.push({
@@ -988,14 +993,16 @@ export default function AIPageV2() {
               content: `${history[index].content}\n\n${repoContext.context}`,
             };
           } catch (error: any) {
-            const message = error?.message || 'Repozitoriyni o‘qib bo‘lmadi.';
+            const message = error?.message || 'Repozitoriyni native GitHub orqali o‘qib bo‘lmadi.';
             const entry = tools.find((tool) => tool.id === toolId);
             if (entry) {
               entry.status = 'error';
-              entry.summary = message;
+              entry.summary = `${message} Public read fallback agent tomonidan sinab ko‘riladi.`;
               entry.finishedAt = Date.now();
             }
-            notice = `GitHub: ${message}`;
+            // Do not turn this into a blocking notice. A fine-grained token can
+            // legitimately exclude somebody else's public repo; the server agent
+            // can still retry that repository through public GitHub access.
           }
         }
       }
