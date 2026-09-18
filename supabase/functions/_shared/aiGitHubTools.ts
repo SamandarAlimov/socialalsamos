@@ -677,7 +677,7 @@ async function searchCode(args: Record<string, unknown>, ctx: ToolContext): Prom
   // GitHub's code-search API can require authentication. For public repositories,
   // fall back to the recursive tree and match file paths so the model can then
   // read the likely files with github_read_file.
-  if (!token && (response.status === 401 || response.status === 403)) {
+  if (response.status === 401 || response.status === 403) {
     const repo = await getRepoMeta(ctx, null, repository);
     const branch = String(repo.default_branch ?? "main");
     const tree = await ghRead(null, `${repoApiPath(repository)}/git/trees/${encodeURIComponent(branch)}?recursive=1`);
