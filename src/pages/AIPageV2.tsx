@@ -42,6 +42,7 @@ import { streamAgent } from '@/lib/ai/agentClient';
 import { buildRepoContext, detectRepoRefs, githubReady, githubRepoUrl } from '@/lib/ai/githubContext';
 import { buildBrainContext } from '@/lib/ai/brain';
 import { captureMemories, syncMemories } from '@/lib/ai/memory';
+import { buildAIWorkspaceHref, parseAIWorkspaceSearch } from '@/lib/ai/workspaceUrl';
 import { toolLabel, type AIMode, type ModelId, type ToolGroupId } from '@/lib/ai/capabilities';
 
 const PIN_KEY = 'alsamos.ai.pinned';
@@ -180,8 +181,10 @@ export default function AIPageV2() {
   const autoFollowRef = useRef(true);
   const abortRef = useRef<AbortController | null>(null);
   const mediaPollsRef = useRef<Map<string, boolean>>(new Map());
+  const hydratedSearchRef = useRef<string | null>(null);
   const { uploadFileOrThrow, uploading, getFileType } = useFileUpload();
   const busy = isStreaming;
+  const workspaceRoute = useMemo(() => parseAIWorkspaceSearch(location.search), [location.search]);
 
   const activeProject = useMemo(
     () => projects.find((project) => project.id === activeProjectId) ?? null,
@@ -280,6 +283,49 @@ export default function AIPageV2() {
     void load();
   }, [deriveTitle, user]);
 
+  useEffect(() => {
+    if (historyLoading || hydratedSearchRef.current === location.search) return;
+    hydratedSearchRef.current = location.search;
+
+    autoFollowRef.current = true;
+    setShowScrollToLatest(false);
+
+    if (workspaceRoute.conversationId) {
+      const conversation = conversations.find((item) => item.id === workspaceRoute.conversationId);
+      if (conversation) {
+        setMessages(conversation.messages);
+        setCurrentConversationId(conversation.id);
+        setActiveProjectId(
+          projectsAvailable
+            ? workspaceRoute.projectId || conversation.projectId || null
+            : null,
+        );
+        return;
+      }
+    }
+
+    const projectExists = Boolean(
+      workspaceRoute.projectId &&
+      projectsAvailable &&
+      projects.some((project) => project.id === workspaceRoute.projectId),
+    );
+
+    setMessages([]);
+    setCurrentConversationId(null);
+    setActiveProjectId(projectExists ? workspaceRoute.projectId : null);
+    setInput('');
+    setAttachments([]);
+    setForwardedPost(null);
+  }, [
+    conversations,
+    historyLoading,
+    location.search,
+    projects,
+    projectsAvailable,
+    workspaceRoute.conversationId,
+    workspaceRoute.projectId,
+  ]);
+
   const saveConversation = async (newMessages: AIMessage[]): Promise<string | null> => {
     if (!user) return currentConversationId;
 
@@ -374,6 +420,13 @@ export default function AIPageV2() {
       },
       ...previous,
     ]);
+    navigate(
+      buildAIWorkspaceHref('/ai', location.search, {
+        projectId: projectsAvailable ? activeProjectId : null,
+        conversationId: id,
+      }),
+      { replace: true },
+    );
     return id;
   };
 
@@ -527,27 +580,41 @@ export default function AIPageV2() {
 
   const startNew = useCallback(
     (projectId: string | null = activeProjectId) => {
+      const nextProjectId = projectsAvailable ? projectId : null;
       abortRef.current?.abort();
       autoFollowRef.current = true;
       setShowScrollToLatest(false);
       setMessages([]);
       setCurrentConversationId(null);
-      setActiveProjectId(projectsAvailable ? projectId : null);
+      setActiveProjectId(nextProjectId);
       setInput('');
       setAttachments([]);
       setForwardedPost(null);
+      navigate(
+        buildAIWorkspaceHref('/ai', location.search, {
+          projectId: nextProjectId,
+          conversationId: null,
+        }),
+      );
       if (sidebarOverlay) setSidebarOpen(false);
     },
-    [activeProjectId, projectsAvailable, sidebarOverlay],
+    [activeProjectId, location.search, navigate, projectsAvailable, sidebarOverlay],
   );
 
   const selectConversation = (conversation: AIConversation) => {
+    const projectId = projectsAvailable ? conversation.projectId || null : null;
     abortRef.current?.abort();
     autoFollowRef.current = true;
     setShowScrollToLatest(false);
     setMessages(conversation.messages);
     setCurrentConversationId(conversation.id);
-    setActiveProjectId(projectsAvailable ? conversation.projectId || null : null);
+    setActiveProjectId(projectId);
+    navigate(
+      buildAIWorkspaceHref('/ai', location.search, {
+        projectId,
+        conversationId: conversation.id,
+      }),
+    );
     if (sidebarOverlay) setSidebarOpen(false);
   };
 
@@ -561,6 +628,12 @@ export default function AIPageV2() {
     setCurrentConversationId(null);
     setInput('');
     setAttachments([]);
+    navigate(
+      buildAIWorkspaceHref('/ai', location.search, {
+        projectId,
+        conversationId: null,
+      }),
+    );
     if (sidebarOverlay) setSidebarOpen(false);
   };
 
