@@ -272,19 +272,21 @@ export default function AIProjectsWorkspacePage() {
         )}
       </AnimatePresence>
 
-      <div className="relative min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain alsamos-scrollbar">
-        {isMobile ? (
-          <div className="sticky top-0 z-30 flex h-12 items-center gap-2 border-b border-border/40 bg-background/95 px-2.5 backdrop-blur-xl">
-            <Button
-              size="icon"
-              variant="ghost"
-              className="h-8 w-8 shrink-0 rounded-lg"
-              onClick={() => navigate('/home')}
-              aria-label="AI yordamchidan chiqish"
-              title="Bosh sahifaga qaytish"
-            >
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
+      <div className="relative min-h-0 min-w-0 max-w-full flex-1 overflow-x-hidden overflow-y-auto overscroll-x-none overscroll-y-contain alsamos-scrollbar">
+        {sidebarOverlay ? (
+          <div className="sticky top-0 z-30 flex h-12 min-w-0 items-center gap-2 border-b border-border/40 bg-background/95 px-2.5 backdrop-blur-xl sm:h-14 sm:px-4">
+            {isMobile && (
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-8 w-8 shrink-0 rounded-lg"
+                onClick={() => navigate('/home')}
+                aria-label="AI yordamchidan chiqish"
+                title="Bosh sahifaga qaytish"
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
+            )}
             {!sidebarOpen && (
               <Button
                 size="icon"
@@ -296,7 +298,8 @@ export default function AIProjectsWorkspacePage() {
                 <PanelLeft className="h-4 w-4" />
               </Button>
             )}
-            <span className="min-w-0 flex-1 truncate text-sm font-semibold">AI loyihalari</span>
+            <span className="min-w-0 flex-1 truncate text-sm font-semibold">Alsamos AI</span>
+            <span className="hidden shrink-0 text-xs text-muted-foreground sm:inline">Loyihalar</span>
           </div>
         ) : (
           !sidebarOpen && (
