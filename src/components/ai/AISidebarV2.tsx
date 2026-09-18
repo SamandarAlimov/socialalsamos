@@ -8,6 +8,7 @@ import {
   MessageSquare,
   MoreHorizontal,
   PanelLeftClose,
+  PanelLeftOpen,
   Pencil,
   Pin,
   PinOff,
@@ -39,6 +40,8 @@ interface Props {
   loading: boolean;
   activeId: string | null;
   isMobile: boolean;
+  collapsed?: boolean;
+  onExpand?: () => void;
   profile?: { display_name?: string | null; username?: string | null; avatar_url?: string | null } | null;
   onNew: () => void;
   onNewProject?: (projectId: string) => void;
@@ -98,6 +101,8 @@ export function AISidebar({
   loading,
   activeId,
   isMobile,
+  collapsed = false,
+  onExpand,
   onNew,
   onNewProject,
   onSelect,
@@ -166,6 +171,99 @@ export function AISidebar({
     }
     onSelectProject?.(projectId);
   };
+
+  if (collapsed && !isMobile) {
+    const expandSidebar = () => onExpand?.();
+
+    return (
+      <div className="flex h-full w-full min-w-0 flex-col items-center overflow-hidden bg-background py-3">
+        <Button
+          type="button"
+          size="icon"
+          variant="ghost"
+          className="h-10 w-10 shrink-0 rounded-xl"
+          onClick={expandSidebar}
+          aria-label="AI yon panelini kengaytirish"
+          title="AI yon panelini kengaytirish"
+        >
+          <PanelLeftOpen className="h-4.5 w-4.5" />
+        </Button>
+
+        <div className="my-2 h-px w-8 shrink-0 bg-border/60" />
+
+        <nav className="flex min-h-0 flex-1 flex-col items-center gap-1.5">
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="h-10 w-10 rounded-xl"
+            onClick={startGlobalConversation}
+            aria-label="Yangi suhbat"
+            title="Yangi suhbat"
+          >
+            <Plus className="h-4.5 w-4.5" />
+          </Button>
+
+          <Button
+            type="button"
+            size="icon"
+            variant={activeProjectId ? 'secondary' : 'ghost'}
+            className="h-10 w-10 rounded-xl"
+            onClick={() => onOpenProjects?.()}
+            aria-label="Loyihalar"
+            title="Loyihalar"
+          >
+            <FolderKanban className="h-4.5 w-4.5" />
+          </Button>
+
+          {onOpenArtifacts && (
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              className="relative h-10 w-10 rounded-xl"
+              onClick={onOpenArtifacts}
+              aria-label="Artefaktlar"
+              title={artifactCount > 0 ? `Artefaktlar (${artifactCount})` : 'Artefaktlar'}
+            >
+              <FileCode2 className="h-4.5 w-4.5" />
+              {artifactCount > 0 && (
+                <span className="absolute right-1 top-1 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-foreground px-0.5 text-[8px] font-semibold text-background">
+                  {artifactCount > 9 ? '9+' : artifactCount}
+                </span>
+              )}
+            </Button>
+          )}
+
+          {onOpenConnectors && (
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              className="h-10 w-10 rounded-xl"
+              onClick={onOpenConnectors}
+              aria-label="Konnektorlar"
+              title="Konnektorlar"
+            >
+              <Plug className="h-4.5 w-4.5" />
+            </Button>
+          )}
+
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="h-10 w-10 rounded-xl"
+            onClick={expandSidebar}
+            aria-label="Suhbatlar tarixini ochish"
+            title="Suhbatlar"
+          >
+            <History className="h-4.5 w-4.5" />
+          </Button>
+        </nav>
+      </div>
+    );
+  }
 
   const renderConversationMenu = (conversation: AIConversation, compact = false) => (
     <DropdownMenu>
