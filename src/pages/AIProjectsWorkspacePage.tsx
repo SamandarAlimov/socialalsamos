@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { PanelLeft } from 'lucide-react';
+import { ArrowLeft, PanelLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 import { AISidebar as AISidebarV2 } from '@/components/ai/AISidebarV2';
@@ -92,7 +92,7 @@ function isProjectSchemaError(error: any): boolean {
 export default function AIProjectsWorkspacePage() {
   const { user, profile } = useAuth();
   const navigate = useNavigate();
-  const { sidebarOverlay } = useAIWorkspaceLayout();
+  const { isMobile, sidebarOverlay } = useAIWorkspaceLayout();
   const [sidebarOpen, setSidebarOpen] = useState(!sidebarOverlay);
   const [loading, setLoading] = useState(true);
   const [projects, setProjects] = useState<AIProject[]>([]);
@@ -273,16 +273,43 @@ export default function AIProjectsWorkspacePage() {
       </AnimatePresence>
 
       <div className="relative min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain alsamos-scrollbar">
-        {!sidebarOpen && (
-          <Button
-            size="icon"
-            variant="secondary"
-            className="sticky left-3 top-3 z-30 ml-3 mt-3 inline-flex h-9 w-9 rounded-xl shadow-sm"
-            onClick={() => setSidebarOpen(true)}
-            aria-label="Yon panelni ochish"
-          >
-            <PanelLeft className="h-4 w-4" />
-          </Button>
+        {isMobile ? (
+          <div className="sticky top-0 z-30 flex h-12 items-center gap-2 border-b border-border/40 bg-background/95 px-2.5 backdrop-blur-xl">
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-8 w-8 shrink-0 rounded-lg"
+              onClick={() => navigate('/home')}
+              aria-label="AI yordamchidan chiqish"
+              title="Bosh sahifaga qaytish"
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+            {!sidebarOpen && (
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-8 w-8 shrink-0 rounded-lg"
+                onClick={() => setSidebarOpen(true)}
+                aria-label="Yon panelni ochish"
+              >
+                <PanelLeft className="h-4 w-4" />
+              </Button>
+            )}
+            <span className="min-w-0 flex-1 truncate text-sm font-semibold">AI loyihalari</span>
+          </div>
+        ) : (
+          !sidebarOpen && (
+            <Button
+              size="icon"
+              variant="secondary"
+              className="sticky left-3 top-3 z-30 ml-3 mt-3 inline-flex h-9 w-9 rounded-xl shadow-sm"
+              onClick={() => setSidebarOpen(true)}
+              aria-label="Yon panelni ochish"
+            >
+              <PanelLeft className="h-4 w-4" />
+            </Button>
+          )
         )}
         <ProjectsPage />
       </div>

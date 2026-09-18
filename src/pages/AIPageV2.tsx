@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   ArrowDown,
+  ArrowLeft,
   Code2,
   FileText,
   FolderKanban,
@@ -1136,6 +1137,19 @@ export default function AIPageV2() {
 
       <div className="relative flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border/40 bg-background/90 px-2.5 backdrop-blur-xl sm:h-14 sm:px-4">
+          {isMobile && (
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-8 w-8 shrink-0 rounded-lg"
+              onClick={() => navigate('/home')}
+              aria-label="AI yordamchidan chiqish"
+              title="Bosh sahifaga qaytish"
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+          )}
+
           {!sidebarOpen && (
             <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0 rounded-lg" onClick={() => setSidebarOpen(true)} aria-label="Yon panelni ochish">
               <PanelLeft className="h-4 w-4" />
