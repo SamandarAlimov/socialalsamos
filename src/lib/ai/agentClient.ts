@@ -322,6 +322,32 @@ export async function streamAgent(options: StreamAgentOptions): Promise<void> {
   }
 }
 
+export async function generateConversationTitle(
+  prompt: string,
+  conversationId?: string | null,
+): Promise<string | null> {
+  const cleanPrompt = prompt.trim();
+  if (!cleanPrompt) return null;
+
+  try {
+    const response = await fetch(`${FUNCTIONS_BASE}/ai-agent`, {
+      method: 'POST',
+      headers: await authHeaders(),
+      body: JSON.stringify({
+        action: 'title',
+        prompt: cleanPrompt,
+        conversationId: conversationId || null,
+      }),
+    });
+    if (!response.ok) return null;
+    const body = await response.json().catch(() => null) as { title?: string } | null;
+    const title = body?.title?.trim() || '';
+    return title || null;
+  } catch (error) {
+    console.warn('AI conversation title generation failed', error);
+    return null;
+  }
+}
 export async function continueAgentRun(
   runId: string,
   onEvent: (event: AgentEvent) => void,
