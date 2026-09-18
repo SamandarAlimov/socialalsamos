@@ -136,7 +136,7 @@ function conversationDate(value: Date): string {
 export default function AIPageV2() {
   const { user, profile } = useAuth();
   const { toast } = useToast();
-  const { isMobile, sidebarOverlay, artifactOverlay } = useAIWorkspaceLayout();
+  const { isMobile, isCompact, sidebarOverlay, artifactOverlay } = useAIWorkspaceLayout();
   const location = useLocation();
   const navigate = useNavigate();
   const initialPrefs = useMemo(readPrefs, []);
@@ -151,7 +151,7 @@ export default function AIPageV2() {
   const [historyLoading, setHistoryLoading] = useState(true);
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
-  const [sidebarOpen, setSidebarOpen] = useState(!sidebarOverlay);
+  const [sidebarOpen, setSidebarOpen] = useState(() => !sidebarOverlay && !isCompact);
   const [artifactsOpen, setArtifactsOpen] = useState(false);
   const [activeArtifactId, setActiveArtifactId] = useState<string | null>(null);
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
@@ -195,13 +195,9 @@ export default function AIPageV2() {
       .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
   }, [activeProjectId, conversations]);
 
-  useEffect(() => setSidebarOpen(!sidebarOverlay), [sidebarOverlay]);
-
   useEffect(() => {
-    if (sidebarOverlay) return;
-    const { projectId } = parseAIWorkspaceSearch(location.search);
-    if (projectId) setSidebarOpen(true);
-  }, [location.search, sidebarOverlay]);
+    setSidebarOpen(sidebarOverlay ? false : !isCompact);
+  }, [isCompact, sidebarOverlay]);
 
   useEffect(() => {
     if (historyLoading) return;
@@ -1169,10 +1165,10 @@ export default function AIPageV2() {
 
   return (
     <div className="relative flex h-full min-h-0 min-w-0 overflow-hidden bg-background">
-      <AnimatePresence>
-        {sidebarOpen && (
+      <AnimatePresence initial={false}>
+        {(!sidebarOverlay || sidebarOpen) && (
           <>
-            {sidebarOverlay && (
+            {sidebarOverlay && sidebarOpen && (
               <motion.button
                 type="button"
                 aria-label="Yon panelni yopish"
@@ -1184,15 +1180,17 @@ export default function AIPageV2() {
               />
             )}
             <motion.aside
-              initial={{ x: sidebarOverlay ? -320 : 0, opacity: sidebarOverlay ? 0 : 1 }}
+              initial={sidebarOverlay ? { x: -320, opacity: 0 } : false}
               animate={{ x: 0, opacity: 1 }}
-              exit={{ x: -320, opacity: 0 }}
+              exit={sidebarOverlay ? { x: -320, opacity: 0 } : undefined}
               transition={{ type: 'spring', damping: 26, stiffness: 300 }}
               className={cn(
-                'z-50 flex min-h-0 min-w-0 flex-col border-r border-border/50 bg-background',
+                'z-50 flex min-h-0 min-w-0 shrink-0 flex-col border-r border-border/50 bg-background transition-[width] duration-300',
                 sidebarOverlay
                   ? 'absolute inset-y-0 left-0 w-[min(300px,88%)] shadow-2xl'
-                  : 'relative h-full w-[280px] shrink-0 xl:w-[300px]',
+                  : sidebarOpen
+                    ? 'relative h-full w-[280px] xl:w-[300px]'
+                    : 'relative h-full w-[72px]',
               )}
             >
               <AISidebar
@@ -1200,6 +1198,8 @@ export default function AIPageV2() {
                 loading={historyLoading}
                 activeId={currentConversationId}
                 isMobile={sidebarOverlay}
+                collapsed={!sidebarOverlay && !sidebarOpen}
+                onExpand={() => setSidebarOpen(true)}
                 onNew={() => startNew(activeProjectId)}
                 onSelect={selectConversation}
                 onDelete={deleteConversation}
@@ -1238,7 +1238,7 @@ export default function AIPageV2() {
             </Button>
           )}
 
-          {!sidebarOpen && (
+          {sidebarOverlay && !sidebarOpen && (
             <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0 rounded-lg" onClick={() => setSidebarOpen(true)} aria-label="Yon panelni ochish">
               <PanelLeft className="h-4 w-4" />
             </Button>
@@ -1386,17 +1386,19 @@ export default function AIPageV2() {
         </ScrollArea>
 
         {messages.length > 0 && showScrollToLatest && (
-          <Button
-            type="button"
-            size="sm"
-            variant="secondary"
-            onClick={() => scrollToLatest()}
-            className="absolute bottom-24 left-1/2 z-30 h-9 -translate-x-1/2 gap-1.5 rounded-full border border-border/70 bg-background/95 px-3 text-xs shadow-lg backdrop-blur sm:bottom-20"
-            aria-label="Eng yangi xabarga tushish"
-          >
-            <ArrowDown className="h-4 w-4" />
-            <span className="hidden sm:inline">Eng yangi xabar</span>
-          </Button>
+          <div className="pointer-events-none z-30 flex h-0 shrink-0 justify-center">
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              onClick={() => scrollToLatest()}
+              className="pointer-events-auto h-9 -translate-y-12 gap-1.5 rounded-full border border-border/70 bg-background/95 px-3 text-xs shadow-lg backdrop-blur"
+              aria-label="Eng yangi xabarga tushish"
+            >
+              <ArrowDown className="h-4 w-4" />
+              <span className="hidden sm:inline">Eng yangi xabar</span>
+            </Button>
+          </div>
         )}
 
         {messages.length > 0 && (

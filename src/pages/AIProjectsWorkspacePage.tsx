@@ -92,13 +92,15 @@ function isProjectSchemaError(error: any): boolean {
 export default function AIProjectsWorkspacePage() {
   const { user, profile } = useAuth();
   const navigate = useNavigate();
-  const { isMobile, sidebarOverlay } = useAIWorkspaceLayout();
-  const [sidebarOpen, setSidebarOpen] = useState(!sidebarOverlay);
+  const { isMobile, isCompact, sidebarOverlay } = useAIWorkspaceLayout();
+  const [sidebarOpen, setSidebarOpen] = useState(() => !sidebarOverlay && !isCompact);
   const [loading, setLoading] = useState(true);
   const [projects, setProjects] = useState<AIProject[]>([]);
   const [conversations, setConversations] = useState<AIConversation[]>([]);
 
-  useEffect(() => setSidebarOpen(!sidebarOverlay), [sidebarOverlay]);
+  useEffect(() => {
+    setSidebarOpen(sidebarOverlay ? false : !isCompact);
+  }, [isCompact, sidebarOverlay]);
 
   useEffect(() => {
     let cancelled = false;
@@ -220,10 +222,10 @@ export default function AIProjectsWorkspacePage() {
 
   return (
     <div className="relative flex h-full min-h-0 min-w-0 overflow-hidden bg-background">
-      <AnimatePresence>
-        {sidebarOpen && (
+      <AnimatePresence initial={false}>
+        {(!sidebarOverlay || sidebarOpen) && (
           <>
-            {sidebarOverlay && (
+            {sidebarOverlay && sidebarOpen && (
               <motion.button
                 type="button"
                 aria-label="Yon panelni yopish"
@@ -235,15 +237,17 @@ export default function AIProjectsWorkspacePage() {
               />
             )}
             <motion.aside
-              initial={{ x: sidebarOverlay ? -320 : 0, opacity: sidebarOverlay ? 0 : 1 }}
+              initial={sidebarOverlay ? { x: -320, opacity: 0 } : false}
               animate={{ x: 0, opacity: 1 }}
-              exit={{ x: -320, opacity: 0 }}
+              exit={sidebarOverlay ? { x: -320, opacity: 0 } : undefined}
               transition={{ type: 'spring', damping: 26, stiffness: 300 }}
               className={cn(
-                'z-50 flex min-h-0 min-w-0 flex-col border-r border-border/50 bg-background',
+                'z-50 flex min-h-0 min-w-0 shrink-0 flex-col border-r border-border/50 bg-background transition-[width] duration-300',
                 sidebarOverlay
                   ? 'absolute inset-y-0 left-0 w-[min(300px,88%)] shadow-2xl'
-                  : 'relative h-full w-[280px] shrink-0 xl:w-[300px]',
+                  : sidebarOpen
+                    ? 'relative h-full w-[280px] xl:w-[300px]'
+                    : 'relative h-full w-[72px]',
               )}
             >
               <AISidebarV2
@@ -251,6 +255,8 @@ export default function AIProjectsWorkspacePage() {
                 loading={loading}
                 activeId={null}
                 isMobile={sidebarOverlay}
+                collapsed={!sidebarOverlay && !sidebarOpen}
+                onExpand={() => setSidebarOpen(true)}
                 profile={profile}
                 onNew={() => navigate('/ai')}
                 onNewProject={goToProject}
