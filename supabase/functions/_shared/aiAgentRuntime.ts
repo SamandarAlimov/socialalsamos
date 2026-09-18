@@ -505,6 +505,17 @@ function requestsGitHubWork(text: string): boolean {
   return /(?:\b(?:commit|branch|pull\s*request|merge|push|clone|fork|issue|actions?|workflow|repository|repo|file|code)\b|\b(?:fayl|kod|branch|tarmoq|repozitoriy|repo|commit|pr)(?:ni|ga|da|dan|lar|larni)?\b|\b(?:yarat|och|yoz|tahrir|o['’]?qi|audit|tekshir|merge|push|commit|clone|ulab|ishla)(?:ish|ishni|ib|ing|aman|amiz|moq)?\b)/i.test(intent);
 }
 
+function requestsGitHubMutation(text: string): boolean {
+  const intent = originalUserIntent(text);
+  if (!requestsGitHubWork(intent)) return false;
+  return /(?:\b(?:create|write|edit|modify|update|delete|rename|push|commit|merge|fork|open\s+(?:a\s+)?pull\s*request|create\s+(?:a\s+)?branch)\b|\b(?:yarat|yoz|tahrir|o['’]?zgartir|yangila|o['’]?chir|nomini\s+o['’]?zgartir|push|commit|merge|fork|pr\s+och|branch\s+yarat)(?:ish|ishni|ib|ing|aman|amiz|moq)?\b)/i.test(intent);
+}
+
+function requestsGitHubDiscovery(text: string): boolean {
+  const intent = originalUserIntent(text);
+  return /(?:\b(?:find|discover|search|trending|popular|top|best)\b[^\n]{0,160}\b(?:github|repo|repository|mcp)\b|\b(?:github|repo|repository|mcp)\b[^\n]{0,160}\b(?:find|discover|search|trending|popular|top|best)\b|\b(?:topib\s+ber|qidirib\s+ber|trend(?:da|dagi)?|mashhur|eng\s+ko['’]?p\s+ishlatiladigan)\b[^\n]{0,160}\b(?:repo|repository|github)\b)/i.test(intent);
+}
+
 function explicitlyNeedsExternalWeb(text: string): boolean {
   const intent = originalUserIntent(text);
   return /(?:\bweb\s*search\b|\binternet(?:dan|da)?\b|\bweb(?:dan|da)?\b|\bgoogle(?:dan|da)?\b|\bsearch\s+the\s+web\b|\bexternal\s+research\b|\brelease\s+notes?\b|\bchangelog\b|\bCVE-\d{4}-\d+\b|\bsecurity\s+(?:audit|advis(?:ory|ories))\b|\bvulnerab(?:ility|ilities)\b|\blatest\s+(?:versions?|releases?|documentation|docs?|news|prices?|dependenc(?:y|ies))\b|\bcurrent\s+(?:versions?|releases?|documentation|docs?|news|prices?|dependenc(?:y|ies))\b|\beng\s+yangi\s+(?:versiya(?:lar(?:ini|i)?|si)?|reliz(?:lar)?|hujjat(?:lar)?|yangilik(?:lar)?|narx(?:lar)?)\b|\bso['‘’]?nggi\s+(?:versiya(?:lar(?:ini|i)?|si)?|reliz(?:lar)?|hujjat(?:lar)?|yangilik(?:lar)?|narx(?:lar)?)\b|\bhozirgi\s+(?:versiya(?:lar)?|hujjat(?:lar)?|narx(?:lar)?)\b|\bjoriy\s+(?:versiya(?:lar)?|hujjat(?:lar)?|narx(?:lar)?|holat)\b|\bmarket\s+trend\b|\bnews\b|\byangilik(?:lar)?\b|\bnarx(?:lar)?\b|\bprice(?:s)?\b|\bинтернет\b|\bвеб\s*поиск\b|\bновост(?:и|ей)?\b|\bдокументац(?:ия|ии)\b|\bуязвим(?:ость|ости)\b|\bпоследн(?:яя|ий|ие)\s+(?:верси|релиз|новост))/i.test(intent);
@@ -526,9 +537,9 @@ const IMPLEMENTATION_GITHUB_TOOLS = new Set([
   "github_merge_branch",
 ]);
 
-const ALL_GITHUB_EXECUTION_TOOLS = new Set<string>([
-  ...GITHUB_TOOL_NAMES,
-  GITHUB_ATOMIC_TOOL_NAME,
+const AUTHENTICATED_GITHUB_TOOLS = new Set<string>([
+  "github_list_repositories",
+  ...IMPLEMENTATION_GITHUB_TOOLS,
 ]);
 
 function effectiveToolsForRequest(
@@ -537,21 +548,12 @@ function effectiveToolsForRequest(
   githubConnected: boolean,
 ): Set<string> {
   const enabled = new Set(baseEnabled);
-  const githubTargeted = targetsGitHubRepository(userText);
-  const githubWorkRequested = requestsGitHubWork(userText);
 
-  // GitHub repository state must come from the user's native connection, not
-  // from public-web fallbacks. This also avoids misleading 404s for private repos.
-  if (githubWorkRequested && !explicitlyNeedsExternalWeb(userText)) {
-    enabled.delete("web_search");
-    enabled.delete("web_fetch");
-  }
-
-  // When GitHub is disconnected, do not expose github_* execution tools for a
-  // GitHub-targeted turn. The model receives explicit connection instructions
-  // in the system prompt and should guide the user to connect first.
-  if (githubWorkRequested && !githubConnected) {
-    for (const name of ALL_GITHUB_EXECUTION_TOOLS) enabled.delete(name);
+  // Public GitHub reading and repository discovery must stay available even
+  // without an account connection. We only hide tools that require account
+  // authority when the user is actually asking for a mutation.
+  if (!githubConnected && requestsGitHubMutation(userText)) {
+    for (const name of AUTHENTICATED_GITHUB_TOOLS) enabled.delete(name);
   }
 
   if (requestsPlanningBeforeImplementation(userText)) {
@@ -690,18 +692,6 @@ async function dispatchTool(
   ctx: ToolContext,
 ): Promise<{ call: PendingCall; args: Record<string, unknown>; outcome: ToolOutcome }> {
   const args = parseArgs(call.args);
-  if (ctx.githubConnected && webLookupTargetsGitHub(call.name, args)) {
-    return {
-      call,
-      args,
-      outcome: {
-        ok: false,
-        text: "Public web lookup skipped: GitHub is connected. Read repository contents/state with native github_* tools or the supplied repository context instead.",
-        data: { skipped: true, reason: "native_github_available" },
-      },
-    };
-  }
-
   const mutationKey = DEDUPED_MUTATION_TOOLS.has(call.name)
     ? `${call.name}:${stableJson(args)}`
     : null;
