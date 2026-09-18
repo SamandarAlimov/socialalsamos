@@ -363,17 +363,71 @@ function originalUserIntent(text: string): string {
   return text.slice(0, end).trim();
 }
 
+const NON_REPO_SLASH_TERMS = new Set([
+  "ui/ux",
+  "ci/cd",
+  "api/sdk",
+  "tcp/ip",
+  "http/https",
+  "ssr/csr",
+  "csr/ssr",
+  "b2b/b2c",
+  "b2c/b2b",
+  "qa/qc",
+]);
+
+function hasLikelyBareRepoRef(text: string): boolean {
+  const re = /\b([A-Za-z0-9][A-Za-z0-9_.-]{0,38})\/([A-Za-z0-9][A-Za-z0-9_.-]{0,99})\b/g;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(text)) !== null) {
+    const owner = match[1];
+    const repo = match[2];
+    const candidate = `${owner}/${repo}`;
+    if (NON_REPO_SLASH_TERMS.has(candidate.toLowerCase())) continue;
+    if (/^\d+\/\d+$/.test(candidate)) continue;
+    if (
+      owner.length <= 4 &&
+      repo.length <= 4 &&
+      /^[A-Z0-9]+$/.test(owner) &&
+      /^[A-Z0-9]+$/.test(repo)
+    ) continue;
+    return true;
+  }
+  return false;
+}
+
 function targetsGitHubRepository(text: string): boolean {
   const intent = originalUserIntent(text);
   if (/https?:\/\/(?:www\.)?github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+/i.test(intent)) return true;
-  if (!/\b(?:github|repo|repository|repozitor|репозитор)/i.test(intent)) return false;
-  return /\b[A-Za-z0-9][A-Za-z0-9_.-]{0,38}\/[A-Za-z0-9][A-Za-z0-9_.-]{0,99}\b/.test(intent);
+
+  const mentionsGithub = /\bgithub\b/i.test(intent);
+  const mentionsRepo = /\b(?:repo|repository|repozitor|repozitoriy|репозитор)/i.test(intent);
+  if (mentionsGithub && mentionsRepo) return true;
+  if (!mentionsGithub && !mentionsRepo) return false;
+
+  return hasLikelyBareRepoRef(intent);
 }
 
 function explicitlyNeedsExternalWeb(text: string): boolean {
   const intent = originalUserIntent(text);
   return /(?:\bweb\s*search\b|\binternet(?:dan|da)?\b|\bweb(?:dan|da)?\b|\bgoogle(?:dan|da)?\b|\bsearch\s+the\s+web\b|\bexternal\s+research\b|\brelease\s+notes?\b|\bchangelog\b|\bCVE-\d{4}-\d+\b|\bsecurity\s+(?:audit|advis(?:ory|ories))\b|\bvulnerab(?:ility|ilities)\b|\blatest\s+(?:versions?|releases?|documentation|docs?|news|prices?|dependenc(?:y|ies))\b|\bcurrent\s+(?:versions?|releases?|documentation|docs?|news|prices?|dependenc(?:y|ies))\b|\beng\s+yangi\s+(?:versiya(?:lar(?:ini|i)?|si)?|reliz(?:lar)?|hujjat(?:lar)?|yangilik(?:lar)?|narx(?:lar)?)\b|\bso['‘’]?nggi\s+(?:versiya(?:lar(?:ini|i)?|si)?|reliz(?:lar)?|hujjat(?:lar)?|yangilik(?:lar)?|narx(?:lar)?)\b|\bhozirgi\s+(?:versiya(?:lar)?|hujjat(?:lar)?|narx(?:lar)?)\b|\bjoriy\s+(?:versiya(?:lar)?|hujjat(?:lar)?|narx(?:lar)?|holat)\b|\bmarket\s+trend\b|\bnews\b|\byangilik(?:lar)?\b|\bnarx(?:lar)?\b|\bprice(?:s)?\b|\bинтернет\b|\bвеб\s*поиск\b|\bновост(?:и|ей)?\b|\bдокументац(?:ия|ии)\b|\bуязвим(?:ость|ости)\b|\bпоследн(?:яя|ий|ие)\s+(?:верси|релиз|новост))/i.test(intent);
 }
+
+function requestsPlanningBeforeImplementation(text: string): boolean {
+  const intent = originalUserIntent(text);
+  return /(?:kod\s+yoz(?:ish|ishni)?dan\s+oldin|koddan\s+oldin|before\s+(?:writing\s+)?code|before\s+implementation|birinchi\s+navbatda[^.!?\n]{0,180}(?:ui\/ux|design|reja|muhokama|kelish)|avval(?:iga)?[^.!?\n]{0,180}(?:ui\/ux|design|reja|muhokama|kelish)|(?:ui\/ux|design|reja|muhokama)[^.!?\n]{0,140}kelishib\s+ol)/i.test(intent);
+}
+
+const IMPLEMENTATION_GITHUB_TOOLS = new Set([
+  GITHUB_ATOMIC_TOOL_NAME,
+  "github_create_branch",
+  "github_write_file",
+  "github_apply_patch",
+  "github_delete_file",
+  "github_open_pull_request",
+  "github_merge_pull_request",
+  "github_merge_branch",
+]);
 
 function effectiveToolsForRequest(
   baseEnabled: Set<string>,
@@ -385,6 +439,11 @@ function effectiveToolsForRequest(
     enabled.delete("web_search");
     enabled.delete("web_fetch");
   }
+
+  if (requestsPlanningBeforeImplementation(userText)) {
+    for (const name of IMPLEMENTATION_GITHUB_TOOLS) enabled.delete(name);
+  }
+
   return enabled;
 }
 
