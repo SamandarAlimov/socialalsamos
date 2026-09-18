@@ -169,6 +169,7 @@ export default function AIPageV2() {
   const [toolGroups, setToolGroups] = useState<ToolGroupId[]>(initialPrefs.toolGroups);
   const [activeModel, setActiveModel] = useState<string | null>(null);
   const [showScrollToLatest, setShowScrollToLatest] = useState(false);
+  const [composerDockHeight, setComposerDockHeight] = useState(0);
   const [forwardedPost, setForwardedPost] = useState<{
     id: string;
     content?: string;
@@ -177,6 +178,7 @@ export default function AIPageV2() {
   } | null>(null);
 
   const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const composerDockRef = useRef<HTMLDivElement>(null);
   const autoFollowRef = useRef(true);
   const abortRef = useRef<AbortController | null>(null);
   const mediaPollsRef = useRef<Map<string, boolean>>(new Map());
@@ -576,6 +578,30 @@ export default function AIPageV2() {
     viewport.addEventListener('scroll', onScroll, { passive: true });
     return () => viewport.removeEventListener('scroll', onScroll);
   }, []);
+
+  useEffect(() => {
+    if (messages.length === 0) {
+      setComposerDockHeight(0);
+      return;
+    }
+
+    const dock = composerDockRef.current;
+    if (!dock) return;
+
+    const syncHeight = () => {
+      setComposerDockHeight(Math.ceil(dock.getBoundingClientRect().height));
+    };
+
+    syncHeight();
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', syncHeight);
+      return () => window.removeEventListener('resize', syncHeight);
+    }
+
+    const observer = new ResizeObserver(syncHeight);
+    observer.observe(dock);
+    return () => observer.disconnect();
+  }, [messages.length]);
 
   useEffect(() => {
     if (!autoFollowRef.current) return;
@@ -1397,40 +1423,55 @@ export default function AIPageV2() {
               </div>
             </div>
           ) : (
-            <div className="mx-auto w-full min-w-0 max-w-4xl overflow-x-hidden px-2.5 py-3 sm:px-5 sm:py-6">
-              {messages.map((message, index) => (
-                <AIMessageBubble
-                  key={message.id}
-                  message={message}
-                  isStreaming={isStreaming && index === messages.length - 1 && message.role === 'assistant'}
-                  onRegenerate={message.role === 'assistant' ? () => regenerateFrom(index) : undefined}
-                  onEdit={message.role === 'user' && !isStreaming ? (content) => void editUserMessage(index, content) : undefined}
-                />
-              ))}
-              {isStreaming && messages[messages.length - 1]?.role === 'user' && <AIThinkingBubble label={statusLabel} />}
+            <div
+              className="w-full min-w-0 overflow-x-hidden px-2 pt-3 sm:px-4 sm:pt-6"
+              style={{ paddingBottom: `${Math.max(composerDockHeight + 18, 132)}px` }}
+            >
+              <div className="mx-auto w-full min-w-0 max-w-3xl">
+                {messages.map((message, index) => (
+                  <AIMessageBubble
+                    key={message.id}
+                    message={message}
+                    isStreaming={isStreaming && index === messages.length - 1 && message.role === 'assistant'}
+                    onRegenerate={message.role === 'assistant' ? () => regenerateFrom(index) : undefined}
+                    onEdit={message.role === 'user' && !isStreaming ? (content) => void editUserMessage(index, content) : undefined}
+                  />
+                ))}
+                {isStreaming && messages[messages.length - 1]?.role === 'user' && <AIThinkingBubble label={statusLabel} />}
+              </div>
             </div>
           )}
         </ScrollArea>
 
-        {messages.length > 0 && showScrollToLatest && (
-          <div className="pointer-events-none z-30 flex h-0 shrink-0 justify-center">
-            <Button
-              type="button"
-              size="sm"
-              variant="secondary"
-              onClick={() => scrollToLatest()}
-              className="pointer-events-auto h-9 -translate-y-12 gap-1.5 rounded-full border border-border/70 bg-background/95 px-3 text-xs shadow-lg backdrop-blur"
-              aria-label="Eng yangi xabarga tushish"
-            >
-              <ArrowDown className="h-4 w-4" />
-              <span className="hidden sm:inline">Eng yangi xabar</span>
-            </Button>
-          </div>
-        )}
-
         {messages.length > 0 && (
-          <div className="shrink-0 bg-gradient-to-t from-background via-background to-background/0 pt-1">
-            {composer}
+          <div
+            ref={composerDockRef}
+            className="pointer-events-none absolute inset-x-0 bottom-0 z-30 pt-10 sm:pt-12"
+          >
+            <div
+              aria-hidden="true"
+              className="absolute inset-0 bg-gradient-to-t from-background via-background/80 to-background/0 backdrop-blur-[2px]"
+            />
+
+            {showScrollToLatest && (
+              <div className="relative z-10 flex justify-center pb-1.5">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => scrollToLatest()}
+                  className="pointer-events-auto h-9 gap-1.5 rounded-full border border-border/70 bg-background/90 px-3 text-xs shadow-lg backdrop-blur-xl"
+                  aria-label="Eng yangi xabarga tushish"
+                >
+                  <ArrowDown className="h-4 w-4" />
+                  <span className="hidden sm:inline">Eng yangi xabar</span>
+                </Button>
+              </div>
+            )}
+
+            <div className="pointer-events-auto relative z-10">
+              {composer}
+            </div>
           </div>
         )}
       </div>
