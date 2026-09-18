@@ -1392,7 +1392,7 @@ export default function AIPageV2() {
               size="sm"
               variant="secondary"
               onClick={() => scrollToLatest()}
-              className="pointer-events-auto h-9 -translate-y-[calc(100%+0.5rem)] gap-1.5 rounded-full border border-border/70 bg-background/95 px-3 text-xs shadow-lg backdrop-blur"
+              className="pointer-events-auto h-9 -translate-y-12 gap-1.5 rounded-full border border-border/70 bg-background/95 px-3 text-xs shadow-lg backdrop-blur"
               aria-label="Eng yangi xabarga tushish"
             >
               <ArrowDown className="h-4 w-4" />
