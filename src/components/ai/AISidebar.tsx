@@ -16,7 +16,7 @@ import {
 } from '@/lib/ai/projectsStore';
 import {
   buildAIWorkspaceHref,
-  parseAIWorkspaceSearch,
+  parseAIWorkspaceLocation,
 } from '@/lib/ai/workspaceUrl';
 import { AISidebar as AISidebarV2 } from './AISidebarV2';
 import type { AIConversation, AIProject } from './types';
@@ -64,7 +64,7 @@ export function AISidebar(props: Props) {
 
   useEffect(() => {
     refreshLocalProjects();
-  }, [user?.id, location.search]);
+  }, [user?.id, location.pathname, location.search]);
 
   /**
    * One-time migration for legacy browser-only projects. The same helper is
@@ -102,7 +102,7 @@ export function AISidebar(props: Props) {
     if (!useLocalProjects || !user?.id) return null;
     const active = readActiveLocalProject();
     return active?.userId === user.id ? active.project.id : null;
-  }, [localProjects, location.search, useLocalProjects, user?.id]);
+  }, [localProjects, location.pathname, location.search, useLocalProjects, user?.id]);
 
   const conversations = useMemo(() => {
     if (!useLocalProjects || !user?.id) return props.conversations;
@@ -112,17 +112,18 @@ export function AISidebar(props: Props) {
     }));
   }, [props.conversations, useLocalProjects, user?.id]);
 
-  // `/ai?project=<id>` is the durable project root. Do not blank the workspace
+  // `/ai/projects/<project-id>` is the durable project root. Do not blank the workspace
   // first when a chat deep link is present; the chat hydration effect below owns
   // that state transition.
   useEffect(() => {
     if (useLocalProjects || !props.onSelectProject || props.loading) return;
-    const route = parseAIWorkspaceSearch(location.search);
+    const route = parseAIWorkspaceLocation(location.pathname, location.search);
     if (route.conversationId) return;
     if (!route.projectId || route.projectId === props.activeProjectId) return;
     if (!props.projects.some((project) => project.id === route.projectId)) return;
     props.onSelectProject(route.projectId);
   }, [
+    location.pathname,
     location.search,
     props.activeProjectId,
     props.loading,
@@ -135,7 +136,7 @@ export function AISidebar(props: Props) {
   // RLS-filtered conversation list, then canonicalize project+chat together.
   useEffect(() => {
     if (props.loading) return;
-    const route = parseAIWorkspaceSearch(location.search);
+    const route = parseAIWorkspaceLocation(location.pathname, location.search);
     if (!route.conversationId) return;
 
     const conversation = conversations.find((item) => item.id === route.conversationId);
@@ -172,6 +173,7 @@ export function AISidebar(props: Props) {
   }, [
     conversations,
     localProjects,
+    location.pathname,
     location.search,
     props.activeId,
     props.loading,
@@ -195,7 +197,7 @@ export function AISidebar(props: Props) {
     }
 
     if (previousActiveId) {
-      const route = parseAIWorkspaceSearch(location.search);
+      const route = parseAIWorkspaceLocation(location.pathname, location.search);
       if (route.conversationId === previousActiveId) {
         const projectId = useLocalProjects ? localActiveProjectId : props.activeProjectId;
         syncWorkspaceQuery(projectId || null, null, true);
@@ -203,6 +205,7 @@ export function AISidebar(props: Props) {
     }
   }, [
     localActiveProjectId,
+    location.pathname,
     location.search,
     props.activeId,
     props.activeProjectId,
@@ -213,7 +216,7 @@ export function AISidebar(props: Props) {
   // but update its project scope instead of creating a second address.
   useEffect(() => {
     if (!props.activeId) return;
-    const route = parseAIWorkspaceSearch(location.search);
+    const route = parseAIWorkspaceLocation(location.pathname, location.search);
     if (route.conversationId !== props.activeId) return;
     const projectId = useLocalProjects ? localActiveProjectId : props.activeProjectId;
     if (route.projectId !== (projectId || null)) {
@@ -221,6 +224,7 @@ export function AISidebar(props: Props) {
     }
   }, [
     localActiveProjectId,
+    location.pathname,
     location.search,
     props.activeId,
     props.activeProjectId,
@@ -297,7 +301,7 @@ export function AISidebar(props: Props) {
 
   const deleteBackend = async (projectId: string) => {
     await props.onDeleteProject?.(projectId);
-    const route = parseAIWorkspaceSearch(location.search);
+    const route = parseAIWorkspaceLocation(location.pathname, location.search);
     if (route.projectId === projectId) syncWorkspaceQuery(null, null, true);
   };
 

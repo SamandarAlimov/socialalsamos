@@ -40,9 +40,10 @@ import { extractArtifacts } from '@/lib/aiArtifacts';
 import { generateConversationTitle, streamAgent } from '@/lib/ai/agentClient';
 import { buildRepoContext, detectRepoRefs, githubReady, githubRepoUrl } from '@/lib/ai/githubContext';
 import { buildBrainContext } from '@/lib/ai/brain';
+import { formatAIListDate } from '@/lib/ai/dateFormat';
 import { captureMemories, syncMemories } from '@/lib/ai/memory';
 import { toolLabel, type AIMode, type ModelId, type ToolGroupId } from '@/lib/ai/capabilities';
-import { buildAIWorkspaceHref, parseAIWorkspaceSearch } from '@/lib/ai/workspaceUrl';
+import { buildAIWorkspaceHref, parseAIWorkspaceLocation } from '@/lib/ai/workspaceUrl';
 
 const PIN_KEY = 'alsamos.ai.pinned';
 const TITLE_KEY = 'alsamos.ai.titles';
@@ -165,11 +166,7 @@ function conversationPreview(conversation: AIConversation): string {
 }
 
 function conversationDate(value: Date): string {
-  try {
-    return new Intl.DateTimeFormat('uz-UZ', { day: 'numeric', month: 'short' }).format(value);
-  } catch {
-    return value.toLocaleDateString();
-  }
+  return formatAIListDate(value);
 }
 
 export default function AIPageV2() {
@@ -268,7 +265,7 @@ export default function AIPageV2() {
   useEffect(() => {
     if (historyLoading) return;
 
-    const route = parseAIWorkspaceSearch(location.search);
+    const route = parseAIWorkspaceLocation(location.pathname, location.search);
     const linkedConversation = route.conversationId
       ? conversations.find((conversation) => conversation.id === route.conversationId) ?? null
       : null;
@@ -299,6 +296,7 @@ export default function AIPageV2() {
   }, [
     conversations,
     historyLoading,
+    location.pathname,
     location.search,
     projects,
     projectsAvailable,
