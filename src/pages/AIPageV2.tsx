@@ -235,9 +235,7 @@ export default function AIPageV2() {
       setActiveProjectId(linkedProjectId);
     }
   }, [
-    activeProjectId,
     conversations,
-    currentConversationId,
     historyLoading,
     location.search,
     projects,
