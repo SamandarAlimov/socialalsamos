@@ -98,7 +98,7 @@ export function AppSidebar({ collapsed, onCollapsedChange }: AppSidebarProps) {
             >
               <div className="relative">
                 <item.icon
-                  className={cn('h-5 w-5 flex-shrink-0 transition-transform duration-200', !isActive && 'group-hover:scale-110')}
+                  className={cn('h-[22px] w-[22px] flex-shrink-0 transition-transform duration-200', !isActive && 'group-hover:scale-110')}
                   strokeWidth={isActive ? 2.4 : 1.9}
                 />
                 <AnimatePresence>
@@ -142,12 +142,12 @@ export function AppSidebar({ collapsed, onCollapsedChange }: AppSidebarProps) {
             )}
           >
             {profile?.avatar_url ? (
-              <Avatar className={cn('h-5 w-5 flex-shrink-0', profileActive && 'ring-2 ring-foreground/20 ring-offset-1 ring-offset-sidebar')}>
+              <Avatar className={cn('h-[22px] w-[22px] flex-shrink-0', profileActive && 'ring-2 ring-foreground/20 ring-offset-1 ring-offset-sidebar')}>
                 <AvatarImage src={profile.avatar_url} alt={profile.display_name || 'Profile'} />
                 <AvatarFallback><User className="h-3 w-3" /></AvatarFallback>
               </Avatar>
             ) : (
-              <User className="h-5 w-5 flex-shrink-0" />
+              <User className="h-[22px] w-[22px] flex-shrink-0" />
             )}
             {!collapsed && <span className="text-sm">{t('nav.profile')}</span>}
           </NavLink>
@@ -186,7 +186,7 @@ export function AppSidebar({ collapsed, onCollapsedChange }: AppSidebarProps) {
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon" className="w-full h-10 rounded-xl" aria-label="Qo‘shimcha menyu">
-                <MoreHorizontal className="h-5 w-5" />
+                <MoreHorizontal className="h-[22px] w-[22px]" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="center" side="right" className="w-56">
