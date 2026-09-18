@@ -1207,6 +1207,104 @@ async function synthesizeFinal(
   return String(json.choices?.[0]?.message?.content ?? "").trim() || `Agent vazifasi ${reason} sabab to'xtadi.`;
 }
 
+async function streamWorkerModelRound(
+  admin: SupabaseClient,
+  runId: string,
+  lovableKey: string,
+  model: string,
+  conversation: ChatMessage[],
+  specs: ToolSpec[],
+): Promise<{ assistantText: string; calls: PendingCall[] }> {
+  const { response, provider } = await aiFetch({
+    lovableKey: lovableKey || undefined,
+    body: {
+      model,
+      messages: conversation,
+      stream: true,
+      ...(specs.length ? { tools: specs, tool_choice: "auto" } : {}),
+    },
+  });
+
+  if (!response.ok || !response.body) {
+    const detail = await response.text().catch(() => "");
+    throw new Error(`AI provider ${provider} HTTP ${response.status}: ${detail.slice(0, 500)}`);
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let assistantText = "";
+  let pendingText = "";
+  let lastTextEmitAt = Date.now();
+  const pendingCalls = new Map<number, PendingCall>();
+
+  const flushText = async (force = false) => {
+    if (!pendingText) return;
+    const elapsed = Date.now() - lastTextEmitAt;
+    const hasNaturalBoundary = /(?:\n|[.!?]\s)$/.test(pendingText);
+    if (!force && pendingText.length < 96 && elapsed < 140 && !hasNaturalBoundary) return;
+
+    const text = pendingText;
+    pendingText = "";
+    lastTextEmitAt = Date.now();
+    await emit(admin, runId, "delta", { text });
+  };
+
+  const consumeLine = async (line: string) => {
+    const normalized = line.endsWith("\r") ? line.slice(0, -1) : line;
+    if (!normalized.startsWith("data: ")) return;
+    const raw = normalized.slice(6).trim();
+    if (!raw || raw === "[DONE]") return;
+
+    let parsed: any;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      return;
+    }
+
+    const delta = parsed.choices?.[0]?.delta ?? {};
+    if (typeof delta.content === "string" && delta.content) {
+      assistantText += delta.content;
+      pendingText += delta.content;
+      await flushText(false);
+    }
+
+    for (const tc of delta.tool_calls ?? []) {
+      const index = Number(tc.index ?? 0);
+      const slot = pendingCalls.get(index) ?? { id: "", name: "", args: "" };
+      if (tc.id) slot.id = tc.id;
+      if (tc.function?.name) slot.name += tc.function.name;
+      if (tc.function?.arguments) slot.args += tc.function.arguments;
+      pendingCalls.set(index, slot);
+    }
+  };
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    let newline: number;
+    while ((newline = buffer.indexOf("\n")) !== -1) {
+      const line = buffer.slice(0, newline);
+      buffer = buffer.slice(newline + 1);
+      await consumeLine(line);
+    }
+  }
+
+  buffer += decoder.decode();
+  if (buffer.trim()) await consumeLine(buffer);
+  await flushText(true);
+
+  const calls = [...pendingCalls.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([, call]) => call)
+    .filter((call) => call.name);
+
+  return { assistantText, calls };
+}
+
 async function processRunChunk(admin: SupabaseClient, claimed: AgentRun): Promise<RunStatus> {
   const chunkStarted = Date.now();
   let run = claimed;
@@ -1266,34 +1364,18 @@ async function processRunChunk(admin: SupabaseClient, claimed: AgentRun): Promis
       return "queued";
     }
 
-    const { response, provider } = await aiFetch({
-      lovableKey: lovableKey || undefined,
-      body: {
-        model: run.resolved_model || MODEL_ROUTES.balanced,
-        messages: conversation,
-        stream: false,
-        ...(specs.length ? { tools: specs, tool_choice: "auto" } : {}),
-      },
-    });
-    if (!response.ok) {
-      const detail = await response.text().catch(() => "");
-      throw new Error(`AI provider ${provider} HTTP ${response.status}: ${detail.slice(0, 500)}`);
-    }
-    const json = await response.json();
-    const choice = json.choices?.[0];
-    const message = choice?.message ?? {};
-    const assistantText = typeof message.content === "string" ? message.content : "";
-    const calls: PendingCall[] = Array.isArray(message.tool_calls)
-      ? message.tool_calls.map((c: any) => ({
-          id: String(c.id || crypto.randomUUID()),
-          name: String(c.function?.name || ""),
-          args: typeof c.function?.arguments === "string" ? c.function.arguments : JSON.stringify(c.function?.arguments ?? {}),
-        })).filter((c: PendingCall) => c.name)
-      : [];
+    const { assistantText, calls } = await streamWorkerModelRound(
+      admin,
+      run.id,
+      lovableKey,
+      run.resolved_model || MODEL_ROUTES.balanced,
+      conversation,
+      specs,
+    );
 
     if (!calls.length) {
       const finalText = assistantText.trim() || "Vazifa yakunlandi.";
-      if (finalText) await emit(admin, run.id, "delta", { text: finalText });
+      if (!assistantText.trim()) await emit(admin, run.id, "delta", { text: finalText });
       await admin.from("ai_agent_runs").update({ status: "completed", final_text: finalText, checkpoint: durableCheckpoint([...conversation, { role: "assistant", content: finalText }]), lease_until: null, completed_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", run.id);
       await finalizeConversation(admin, run, finalText);
       return "completed";
@@ -1306,7 +1388,6 @@ async function processRunChunk(admin: SupabaseClient, claimed: AgentRun): Promis
       content: assistantText || null,
       tool_calls: selectedCalls.map((c) => ({ id: c.id, type: "function", function: { name: c.name, arguments: c.args || "{}" } })),
     });
-    if (assistantText.trim()) await emit(admin, run.id, "delta", { text: assistantText });
 
     const results = await executeCalls(
       selectedCalls,
