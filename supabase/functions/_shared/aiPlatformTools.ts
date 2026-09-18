@@ -10,6 +10,7 @@ const str = (description: string) => ({ type: "string", description });
 const num = (description: string) => ({ type: "number", description });
 
 export const PLATFORM_TOOL_NAMES = [
+  "search_alsamos_platform",
   "my_search_insights",
   "my_payment_history",
   "my_marketplace_orders",
@@ -19,6 +20,28 @@ export const PLATFORM_TOOL_NAMES = [
 ] as const;
 
 export const PLATFORM_TOOL_SPECS: Record<string, ToolSpec> = {
+  search_alsamos_platform: {
+    type: "function",
+    function: {
+      name: "search_alsamos_platform",
+      description:
+        "Primary first-party Alsamos search across Marketplace stores/products, public posts/profiles and Alsamos Map places. Use this BEFORE web_search when the user asks about an entity, product, store, post, person or location that may exist inside Alsamos. This is platform search, not the public internet. For the user's own saved/favorite places use my_saved_places instead.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: str("What to find inside Alsamos, e.g. 'Alsamos Store', 'HP Victus 15', a post topic, username or place name."),
+          scope: {
+            type: "string",
+            enum: ["all", "marketplace", "posts", "places", "people"],
+            description: "Optional area to search. Default all.",
+          },
+          limit: num("Maximum matches per result type (1-12, default 6)."),
+        },
+        required: ["query"],
+        additionalProperties: false,
+      },
+    },
+  },
   my_search_insights: {
     type: "function",
     function: {
@@ -221,6 +244,341 @@ async function requirePrivateAccess(ctx: ToolContext): Promise<ToolOutcome | nul
   } catch (error) {
     return fail(error instanceof Error ? error.message : String(error));
   }
+}
+
+
+function publicSearchText(value: unknown): string {
+  return String(value ?? "")
+    .trim()
+    .replace(/[%,()]/g, " ")
+    .replace(/\s+/g, " ")
+    .slice(0, 120);
+}
+
+function compactPlatformText(value: unknown, max = 600): string | null {
+  const text = typeof value === "string" ? value.trim().replace(/\s+/g, " ") : "";
+  if (!text) return null;
+  return text.length > max ? `${text.slice(0, Math.max(1, max - 1)).trimEnd()}…` : text;
+}
+
+function finiteNumber(value: unknown): number | null {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function alsamosMapPath(
+  latitude: unknown,
+  longitude: unknown,
+  name: unknown,
+): string | null {
+  const lat = finiteNumber(latitude);
+  const lng = finiteNumber(longitude);
+  if (lat === null || lng === null) return null;
+  return `/map?destLat=${encodeURIComponent(String(lat))}&destLng=${encodeURIComponent(String(lng))}&destName=${encodeURIComponent(String(name || "Joy"))}`;
+}
+
+async function searchAlsamosPlatform(
+  args: Record<string, unknown>,
+  ctx: ToolContext,
+): Promise<ToolOutcome> {
+  const queryText = publicSearchText(args.query);
+  if (!queryText) return fail("query talab qilinadi.");
+
+  const requestedScope = String(args.scope ?? "all");
+  const scope = ["all", "marketplace", "posts", "places", "people"].includes(requestedScope)
+    ? requestedScope
+    : "all";
+  const limit = Math.round(clamp(args.limit, 1, 12, 6));
+  const includes = (target: string) => scope === "all" || scope === target;
+
+  const result: {
+    query: string;
+    scope: string;
+    stores: unknown[];
+    products: unknown[];
+    posts: unknown[];
+    places: unknown[];
+    people: unknown[];
+  } = {
+    query: queryText,
+    scope,
+    stores: [],
+    products: [],
+    posts: [],
+    places: [],
+    people: [],
+  };
+
+  if (includes("marketplace")) {
+    const [sellerSearch, productSearch] = await Promise.all([
+      ctx.admin
+        .from("sellers")
+        .select("id, user_id, business_name, store_name, business_type, description, logo_url, location, is_verified, rating, total_reviews, total_sales, status, created_at")
+        .eq("status", "active")
+        .or(
+          `business_name.ilike.%${queryText}%,store_name.ilike.%${queryText}%,description.ilike.%${queryText}%,location.ilike.%${queryText}%`,
+        )
+        .order("created_at", { ascending: false })
+        .limit(limit),
+      ctx.admin
+        .from("products")
+        .select("id, seller_id, title, description, price, compare_at_price, currency, location, latitude, longitude, status, is_featured, likes_count, views_count, created_at, images")
+        .eq("status", "active")
+        .or(
+          `title.ilike.%${queryText}%,description.ilike.%${queryText}%,location.ilike.%${queryText}%`,
+        )
+        .order("created_at", { ascending: false })
+        .limit(limit),
+    ]);
+
+    if (sellerSearch.error) return fail(sellerSearch.error.message);
+    if (productSearch.error) return fail(productSearch.error.message);
+
+    const sellerRows = [...(sellerSearch.data ?? [])] as Array<Record<string, any>>;
+    const productMap = new Map<string, Record<string, any>>();
+    for (const product of productSearch.data ?? []) productMap.set(String(product.id), product as Record<string, any>);
+
+    const initialSellerIds = [...new Set(sellerRows.map((seller) => String(seller.id)).filter(Boolean))];
+    if (initialSellerIds.length) {
+      const sellerProducts = await ctx.admin
+        .from("products")
+        .select("id, seller_id, title, description, price, compare_at_price, currency, location, latitude, longitude, status, is_featured, likes_count, views_count, created_at, images")
+        .eq("status", "active")
+        .in("seller_id", initialSellerIds)
+        .order("created_at", { ascending: false })
+        .limit(Math.max(limit, limit * 2));
+      if (sellerProducts.error) return fail(sellerProducts.error.message);
+      for (const product of sellerProducts.data ?? []) productMap.set(String(product.id), product as Record<string, any>);
+    }
+
+    const allProducts = [...productMap.values()];
+    const productSellerIds = [...new Set(allProducts.map((product) => String(product.seller_id)).filter(Boolean))];
+    const knownSellerIds = new Set(sellerRows.map((seller) => String(seller.id)));
+    const missingSellerIds = productSellerIds.filter((sellerId) => !knownSellerIds.has(sellerId));
+    if (missingSellerIds.length) {
+      const relatedSellers = await ctx.admin
+        .from("sellers")
+        .select("id, user_id, business_name, store_name, business_type, description, logo_url, location, is_verified, rating, total_reviews, total_sales, status, created_at")
+        .in("id", missingSellerIds)
+        .eq("status", "active");
+      if (relatedSellers.error) return fail(relatedSellers.error.message);
+      sellerRows.push(...((relatedSellers.data ?? []) as Array<Record<string, any>>));
+    }
+
+    const sellerMap = new Map(sellerRows.map((seller) => [String(seller.id), seller]));
+    const productRows = allProducts.slice(0, Math.max(limit, initialSellerIds.length ? limit * 2 : limit));
+
+    result.products = productRows.map((product) => {
+      const seller = sellerMap.get(String(product.seller_id));
+      const displayName = seller?.store_name || seller?.business_name || null;
+      const latitude = finiteNumber(product.latitude);
+      const longitude = finiteNumber(product.longitude);
+      return {
+        id: product.id,
+        title: product.title,
+        description: compactPlatformText(product.description),
+        price: product.price === null || product.price === undefined ? null : Number(product.price),
+        compare_at_price:
+          product.compare_at_price === null || product.compare_at_price === undefined
+            ? null
+            : Number(product.compare_at_price),
+        currency: product.currency,
+        location: product.location,
+        latitude,
+        longitude,
+        is_featured: product.is_featured,
+        likes_count: product.likes_count,
+        views_count: product.views_count,
+        created_at: product.created_at,
+        image_url: Array.isArray(product.images) ? product.images.find((value: unknown) => typeof value === "string") ?? null : null,
+        seller: seller
+          ? {
+              id: seller.id,
+              name: displayName,
+              is_verified: seller.is_verified,
+            }
+          : null,
+        product_path: `/marketplace/product/${encodeURIComponent(String(product.id))}`,
+        store_path: product.seller_id
+          ? `/marketplace/store/${encodeURIComponent(String(product.seller_id))}`
+          : null,
+        map_path: alsamosMapPath(latitude, longitude, product.title || displayName || product.location),
+      };
+    });
+
+    const productsBySeller = new Map<string, Array<Record<string, any>>>();
+    for (const product of allProducts) {
+      const key = String(product.seller_id || "");
+      if (!key) continue;
+      const rows = productsBySeller.get(key) ?? [];
+      rows.push(product);
+      productsBySeller.set(key, rows);
+    }
+
+    result.stores = sellerRows.slice(0, limit).map((seller) => {
+      const sellerProducts = productsBySeller.get(String(seller.id)) ?? [];
+      const locationProduct = sellerProducts.find((product) =>
+        Boolean(product.location) ||
+        (finiteNumber(product.latitude) !== null && finiteNumber(product.longitude) !== null)
+      );
+      const location = compactPlatformText(seller.location, 240) || compactPlatformText(locationProduct?.location, 240);
+      const latitude = finiteNumber(locationProduct?.latitude);
+      const longitude = finiteNumber(locationProduct?.longitude);
+      const name = seller.store_name || seller.business_name || "Store";
+      return {
+        id: seller.id,
+        name,
+        business_name: seller.business_name,
+        business_type: seller.business_type,
+        description: compactPlatformText(seller.description),
+        logo_url: seller.logo_url,
+        is_verified: seller.is_verified,
+        rating: seller.rating === null || seller.rating === undefined ? null : Number(seller.rating),
+        total_reviews: seller.total_reviews,
+        total_sales: seller.total_sales,
+        location,
+        latitude,
+        longitude,
+        location_source: seller.location ? "seller" : locationProduct ? "active_product" : null,
+        store_path: `/marketplace/store/${encodeURIComponent(String(seller.id))}`,
+        map_path: alsamosMapPath(latitude, longitude, name),
+      };
+    });
+  }
+
+  if (includes("posts")) {
+    const posts = await ctx.admin
+      .from("posts")
+      .select("id, user_id, content, media_urls, thumbnail_url, likes_count, comments_count, views_count, created_at, location, location_name, location_address, location_lat, location_lng, source_title")
+      .eq("visibility", "public")
+      .eq("status", "published")
+      .or("is_hidden.eq.false,is_hidden.is.null")
+      .or(
+        `content.ilike.%${queryText}%,source_title.ilike.%${queryText}%,location.ilike.%${queryText}%,location_name.ilike.%${queryText}%,location_address.ilike.%${queryText}%`,
+      )
+      .order("created_at", { ascending: false })
+      .limit(limit);
+    if (posts.error) return fail(posts.error.message);
+
+    const authorIds = [...new Set((posts.data ?? []).map((post) => String(post.user_id)).filter(Boolean))];
+    const authorMap = new Map<string, Record<string, any>>();
+    if (authorIds.length) {
+      const authors = await ctx.admin
+        .from("profiles")
+        .select("id, username, display_name, avatar_url, is_verified")
+        .in("id", authorIds);
+      if (authors.error) return fail(authors.error.message);
+      for (const author of authors.data ?? []) authorMap.set(String(author.id), author as Record<string, any>);
+    }
+
+    result.posts = (posts.data ?? []).map((post) => {
+      const author = authorMap.get(String(post.user_id));
+      const latitude = finiteNumber(post.location_lat);
+      const longitude = finiteNumber(post.location_lng);
+      return {
+        id: post.id,
+        content: compactPlatformText(post.content, 700),
+        source_title: post.source_title,
+        media_url: Array.isArray(post.media_urls) ? post.media_urls.find((value: unknown) => typeof value === "string") ?? null : null,
+        thumbnail_url: post.thumbnail_url,
+        likes_count: post.likes_count,
+        comments_count: post.comments_count,
+        views_count: post.views_count,
+        created_at: post.created_at,
+        location: post.location_name || post.location_address || post.location || null,
+        latitude,
+        longitude,
+        author: author
+          ? {
+              id: author.id,
+              username: author.username,
+              display_name: author.display_name,
+              avatar_url: author.avatar_url,
+              is_verified: author.is_verified,
+              profile_path: author.username ? `/user/${encodeURIComponent(String(author.username))}` : null,
+            }
+          : null,
+        post_path: `/post/${encodeURIComponent(String(post.id))}`,
+        map_path: alsamosMapPath(latitude, longitude, post.location_name || post.location_address || "Post joyi"),
+      };
+    });
+  }
+
+  if (includes("places")) {
+    const [placesSearch, poiSearch] = await Promise.all([
+      ctx.admin
+        .from("places")
+        .select("id, name, address, category, latitude, longitude, external_source, usage_count")
+        .or(
+          `name.ilike.%${queryText}%,address.ilike.%${queryText}%,category.ilike.%${queryText}%`,
+        )
+        .limit(limit),
+      ctx.admin
+        .from("map_pois")
+        .select("id, name, address, category, latitude, longitude, phone, website, opening_hours")
+        .or(
+          `name.ilike.%${queryText}%,address.ilike.%${queryText}%,category.ilike.%${queryText}%`,
+        )
+        .limit(limit),
+    ]);
+    if (placesSearch.error) return fail(placesSearch.error.message);
+    if (poiSearch.error) return fail(poiSearch.error.message);
+
+    result.places = [
+      ...(placesSearch.data ?? []).map((place) => ({
+        ...place,
+        source: "places",
+        latitude: finiteNumber(place.latitude),
+        longitude: finiteNumber(place.longitude),
+        map_path: alsamosMapPath(place.latitude, place.longitude, place.name || place.address),
+      })),
+      ...(poiSearch.data ?? []).map((place) => ({
+        ...place,
+        source: "map_pois",
+        latitude: finiteNumber(place.latitude),
+        longitude: finiteNumber(place.longitude),
+        map_path: alsamosMapPath(place.latitude, place.longitude, place.name || place.address),
+      })),
+    ].slice(0, limit);
+  }
+
+  if (includes("people")) {
+    const profiles = await ctx.admin
+      .from("profiles")
+      .select("id, username, display_name, avatar_url, bio, location, website, is_verified")
+      .or(
+        `username.ilike.%${queryText}%,display_name.ilike.%${queryText}%,bio.ilike.%${queryText}%,location.ilike.%${queryText}%`,
+      )
+      .limit(limit);
+    if (profiles.error) return fail(profiles.error.message);
+
+    result.people = (profiles.data ?? []).map((profile) => ({
+      id: profile.id,
+      username: profile.username,
+      display_name: profile.display_name,
+      avatar_url: profile.avatar_url,
+      bio: compactPlatformText(profile.bio),
+      location: profile.location,
+      website: profile.website,
+      is_verified: profile.is_verified,
+      profile_path: profile.username ? `/user/${encodeURIComponent(String(profile.username))}` : null,
+    }));
+  }
+
+  const total =
+    result.stores.length +
+    result.products.length +
+    result.posts.length +
+    result.places.length +
+    result.people.length;
+
+  return {
+    ok: true,
+    text: total
+      ? JSON.stringify(result)
+      : `Alsamos ichida “${queryText}” bo‘yicha natija topilmadi.`,
+    data: { alsamosSearch: result },
+  };
 }
 
 type SearchActivityRow = {
@@ -722,6 +1080,7 @@ const EXECUTORS: Record<
   string,
   (args: Record<string, unknown>, ctx: ToolContext) => Promise<ToolOutcome>
 > = {
+  search_alsamos_platform: searchAlsamosPlatform,
   my_search_insights: mySearchInsights,
   my_payment_history: myPaymentHistory,
   my_marketplace_orders: myMarketplaceOrders,
