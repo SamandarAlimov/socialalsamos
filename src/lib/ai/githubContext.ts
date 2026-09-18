@@ -6,7 +6,7 @@
 // va asosiy fayllarni BRAUZERNING O'ZIDA o'qib, savolga qo'shib yuboramiz.
 // Natija: chat haqiqatan ham repo bo'yicha javob beradi, deploy talab qilinmaydi.
 
-import { getGithubRepoMeta, hasGithubToken, listGithubTree, readGithubFile } from './githubConnector';
+import { getGithubRepoMeta, githubStatus, listGithubTree, readGithubFile } from './githubConnector';
 
 // MUHIM: to'liq URL literalini bitta template ichida yozmaymiz.
 const WEB_SCHEME = 'https://';
@@ -99,7 +99,13 @@ export const detectRepoLinks = (text: string): RepoRef[] => {
   return Array.from(found.values());
 };
 
-export const githubReady = () => hasGithubToken();
+export async function githubReady(): Promise<boolean> {
+  try {
+    return (await githubStatus()).connected;
+  } catch {
+    return false;
+  }
+}
 
 const IGNORED = [
   'node_modules/',
@@ -149,6 +155,11 @@ export type RepoContext = {
  * Repo tuzilishini va bir nechta asosiy faylni o'qib, model uchun kontekst matni tuzadi.
  */
 export async function buildRepoContext(ref: RepoRef): Promise<RepoContext> {
+  const status = await githubStatus();
+  if (!status.connected) {
+    throw new Error('GitHub ulanmagan. Konnektorlar bo‘limidan GitHub ulanishini tekshiring.');
+  }
+
   const [meta, tree] = await Promise.all([
     getGithubRepoMeta(ref.owner, ref.repo).catch(() => null),
     listGithubTree(ref.owner, ref.repo),

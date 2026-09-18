@@ -38,7 +38,7 @@ import type {
 } from '@/components/ai/types';
 import { extractArtifacts } from '@/lib/aiArtifacts';
 import { streamAgent } from '@/lib/ai/agentClient';
-import { buildRepoContext, detectRepoRefs, githubReady, githubRepoUrl } from '@/lib/ai/githubContext';
+import { buildRepoContext, detectRepoRefs, githubRepoUrl } from '@/lib/ai/githubContext';
 import { buildBrainContext } from '@/lib/ai/brain';
 import { captureMemories, syncMemories } from '@/lib/ai/memory';
 import { toolLabel, type AIMode, type ModelId, type ToolGroupId } from '@/lib/ai/capabilities';
@@ -857,45 +857,46 @@ export default function AIPageV2() {
       const repoRefs = lastUser ? detectRepoRefs(lastUser.content) : [];
 
       if (repoRefs.length > 0 && history.length > 0) {
-        if (!githubReady()) {
-          notice = 'GitHub ulanmagan — repozitoriy kontekstini o‘qib bo‘lmadi.';
-        } else {
-          for (const ref of repoRefs.slice(0, 2)) {
-            const toolId = crypto.randomUUID();
-            tools.push({
-              id: toolId,
-              name: 'github_context',
-              label: `${ref.fullName} o‘qilmoqda`,
-              status: 'running',
-              startedAt: Date.now(),
-            });
-            setStatusLabel('GitHub repozitoriysi o‘qilmoqda…');
-            flush();
-            try {
-              const repoContext = await buildRepoContext(ref);
-              const entry = tools.find((tool) => tool.id === toolId);
-              if (entry) {
-                entry.status = 'done';
-                entry.summary = repoContext.summary;
-                entry.data = { files: repoContext.fileCount, pages: repoContext.pageCount } as any;
-                entry.finishedAt = Date.now();
-              }
-              if (!sources.some((source) => source.url === ref.url)) {
-                sources.push({ title: ref.fullName, url: ref.url });
-              }
-              const index = history.length - 1;
-              history[index] = {
-                ...history[index],
-                content: `${history[index].content}\n\n${repoContext.context}`,
-              };
-            } catch (error: any) {
-              const entry = tools.find((tool) => tool.id === toolId);
-              if (entry) {
-                entry.status = 'error';
-                entry.summary = error?.message || 'Repozitoriyni o‘qib bo‘lmadi.';
-                entry.finishedAt = Date.now();
-              }
+        for (const ref of repoRefs.slice(0, 2)) {
+          const toolId = crypto.randomUUID();
+          tools.push({
+            id: toolId,
+            name: 'github_context',
+            label: `${ref.fullName} o‘qilmoqda`,
+            status: 'running',
+            startedAt: Date.now(),
+          });
+          setStatusLabel('GitHub repozitoriysi o‘qilmoqda…');
+          flush();
+          try {
+            // buildRepoContext always checks the authoritative server-side
+            // GitHub connection. Never gate private-repo access on a volatile
+            // browser cache that resets on page reload.
+            const repoContext = await buildRepoContext(ref);
+            const entry = tools.find((tool) => tool.id === toolId);
+            if (entry) {
+              entry.status = 'done';
+              entry.summary = repoContext.summary;
+              entry.data = { files: repoContext.fileCount, pages: repoContext.pageCount } as any;
+              entry.finishedAt = Date.now();
             }
+            if (!sources.some((source) => source.url === ref.url)) {
+              sources.push({ title: ref.fullName, url: ref.url });
+            }
+            const index = history.length - 1;
+            history[index] = {
+              ...history[index],
+              content: `${history[index].content}\n\n${repoContext.context}`,
+            };
+          } catch (error: any) {
+            const message = error?.message || 'Repozitoriyni o‘qib bo‘lmadi.';
+            const entry = tools.find((tool) => tool.id === toolId);
+            if (entry) {
+              entry.status = 'error';
+              entry.summary = message;
+              entry.finishedAt = Date.now();
+            }
+            notice = `GitHub: ${message}`;
           }
         }
       }
