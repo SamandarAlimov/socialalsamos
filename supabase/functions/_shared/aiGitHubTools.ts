@@ -450,7 +450,7 @@ async function requireConnection(ctx: ToolContext): Promise<GitHubConnection | T
     const connection = await getConnection(ctx);
     if (!connection) {
       return fail(
-        "GitHub ulanmagan. GitHub tokenini ulang. Kod yozish uchun Contents write, PR/merge uchun Pull requests write, repo yaratish uchun tegishli repository yaratish huquqi kerak.",
+        "GitHub ulanmagan. Alsamos AI ichidagi GitHub oynasidan fine-grained token ulang. Token yaratish: https://github.com/settings/personal-access-tokens/new. To'liq coding workflow uchun odatda Administration read/write, Contents read/write, Pull requests read/write, Workflows read/write, Actions read va Commit statuses read kerak. Tokenni chatga yubormang; faqat GitHub ulanish oynasidagi Access token maydoniga kiriting.",
       );
     }
     return connection;
