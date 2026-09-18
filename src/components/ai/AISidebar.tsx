@@ -102,7 +102,7 @@ export function AISidebar(props: Props) {
     if (!useLocalProjects || !user?.id) return null;
     const active = readActiveLocalProject();
     return active?.userId === user.id ? active.project.id : null;
-  }, [localProjects, location.search, useLocalProjects, user?.id]);
+  }, [localProjects, location.pathname, location.search, useLocalProjects, user?.id]);
 
   const conversations = useMemo(() => {
     if (!useLocalProjects || !user?.id) return props.conversations;
