@@ -1,16 +1,16 @@
 const UZ_MONTHS = [
-  'yan',
-  'fev',
-  'mar',
-  'apr',
+  'yanvar',
+  'fevral',
+  'mart',
+  'aprel',
   'may',
   'iyun',
   'iyul',
-  'avg',
-  'sen',
-  'okt',
-  'noy',
-  'dek',
+  'avgust',
+  'sentabr',
+  'oktabr',
+  'noyabr',
+  'dekabr',
 ] as const;
 
 function startOfLocalDay(value: Date): number {
@@ -33,7 +33,7 @@ export function formatAIListDate(value: Date, now = new Date()): string {
   if (target === today) return 'Bugun';
   if (target === yesterday) return 'Kecha';
 
-  const label = `${value.getDate()} ${UZ_MONTHS[value.getMonth()]}`;
+  const label = `${value.getDate()}-${UZ_MONTHS[value.getMonth()]}`;
   return value.getFullYear() === now.getFullYear()
     ? label
     : `${label} ${value.getFullYear()}`;
