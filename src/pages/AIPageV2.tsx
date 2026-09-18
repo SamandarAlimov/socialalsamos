@@ -195,6 +195,31 @@ export default function AIPageV2() {
       .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
   }, [activeProjectId, conversations]);
 
+  const promptHistory = useMemo(() => {
+    const byId = new Map<string, AIMessage>();
+    const scopedConversations = conversations.filter((conversation) =>
+      activeProjectId ? conversation.projectId === activeProjectId : !conversation.projectId,
+    );
+
+    for (const conversation of scopedConversations) {
+      for (const message of conversation.messages) {
+        if (message.role === 'user' && message.content.trim()) {
+          byId.set(message.id, message);
+        }
+      }
+    }
+
+    for (const message of messages) {
+      if (message.role === 'user' && message.content.trim()) {
+        byId.set(message.id, message);
+      }
+    }
+
+    return [...byId.values()]
+      .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime())
+      .map((message) => message.content.trim());
+  }, [activeProjectId, conversations, messages]);
+
   useEffect(() => {
     setSidebarOpen(sidebarOverlay ? false : !isCompact);
   }, [isCompact, sidebarOverlay]);
@@ -1160,6 +1185,7 @@ export default function AIPageV2() {
       }}
       onOpenConnectors={() => setConnectorsOpen(true)}
       onOpenGithub={() => setGithubOpen(true)}
+      promptHistory={promptHistory}
     />
   );
 
