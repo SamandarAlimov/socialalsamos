@@ -76,7 +76,7 @@ function CodeBlock({ className, children }: { className?: string; children: Reac
   const code = String(children).replace(/\n$/, '');
 
   return (
-    <div className="my-3 w-full max-w-full overflow-hidden rounded-xl border border-border/60 bg-muted/40">
+    <div className="my-3 w-full min-w-0 max-w-full overflow-hidden rounded-xl border border-border/60 bg-muted/40">
       <div className="flex items-center justify-between border-b border-border/50 px-3 py-1.5">
         <span className="font-mono text-[10px] uppercase tracking-wide text-muted-foreground">{language}</span>
         <button
@@ -92,7 +92,7 @@ function CodeBlock({ className, children }: { className?: string; children: Reac
           {copied ? 'Nusxalandi' : 'Nusxalash'}
         </button>
       </div>
-      <pre className="m-0 w-full max-w-full overflow-x-auto p-3 text-xs leading-relaxed [tab-size:2]">
+      <pre className="m-0 w-full min-w-0 max-w-full overflow-x-auto p-3 text-xs leading-relaxed [tab-size:2]">
         <code className="whitespace-pre">{code}</code>
       </pre>
     </div>
@@ -247,13 +247,13 @@ export function AIMessageBubble({ message, isStreaming, onRegenerate }: Props) {
   const videos = message.videos?.length ? message.videos : message.videoUrl ? [message.videoUrl] : [];
 
   return (
-    <div className="group mb-6 w-full min-w-0 max-w-full overflow-hidden">
+    <div className="group mb-6 w-full min-w-0 max-w-full overflow-x-hidden">
       <div className="flex min-w-0 max-w-full items-start gap-2.5 sm:gap-3">
         <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-border/70 bg-muted/45">
           <Bot className="h-4 w-4 text-foreground/80" />
         </div>
 
-        <div className="min-w-0 max-w-full flex-1 overflow-hidden">
+        <div className="w-0 min-w-0 max-w-full flex-1 overflow-hidden">
           {message.tools && message.tools.length > 0 && <AIToolTimeline events={message.tools} />}
 
           {message.error ? (
@@ -270,7 +270,7 @@ export function AIMessageBubble({ message, isStreaming, onRegenerate }: Props) {
             </div>
           ) : (
             <div
-              className="prose prose-sm min-w-0 max-w-full overflow-hidden break-words dark:prose-invert
+              className="prose prose-sm w-full min-w-0 max-w-full overflow-hidden break-words dark:prose-invert
                 prose-p:mb-3 prose-p:max-w-full prose-p:break-words prose-p:leading-relaxed
                 prose-headings:max-w-full prose-headings:break-words prose-headings:font-semibold
                 prose-li:max-w-full prose-li:break-words
@@ -285,7 +285,7 @@ export function AIMessageBubble({ message, isStreaming, onRegenerate }: Props) {
                 components={{
                   pre: ({ children }) => <>{children}</>,
                   table: ({ children, ...props }: any) => (
-                    <div className="my-3 w-full max-w-full overflow-x-auto rounded-lg border border-border/60">
+                    <div className="my-3 w-full min-w-0 max-w-full overflow-x-auto rounded-lg border border-border/60">
                       <table className="m-0 min-w-full w-max max-w-none" {...props}>{children}</table>
                     </div>
                   ),
@@ -405,7 +405,7 @@ export function AIMessageBubble({ message, isStreaming, onRegenerate }: Props) {
 
 export function AIThinkingBubble({ label }: { label: string }) {
   return (
-    <div className="mb-6 flex items-start gap-2.5 sm:gap-3">
+    <div className="mb-6 flex min-w-0 max-w-full items-start gap-2.5 overflow-x-hidden sm:gap-3">
       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-border/70 bg-muted/45">
         <Bot className="h-4 w-4 text-foreground/80" />
       </div>

@@ -42,6 +42,7 @@ import { buildRepoContext, detectRepoRefs, githubReady, githubRepoUrl } from '@/
 import { buildBrainContext } from '@/lib/ai/brain';
 import { captureMemories, syncMemories } from '@/lib/ai/memory';
 import { toolLabel, type AIMode, type ModelId, type ToolGroupId } from '@/lib/ai/capabilities';
+import { buildAIWorkspaceHref, parseAIWorkspaceSearch } from '@/lib/ai/workspaceUrl';
 
 const PIN_KEY = 'alsamos.ai.pinned';
 const TITLE_KEY = 'alsamos.ai.titles';
@@ -198,9 +199,48 @@ export default function AIPageV2() {
 
   useEffect(() => {
     if (sidebarOverlay) return;
-    const projectId = new URLSearchParams(location.search).get('project');
+    const { projectId } = parseAIWorkspaceSearch(location.search);
     if (projectId) setSidebarOpen(true);
   }, [location.search, sidebarOverlay]);
+
+  useEffect(() => {
+    if (historyLoading) return;
+
+    const route = parseAIWorkspaceSearch(location.search);
+    const linkedConversation = route.conversationId
+      ? conversations.find((conversation) => conversation.id === route.conversationId) ?? null
+      : null;
+
+    if (linkedConversation) {
+      if (currentConversationId !== linkedConversation.id) {
+        autoFollowRef.current = true;
+        setShowScrollToLatest(false);
+        setMessages(linkedConversation.messages);
+        setCurrentConversationId(linkedConversation.id);
+        setActiveProjectId(projectsAvailable ? linkedConversation.projectId || null : null);
+      }
+      return;
+    }
+
+    const linkedProjectId =
+      projectsAvailable && route.projectId && projects.some((project) => project.id === route.projectId)
+        ? route.projectId
+        : null;
+
+    if (currentConversationId || activeProjectId !== linkedProjectId) {
+      autoFollowRef.current = true;
+      setShowScrollToLatest(false);
+      setMessages([]);
+      setCurrentConversationId(null);
+      setActiveProjectId(linkedProjectId);
+    }
+  }, [
+    conversations,
+    historyLoading,
+    location.search,
+    projects,
+    projectsAvailable,
+  ]);
 
   useEffect(() => {
     try {
@@ -355,6 +395,13 @@ export default function AIPageV2() {
     }
     const id = String((data as any).id);
     setCurrentConversationId(id);
+    navigate(
+      buildAIWorkspaceHref('/ai', location.search, {
+        projectId: projectsAvailable ? activeProjectId : null,
+        conversationId: id,
+      }),
+      { replace: true },
+    );
     setConversations((previous) => [
       {
         id,
@@ -479,8 +526,11 @@ export default function AIPageV2() {
         }
       });
 
-    navigate(location.pathname, { replace: true, state: {} });
-  }, [location.pathname, location.state, navigate]);
+    navigate(
+      { pathname: location.pathname, search: location.search },
+      { replace: true, state: {} },
+    );
+  }, [location.pathname, location.search, location.state, navigate]);
 
   const scrollToLatest = useCallback((behavior: ScrollBehavior = 'smooth') => {
     const viewport = scrollAreaRef.current?.querySelector<HTMLElement>('[data-radix-scroll-area-viewport]');
@@ -515,6 +565,16 @@ export default function AIPageV2() {
     return () => window.cancelAnimationFrame(frame);
   }, [messages]);
 
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      const viewport = scrollAreaRef.current?.querySelector<HTMLElement>('[data-radix-scroll-area-viewport]');
+      if (!viewport) return;
+      viewport.scrollLeft = 0;
+      if (messages.length === 0) viewport.scrollTop = 0;
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [activeProjectId, currentConversationId, messages.length]);
+
   const startNew = useCallback(
     (projectId: string | null = activeProjectId) => {
       abortRef.current?.abort();
@@ -526,9 +586,15 @@ export default function AIPageV2() {
       setInput('');
       setAttachments([]);
       setForwardedPost(null);
+      navigate(
+        buildAIWorkspaceHref('/ai', location.search, {
+          projectId: projectsAvailable ? projectId : null,
+          conversationId: null,
+        }),
+      );
       if (sidebarOverlay) setSidebarOpen(false);
     },
-    [activeProjectId, projectsAvailable, sidebarOverlay],
+    [activeProjectId, location.search, navigate, projectsAvailable, sidebarOverlay],
   );
 
   const selectConversation = (conversation: AIConversation) => {
@@ -537,7 +603,14 @@ export default function AIPageV2() {
     setShowScrollToLatest(false);
     setMessages(conversation.messages);
     setCurrentConversationId(conversation.id);
-    setActiveProjectId(projectsAvailable ? conversation.projectId || null : null);
+    const projectId = projectsAvailable ? conversation.projectId || null : null;
+    setActiveProjectId(projectId);
+    navigate(
+      buildAIWorkspaceHref('/ai', location.search, {
+        projectId,
+        conversationId: conversation.id,
+      }),
+    );
     if (sidebarOverlay) setSidebarOpen(false);
   };
 
@@ -551,6 +624,12 @@ export default function AIPageV2() {
     setCurrentConversationId(null);
     setInput('');
     setAttachments([]);
+    navigate(
+      buildAIWorkspaceHref('/ai', location.search, {
+        projectId,
+        conversationId: null,
+      }),
+    );
     if (sidebarOverlay) setSidebarOpen(false);
   };
 
@@ -662,7 +741,16 @@ export default function AIPageV2() {
         conversation.id === conversationId ? { ...conversation, projectId, updatedAt: new Date() } : conversation,
       ),
     );
-    if (currentConversationId === conversationId) setActiveProjectId(projectId);
+    if (currentConversationId === conversationId) {
+      setActiveProjectId(projectId);
+      navigate(
+        buildAIWorkspaceHref('/ai', location.search, {
+          projectId,
+          conversationId,
+        }),
+        { replace: true },
+      );
+    }
   };
 
   const uploadFiles = async (list: FileList | null) => {
@@ -1142,9 +1230,9 @@ export default function AIPageV2() {
               size="icon"
               variant="ghost"
               className="h-8 w-8 shrink-0 rounded-lg"
-              onClick={() => navigate('/home')}
-              aria-label="AI yordamchidan chiqish"
-              title="Bosh sahifaga qaytish"
+              onClick={() => navigate(activeProject ? '/ai/projects' : '/home')}
+              aria-label={activeProject ? 'Loyihalarga qaytish' : 'AI yordamchidan chiqish'}
+              title={activeProject ? 'Loyihalarga qaytish' : 'Bosh sahifaga qaytish'}
             >
               <ArrowLeft className="h-4 w-4" />
             </Button>
@@ -1158,10 +1246,16 @@ export default function AIPageV2() {
 
           <div className="min-w-0 flex-1">
             {activeProject && (
-              <div className="mb-0.5 flex min-w-0 items-center gap-1 text-[10px] text-muted-foreground">
+              <button
+                type="button"
+                onClick={() => navigate('/ai/projects')}
+                className="mb-0.5 flex max-w-full min-w-0 items-center gap-1 rounded-md text-[10px] text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                aria-label="Loyihalarga qaytish"
+                title="Loyihalarga qaytish"
+              >
                 <FolderKanban className="h-3 w-3 shrink-0" />
                 <span className="truncate">{activeProject.name}</span>
-              </div>
+              </button>
             )}
             <h1 className="truncate text-sm font-semibold leading-tight">{currentTitle}</h1>
           </div>
@@ -1180,7 +1274,10 @@ export default function AIPageV2() {
           )}
         </header>
 
-        <ScrollArea ref={scrollAreaRef} className="min-h-0 min-w-0 flex-1 overflow-hidden">
+        <ScrollArea
+          ref={scrollAreaRef}
+          className="min-h-0 min-w-0 flex-1 overflow-hidden [&_[data-radix-scroll-area-viewport]]:overflow-x-hidden"
+        >
           {messages.length === 0 ? (
             <div className="mx-auto flex min-h-full w-full max-w-4xl flex-col px-3 py-4 sm:px-5 sm:py-6 lg:px-6 lg:py-8">
               <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center py-4 sm:py-8 lg:py-10">
@@ -1273,7 +1370,7 @@ export default function AIPageV2() {
               </div>
             </div>
           ) : (
-            <div className="mx-auto w-full min-w-0 max-w-4xl overflow-hidden px-2.5 py-3 sm:px-5 sm:py-6">
+            <div className="mx-auto w-full min-w-0 max-w-4xl overflow-x-hidden px-2.5 py-3 sm:px-5 sm:py-6">
               {messages.map((message, index) => (
                 <AIMessageBubble
                   key={message.id}
