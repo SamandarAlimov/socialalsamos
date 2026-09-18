@@ -28,8 +28,8 @@ type SearchPayload = {
   error?: { code?: string; message?: string } | null;
 };
 
-const EXPLICIT_WEB_INTENT = /\b(search|look\s*up|find\s+(?:on\s+)?(?:the\s+)?web|search\s+(?:the\s+)?web|internetdan\s+(?:qidir|izla|tekshir)|internetda\s+(?:qidir|izla|tekshir)|vebda\s+(?:qidir|izla|tekshir)|webda\s+(?:qidir|izla|tekshir)|google(?:da|dan)?\s+(?:qidir|izla|tekshir)|qidirib\s+(?:ber|ko['’]?r)|найд(?:и|ите)?\s+в\s+интернете|поиск\s+в\s+интернете|проверь\s+в\s+интернете)\b/i;
-const CURRENT_WEB_INTENT = /\b(latest|current|today|tonight|news|headline|price|prices|release\s+notes?|changelog|market\s+trend|stock\s+price|exchange\s+rate|CVE-\d{4}-\d+|so['’]nggi|oxirgi|bugun|hozirgi|joriy|yangilik(?:lar)?|narx(?:lar)?|kurs|последн(?:ий|яя|ие)|сегодня|сейчас|новост(?:и|ей)?|цена|курс)\b/i;
+const EXPLICIT_WEB_INTENT = /\b(search|look\s*up|find\s+(?:on\s+)?(?:the\s+)?web|search\s+(?:the\s+)?web|internet(?:dan|da)?\s+(?:qidir(?:ib|ing)?|izla(?:b|ng)?|tekshir(?:ib|ing)?|top(?:ib|ing)?|ko['’]?r(?:ib|ing)?)|vebda\s+(?:qidir(?:ib|ing)?|izla(?:b|ng)?|tekshir(?:ib|ing)?)|webda\s+(?:qidir(?:ib|ing)?|izla(?:b|ng)?|tekshir(?:ib|ing)?)|google(?:da|dan)?\s+(?:qidir(?:ib|ing)?|izla(?:b|ng)?|tekshir(?:ib|ing)?)|qidirib\s+(?:ber|ko['’]?r)|найд(?:и|ите)?\s+в\s+интернете|поиск\s+в\s+интернете|проверь\s+в\s+интернете)\b/i;
+const CURRENT_WEB_INTENT = /\b(latest|current|today|tonight|news|headline|price|prices|release\s+notes?|changelog|market\s+trend|stock\s+price|exchange\s+rate|CVE-\d{4}-\d+|eng\s+yangi|so['’]nggi|oxirgi|bugun(?:gi)?|hozir(?:gi)?|joriy|yangilik(?:lar)?(?:ni|ini|larini)?|narx(?:lar)?(?:ni|ini)?|kurs(?:i|ni)?|последн(?:ий|яя|ие)|сегодня|сейчас|новост(?:и|ей)?|цена|курс)\b/i;
 const WEATHER_LOOKUP_INTENT = /\b(weather|forecast|ob[- ]?havo|погод|прогноз\s+погод)\b/i;
 const PRODUCT_BUILD_CONTEXT = /\b(platform|platforma|app|application|website|websayt|site|dashboard|project|loyiha|dastur|software|service|system|yarat|qur|build|create|develop|design|ui\/ux|frontend|backend|архитектур|платформ|приложен|сайт|созда|разработ)\b/i;
 const IMAGE_INTENT = /\b(image|images|photo|photos|picture|pictures|rasm|rasmlar|foto|surat|изображ|фото|картин)\b/i;
