@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import {
   ArrowDown,
   ArrowLeft,
+  ChevronRight,
   Code2,
   FileText,
   FolderKanban,
@@ -195,6 +196,14 @@ export default function AIPageV2() {
   }, [activeProjectId, conversations]);
 
   useEffect(() => setSidebarOpen(!sidebarOverlay), [sidebarOverlay]);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      const viewport = scrollAreaRef.current?.querySelector<HTMLElement>('[data-radix-scroll-area-viewport]');
+      if (viewport) viewport.scrollLeft = 0;
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [activeProjectId, currentConversationId, location.search]);
 
   useEffect(() => {
     if (sidebarOverlay) return;
@@ -487,6 +496,7 @@ export default function AIPageV2() {
     if (!viewport) return;
     autoFollowRef.current = true;
     setShowScrollToLatest(false);
+    viewport.scrollLeft = 0;
     viewport.scrollTo({ top: viewport.scrollHeight, behavior });
   }, []);
 
@@ -1158,10 +1168,18 @@ export default function AIPageV2() {
 
           <div className="min-w-0 flex-1">
             {activeProject && (
-              <div className="mb-0.5 flex min-w-0 items-center gap-1 text-[10px] text-muted-foreground">
+              <button
+                type="button"
+                onClick={() => navigate('/ai/projects')}
+                className="mb-0.5 flex max-w-full min-w-0 items-center gap-1 text-[11px] font-medium text-muted-foreground transition-colors hover:text-foreground"
+                aria-label="Loyihalarga qaytish"
+                title="Loyihalarga qaytish"
+              >
                 <FolderKanban className="h-3 w-3 shrink-0" />
-                <span className="truncate">{activeProject.name}</span>
-              </div>
+                <span className="shrink-0">Loyihalar</span>
+                <ChevronRight className="h-3 w-3 shrink-0 opacity-60" />
+                <span className="min-w-0 truncate">{activeProject.name}</span>
+              </button>
             )}
             <h1 className="truncate text-sm font-semibold leading-tight">{currentTitle}</h1>
           </div>
@@ -1182,8 +1200,8 @@ export default function AIPageV2() {
 
         <ScrollArea ref={scrollAreaRef} className="min-h-0 min-w-0 flex-1 overflow-hidden">
           {messages.length === 0 ? (
-            <div className="mx-auto flex min-h-full w-full max-w-4xl flex-col px-3 py-4 sm:px-5 sm:py-6 lg:px-6 lg:py-8">
-              <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center py-4 sm:py-8 lg:py-10">
+            <div className="mx-auto flex min-h-full w-full min-w-0 max-w-4xl flex-col overflow-x-hidden px-3 py-4 [contain:inline-size] sm:px-5 sm:py-6 lg:px-6 lg:py-8">
+              <div className="mx-auto flex w-full min-w-0 max-w-3xl flex-1 flex-col overflow-x-hidden py-4 sm:py-8 lg:py-10">
                 <motion.div
                   initial={{ scale: 0.9, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
@@ -1193,10 +1211,10 @@ export default function AIPageV2() {
                   {activeProject ? <FolderKanban className="h-5 w-5" /> : <Sparkles className="h-5 w-5" />}
                 </motion.div>
 
-                <h2 className="mb-1.5 max-w-full break-words text-center text-xl font-semibold sm:text-2xl lg:text-3xl">
+                <h2 className="mb-1.5 max-w-full break-words text-center text-xl font-semibold [overflow-wrap:anywhere] sm:text-2xl lg:text-3xl">
                   {activeProject ? activeProject.name : greetingName ? `Salom, ${greetingName}` : 'Alsamos AI'}
                 </h2>
-                <p className="mx-auto mb-4 max-w-xl px-1 text-center text-xs leading-relaxed text-muted-foreground sm:mb-5 sm:text-sm">
+                <p className="mx-auto mb-4 max-w-xl break-words px-1 text-center text-xs leading-relaxed text-muted-foreground [overflow-wrap:anywhere] sm:mb-5 sm:text-sm">
                   {activeProject
                     ? activeProject.instructions || 'Bu loyiha ichidagi suhbatlar umumiy kontekst bilan ishlaydi.'
                     : 'Savol, vazifa yoki yaratmoqchi bo‘lgan narsangizni yozing. Kerakli vositani AI o‘zi tanlaydi.'}
@@ -1222,7 +1240,7 @@ export default function AIPageV2() {
                 )}
 
                 {activeProject ? (
-                  <section className="mx-auto mt-6 w-full max-w-2xl sm:mt-8">
+                  <section className="mx-auto mt-6 w-full min-w-0 max-w-2xl overflow-hidden sm:mt-8">
                     <div className="mb-2 flex items-center justify-between gap-3 px-1">
                       <h3 className="text-sm font-semibold">Suhbatlar</h3>
                       <span className="text-xs text-muted-foreground">{activeProjectConversations.length}</span>
@@ -1273,7 +1291,7 @@ export default function AIPageV2() {
               </div>
             </div>
           ) : (
-            <div className="mx-auto w-full min-w-0 max-w-4xl overflow-hidden px-2.5 py-3 sm:px-5 sm:py-6">
+            <div className="mx-auto w-full min-w-0 max-w-4xl overflow-x-hidden px-2.5 py-3 [contain:inline-size] sm:px-5 sm:py-6">
               {messages.map((message, index) => (
                 <AIMessageBubble
                   key={message.id}
