@@ -331,7 +331,7 @@ export default function ProjectsPage() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-5xl px-3 pb-20 pt-5 sm:px-5 sm:pt-8 lg:px-7 lg:pb-24 lg:pt-12">
+    <div className="mx-auto w-full min-w-0 max-w-5xl overflow-x-hidden px-3 pb-16 pt-4 sm:px-5 sm:pb-20 sm:pt-7 lg:px-7 lg:pb-24 lg:pt-10">
       <AIProjectDialog
         open={dialogOpen}
         onOpenChange={setDialogOpen}
@@ -339,7 +339,7 @@ export default function ProjectsPage() {
         onSave={save}
       />
 
-      <header className="mb-6 flex min-w-0 flex-col gap-4 lg:mb-8 lg:flex-row lg:items-center lg:justify-between">
+      <header className="mb-5 flex min-w-0 flex-col gap-3 sm:gap-4 lg:mb-8 lg:flex-row lg:items-center lg:justify-between">
         <div className="min-w-0">
           <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Loyihalar</h1>
           <p className="mt-1 text-xs text-muted-foreground">
@@ -347,8 +347,8 @@ export default function ProjectsPage() {
           </p>
         </div>
 
-        <div className="flex w-full min-w-0 items-center gap-2 lg:w-auto">
-          <div className="relative min-w-0 flex-1 lg:w-64 lg:flex-none">
+        <div className="flex w-full min-w-0 flex-col gap-2 min-[420px]:flex-row min-[420px]:items-center lg:w-auto">
+          <div className="relative w-full min-w-0 flex-1 lg:w-64 lg:flex-none">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               value={query}
@@ -361,9 +361,9 @@ export default function ProjectsPage() {
           </div>
           <Button
             onClick={openCreate}
-            className="h-10 shrink-0 gap-1.5 rounded-xl bg-foreground px-3 text-background hover:bg-foreground/90 sm:px-4"
+            className="h-10 w-full shrink-0 gap-1.5 rounded-xl bg-foreground px-3 text-background hover:bg-foreground/90 min-[420px]:w-auto sm:px-4"
           >
-            <Plus className="h-4 w-4" /> <span className="hidden min-[360px]:inline">Yangi</span>
+            <Plus className="h-4 w-4" /> <span>Yangi loyiha</span>
           </Button>
         </div>
       </header>
@@ -377,7 +377,7 @@ export default function ProjectsPage() {
         </button>
       </div>
 
-      <div className="grid grid-cols-[minmax(0,1fr)_36px] items-center gap-2 border-b border-border/60 px-2 py-3 text-xs text-muted-foreground sm:grid-cols-[minmax(0,1fr)_auto_36px] sm:gap-3">
+      <div className="hidden grid-cols-[minmax(0,1fr)_auto_36px] items-center gap-3 border-b border-border/60 px-2 py-3 text-xs text-muted-foreground sm:grid">
         <span>Nomi</span>
         <button
           type="button"
@@ -424,7 +424,7 @@ export default function ProjectsPage() {
                   openProject(project);
                 }
               }}
-              className="group grid cursor-pointer grid-cols-[minmax(0,1fr)_36px] items-center gap-2 border-b border-border/50 px-2 py-3.5 transition-colors hover:bg-muted/35 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 sm:grid-cols-[minmax(0,1fr)_auto_36px] sm:gap-3 sm:py-4"
+              className="group mb-2 grid min-w-0 cursor-pointer grid-cols-[minmax(0,1fr)_36px] items-center gap-2 rounded-2xl border border-border/60 bg-card/20 px-3 py-3.5 transition-colors hover:bg-muted/35 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 sm:mb-0 sm:grid-cols-[minmax(0,1fr)_auto_36px] sm:gap-3 sm:rounded-none sm:border-x-0 sm:border-t-0 sm:bg-transparent sm:px-2 sm:py-4"
             >
               <div className="flex min-w-0 items-center gap-2.5 sm:gap-3">
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-border/70 bg-muted/35">
@@ -435,6 +435,11 @@ export default function ProjectsPage() {
                   <p className="mt-0.5 truncate text-xs text-muted-foreground">
                     {counts[project.id] || 0} suhbat <span className="sm:hidden">· {modifiedLabel(project.updatedAt)}</span>
                   </p>
+                  {project.instructions && (
+                    <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-muted-foreground/80 sm:hidden">
+                      {project.instructions}
+                    </p>
+                  )}
                 </div>
               </div>
 
