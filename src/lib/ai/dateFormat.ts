@@ -26,10 +26,12 @@ export function formatAIListDate(value: Date, now = new Date()): string {
 
   const today = startOfLocalDay(now);
   const target = startOfLocalDay(value);
-  const dayMs = 86_400_000;
+  const yesterday = startOfLocalDay(
+    new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1),
+  );
 
   if (target === today) return 'Bugun';
-  if (target === today - dayMs) return 'Kecha';
+  if (target === yesterday) return 'Kecha';
 
   const label = `${value.getDate()} ${UZ_MONTHS[value.getMonth()]}`;
   return value.getFullYear() === now.getFullYear()
