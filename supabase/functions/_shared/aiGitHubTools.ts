@@ -410,6 +410,21 @@ async function gh(
   return { ok: response.ok, status: response.status, data };
 }
 
+async function ghRead(
+  token: string | null,
+  path: string,
+  init: { method?: string; body?: unknown } = {},
+): Promise<GhResponse> {
+  const first = await gh(token, path, init);
+  if (!token || first.ok || ![401, 403, 404].includes(first.status)) return first;
+
+  // A fine-grained PAT may be scoped to only the user's selected repositories.
+  // Another person's public repository should still be readable, so retry the
+  // exact read anonymously before concluding that the resource is unavailable.
+  const publicResponse = await gh(null, path, init);
+  return publicResponse.ok ? publicResponse : first;
+}
+
 function githubError(response: GhResponse, fallback: string): ToolOutcome {
   const message =
     typeof response.data?.message === "string"
@@ -484,7 +499,7 @@ async function getRepoMeta(ctx: ToolContext, token: string | null, repository: s
   let cached = map.get(repository);
   if (!cached) {
     cached = (async () => {
-      const response = await gh(token, repoApiPath(repository));
+      const response = await ghRead(token, repoApiPath(repository));
       if (!response.ok) throw new Error(`Repository ochilmadi (GitHub HTTP ${response.status}).`);
       return response.data;
     })();
@@ -575,7 +590,7 @@ async function readFile(args: Record<string, unknown>, ctx: ToolContext): Promis
   if (!repository || !path) return fail("repository va path talab qilinadi.");
   const repo = await getRepoMeta(ctx, token, repository);
   const ref = String(args.ref ?? repo.default_branch ?? "main").trim();
-  const response = await gh(
+  const response = await ghRead(
     token,
     `${repoApiPath(repository)}/contents/${encodePath(path)}?ref=${encodeURIComponent(ref)}`,
   );
@@ -622,7 +637,7 @@ async function listDirectory(args: Record<string, unknown>, ctx: ToolContext): P
   const repo = await getRepoMeta(ctx, token, repository);
   const ref = String(args.ref ?? repo.default_branch ?? "main").trim();
   const suffix = path ? `/contents/${encodePath(path)}` : "/contents";
-  const response = await gh(
+  const response = await ghRead(
     token,
     `${repoApiPath(repository)}${suffix}?ref=${encodeURIComponent(ref)}`,
   );
@@ -645,7 +660,7 @@ async function searchCode(args: Record<string, unknown>, ctx: ToolContext): Prom
   const limit = clamp(args.limit, 1, 30, 10);
   if (!repository || !query) return fail("repository va query talab qilinadi.");
   repoApiPath(repository);
-  const response = await gh(
+  const response = await ghRead(
     token,
     `/search/code?per_page=${limit}&q=${encodeURIComponent(`${query} repo:${repository}`)}`,
   );
@@ -665,7 +680,7 @@ async function searchCode(args: Record<string, unknown>, ctx: ToolContext): Prom
   if (!token && (response.status === 401 || response.status === 403)) {
     const repo = await getRepoMeta(ctx, null, repository);
     const branch = String(repo.default_branch ?? "main");
-    const tree = await gh(null, `${repoApiPath(repository)}/git/trees/${encodeURIComponent(branch)}?recursive=1`);
+    const tree = await ghRead(null, `${repoApiPath(repository)}/git/trees/${encodeURIComponent(branch)}?recursive=1`);
     if (tree.ok) {
       const needles = query.toLowerCase().split(/\s+/).filter(Boolean);
       const items = (Array.isArray(tree.data?.tree) ? tree.data.tree : [])
@@ -924,7 +939,7 @@ async function getPullRequest(args: Record<string, unknown>, ctx: ToolContext): 
   const repository = String(args.repository ?? "").trim();
   const number = clamp(args.number, 1, Number.MAX_SAFE_INTEGER, 0);
   if (!repository || !number) return fail("repository va number talab qilinadi.");
-  const response = await gh(token, `${repoApiPath(repository)}/pulls/${number}`);
+  const response = await ghRead(token, `${repoApiPath(repository)}/pulls/${number}`);
   if (!response.ok) return githubError(response, "Pull request olinmadi");
   const pr = {
     number: response.data?.number,
@@ -1005,7 +1020,7 @@ async function compare(args: Record<string, unknown>, ctx: ToolContext): Promise
   const base = String(args.base ?? "").trim();
   const head = String(args.head ?? "").trim();
   if (!repository || !base || !head) return fail("repository, base va head talab qilinadi.");
-  const response = await gh(
+  const response = await ghRead(
     token,
     `${repoApiPath(repository)}/compare/${encodeURIComponent(base)}...${encodeURIComponent(head)}`,
   );
@@ -1033,13 +1048,13 @@ async function ciStatus(args: Record<string, unknown>, ctx: ToolContext): Promis
   const repository = String(args.repository ?? "").trim();
   const ref = String(args.ref ?? "").trim();
   if (!repository || !ref) return fail("repository va ref talab qilinadi.");
-  const commit = await gh(token, `${repoApiPath(repository)}/commits/${encodeURIComponent(ref)}`);
+  const commit = await ghRead(token, `${repoApiPath(repository)}/commits/${encodeURIComponent(ref)}`);
   if (!commit.ok) return githubError(commit, "CI uchun commit topilmadi");
   const sha = String(commit.data?.sha ?? "");
   const [checks, statuses, runs] = await Promise.all([
-    gh(token, `${repoApiPath(repository)}/commits/${sha}/check-runs?per_page=50`),
-    gh(token, `${repoApiPath(repository)}/commits/${sha}/status`),
-    gh(token, `${repoApiPath(repository)}/actions/runs?head_sha=${encodeURIComponent(sha)}&per_page=20`),
+    ghRead(token, `${repoApiPath(repository)}/commits/${sha}/check-runs?per_page=50`),
+    ghRead(token, `${repoApiPath(repository)}/commits/${sha}/status`),
+    ghRead(token, `${repoApiPath(repository)}/actions/runs?head_sha=${encodeURIComponent(sha)}&per_page=20`),
   ]);
   const checkRuns = checks.ok
     ? (checks.data?.check_runs ?? []).map((run: any) => ({
