@@ -517,16 +517,6 @@ function requestsGitHubMutation(text: string): boolean {
   return /(?:\b(?:create|write|edit|modify|update|delete|rename|push|commit|merge|fork|open\s+(?:a\s+)?pull\s*request|create\s+(?:a\s+)?branch)\b|\b(?:yarat|yoz|tahrir|o['’]?zgartir|yangila|o['’]?chir|nomini\s+o['’]?zgartir|push|commit|merge|fork|pr\s+och|branch\s+yarat)(?:ish|ishni|ib|ing|aman|amiz|moq)?\b)/i.test(intent);
 }
 
-function requestsGitHubDiscovery(text: string): boolean {
-  const intent = originalUserIntent(text);
-  return /(?:\b(?:find|discover|search|trending|popular|top|best)\b[^\n]{0,160}\b(?:github|repo|repository|mcp)\b|\b(?:github|repo|repository|mcp)\b[^\n]{0,160}\b(?:find|discover|search|trending|popular|top|best)\b|\b(?:topib\s+ber|qidirib\s+ber|trend(?:da|dagi)?|mashhur|eng\s+ko['’]?p\s+ishlatiladigan)\b[^\n]{0,160}\b(?:repo|repository|github)\b)/i.test(intent);
-}
-
-function explicitlyNeedsExternalWeb(text: string): boolean {
-  const intent = originalUserIntent(text);
-  return /(?:\bweb\s*search\b|\binternet(?:dan|da)?\b|\bweb(?:dan|da)?\b|\bgoogle(?:dan|da)?\b|\bsearch\s+the\s+web\b|\bexternal\s+research\b|\brelease\s+notes?\b|\bchangelog\b|\bCVE-\d{4}-\d+\b|\bsecurity\s+(?:audit|advis(?:ory|ories))\b|\bvulnerab(?:ility|ilities)\b|\blatest\s+(?:versions?|releases?|documentation|docs?|news|prices?|dependenc(?:y|ies))\b|\bcurrent\s+(?:versions?|releases?|documentation|docs?|news|prices?|dependenc(?:y|ies))\b|\beng\s+yangi\s+(?:versiya(?:lar(?:ini|i)?|si)?|reliz(?:lar)?|hujjat(?:lar)?|yangilik(?:lar)?|narx(?:lar)?)\b|\bso['‘’]?nggi\s+(?:versiya(?:lar(?:ini|i)?|si)?|reliz(?:lar)?|hujjat(?:lar)?|yangilik(?:lar)?|narx(?:lar)?)\b|\bhozirgi\s+(?:versiya(?:lar)?|hujjat(?:lar)?|narx(?:lar)?)\b|\bjoriy\s+(?:versiya(?:lar)?|hujjat(?:lar)?|narx(?:lar)?|holat)\b|\bmarket\s+trend\b|\bnews\b|\byangilik(?:lar)?\b|\bnarx(?:lar)?\b|\bprice(?:s)?\b|\bинтернет\b|\bвеб\s*поиск\b|\bновост(?:и|ей)?\b|\bдокументац(?:ия|ии)\b|\bуязвим(?:ость|ости)\b|\bпоследн(?:яя|ий|ие)\s+(?:верси|релиз|новост))/i.test(intent);
-}
-
 function requestsPlanningBeforeImplementation(text: string): boolean {
   const intent = originalUserIntent(text);
   return /(?:kod\s+yoz(?:ish|ishni)?dan\s+oldin|koddan\s+oldin|before\s+(?:writing\s+)?code|before\s+implementation|birinchi\s+navbatda[^.!?\n]{0,180}(?:ui\/ux|design|reja|muhokama|kelish)|avval(?:iga)?[^.!?\n]{0,180}(?:ui\/ux|design|reja|muhokama|kelish)|(?:ui\/ux|design|reja|muhokama)[^.!?\n]{0,140}kelishib\s+ol)/i.test(intent);
@@ -567,27 +557,6 @@ function effectiveToolsForRequest(
   }
 
   return enabled;
-}
-
-function webLookupTargetsGitHub(callName: string, args: Record<string, unknown>): boolean {
-  if (callName === "web_fetch") {
-    const raw = String(args.url ?? "").trim();
-    try {
-      const host = new URL(raw).hostname.toLowerCase();
-      return host === "github.com" ||
-        host === "www.github.com" ||
-        host === "api.github.com" ||
-        host === "raw.githubusercontent.com";
-    } catch {
-      return /(?:github\.com|raw\.githubusercontent\.com)/i.test(raw);
-    }
-  }
-  if (callName === "web_search") {
-    const query = String(args.query ?? "");
-    return /(?:https?:\/\/)?(?:www\.)?github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+/i.test(query) ||
-      /\bsite:\s*github\.com\b/i.test(query);
-  }
-  return false;
 }
 
 function toolSpecs(enabled: Set<string>): ToolSpec[] {
