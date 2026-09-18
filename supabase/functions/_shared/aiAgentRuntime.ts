@@ -128,6 +128,131 @@ function heuristicLanguage(text: string): string {
   return enScore > uzScore ? "en" : "uz";
 }
 
+const TITLE_MAX_CHARS = 42;
+
+function fallbackConversationTitle(raw: string): string {
+  let text = raw
+    .replace(/https?:\/\/\S+/gi, " ")
+    .replace(/@[A-Za-z0-9_.-]+/g, " ")
+    .replace(/\bBismillahir\s+Rohmanir\s+Rohiym\b/gi, " ")
+    .replace(/\bBismillahir\s+Rahmanir\s+Rahim\b/gi, " ")
+    .replace(/[\x60*_#>\[\]{}()]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!text) return "Yangi suhbat";
+
+  const firstSentence = text.split(/[.!?\n]+/)[0]?.trim() || text;
+  const words = firstSentence.split(/\s+/).filter(Boolean);
+  const filler = new Set([
+    "mana", "shu", "shuni", "buni", "iltimos", "please", "qil", "qilib", "qiling",
+    "qilgin", "kerak", "bo'lsin", "bo‘lsin", "hal", "et", "ber", "bering", "chiq",
+    "davom", "keyin", "endi", "uchun", "menga", "men", "bizda", "bizning", "the",
+    "a", "an", "to", "this", "that", "fix", "do", "make",
+  ]);
+  const meaningful = words.filter((word, index) => {
+    if (index < 2) return true;
+    const normalized = word.toLowerCase().replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "");
+    return normalized.length > 1 && !filler.has(normalized);
+  });
+
+  let title = (meaningful.length ? meaningful : words).slice(0, 6).join(" ").trim();
+  if (title.length > TITLE_MAX_CHARS) {
+    const shortened = title.slice(0, TITLE_MAX_CHARS + 1);
+    title = shortened.slice(0, Math.max(shortened.lastIndexOf(" "), 18)).trim();
+  }
+  title = title.replace(/[,:;\-–—]+$/g, "").trim();
+  if (!title) return "Yangi suhbat";
+  return title.charAt(0).toUpperCase() + title.slice(1);
+}
+
+function normalizeGeneratedTitle(value: unknown, fallback: string): string {
+  let title = typeof value === "string" ? value : "";
+  title = title
+    .replace(/^["'“”‘’]+|["'“”‘’]+$/g, "")
+    .replace(/[\r\n\t]+/g, " ")
+    .replace(/\s+/g, " ")
+    .replace(/[.!?;:]+$/g, "")
+    .trim();
+
+  if (!title) return fallback;
+  const words = title.split(/\s+/).filter(Boolean).slice(0, 7);
+  title = words.join(" ");
+  if (title.length > TITLE_MAX_CHARS) {
+    const shortened = title.slice(0, TITLE_MAX_CHARS + 1);
+    title = shortened.slice(0, Math.max(shortened.lastIndexOf(" "), 18)).trim();
+  }
+  return title || fallback;
+}
+
+async function generateConversationTitleResponse(
+  req: Request,
+  body: Record<string, any>,
+  userId: string,
+  admin: SupabaseClient,
+): Promise<Response> {
+  const prompt = String(body.prompt ?? lastUserText(normalizeInputMessages(body.messages))).trim();
+  if (!prompt) return guardError(req, "INVALID_REQUEST", "Title uchun prompt talab qilinadi.", 400);
+
+  const fallback = fallbackConversationTitle(prompt);
+  const lovableKey = Deno.env.get("LOVABLE_API_KEY") || "";
+  let title = fallback;
+  let source = "fallback";
+
+  if (hasGeminiKeys() || lovableKey) {
+    try {
+      const { response } = await aiFetch({
+        lovableKey: lovableKey || undefined,
+        body: {
+          model: MODEL_ROUTES.fast,
+          messages: [
+            {
+              role: "system",
+              content: [
+                "Generate a short conversation title from the user's message.",
+                "Return JSON only: {\"title\":\"...\"}.",
+                "Rules:",
+                "- same language as the user's message;",
+                "- 3-6 words when possible, never more than 7 words;",
+                "- maximum 42 characters;",
+                "- a compact topic/noun phrase, not a sentence or copied prompt;",
+                "- ignore greetings, connector mentions, URLs, boilerplate and instructions like fix it, audit it, continue;",
+                "- no quotes, emoji, markdown, trailing punctuation or generic labels such as New chat.",
+              ].join("\n"),
+            },
+            { role: "user", content: prompt.slice(0, 3000) },
+          ],
+          response_format: { type: "json_object" },
+        },
+      });
+
+      if (response.ok) {
+        const json = await response.json();
+        const parsed = JSON.parse(json.choices?.[0]?.message?.content ?? "{}");
+        title = normalizeGeneratedTitle(parsed?.title, fallback);
+        source = "ai";
+      }
+    } catch (error) {
+      console.warn("conversation title generation failed", error);
+    }
+  }
+
+  const conversationId = typeof body.conversationId === "string" ? body.conversationId.trim() : "";
+  if (/^[0-9a-f-]{36}$/i.test(conversationId)) {
+    const { error } = await admin
+      .from("ai_conversations")
+      .update({ title })
+      .eq("id", conversationId)
+      .eq("user_id", userId);
+    if (error) console.error("conversation title persist failed", error);
+  }
+
+  return Response.json(
+    { title, source },
+    { headers: { ...corsHeaders(req), "Cache-Control": "no-store" } },
+  );
+}
+
 async function classify(
   lovableKey: string | undefined,
   lastUserText: string,
@@ -720,6 +845,9 @@ async function handleAiAgent(req: Request): Promise<Response> {
     if (!gate.userId) return guardError(req, "UNAUTHORIZED", "Tizimga kirish kerak.", 401);
     const body = await req.json().catch(() => null) as Record<string, any> | null;
     if (!body) return guardError(req, "INVALID_REQUEST", "JSON body talab qilinadi.", 400);
+    if (body.action === "title") {
+      return generateConversationTitleResponse(req, body, gate.userId, gate.admin);
+    }
     const mode: Mode = body.mode === "chat" ? "chat" : "agent";
     if (body.action === "resume" || body.action === "continue") {
       return resumeDurableRun(req, body, gate.userId, gate.admin);

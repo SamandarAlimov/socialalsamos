@@ -37,7 +37,7 @@ import type {
   AIToolEvent,
 } from '@/components/ai/types';
 import { extractArtifacts } from '@/lib/aiArtifacts';
-import { streamAgent } from '@/lib/ai/agentClient';
+import { generateConversationTitle, streamAgent } from '@/lib/ai/agentClient';
 import { buildRepoContext, detectRepoRefs, githubRepoUrl } from '@/lib/ai/githubContext';
 import { buildBrainContext } from '@/lib/ai/brain';
 import { captureMemories, syncMemories } from '@/lib/ai/memory';
@@ -116,6 +116,45 @@ function isProjectSchemaError(error: any): boolean {
     error?.code === '42703' ||
     error?.code === 'PGRST204'
   );
+}
+
+const TITLE_MAX_CHARS = 42;
+
+function fallbackConversationTitle(raw: string): string {
+  const cleaned = raw
+    .replace(/https?:\/\/\S+/gi, ' ')
+    .replace(/@[A-Za-z0-9_.-]+/g, ' ')
+    .replace(/\bBismillahir\s+Rohmanir\s+Rohiym\b/gi, ' ')
+    .replace(/\bBismillahir\s+Rahmanir\s+Rahim\b/gi, ' ')
+    .replace(/[\x60*_#>\[\]{}()]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!cleaned) return 'Yangi suhbat';
+
+  const firstSentence = cleaned.split(/[.!?\n]+/)[0]?.trim() || cleaned;
+  const words = firstSentence.split(/\s+/).filter(Boolean);
+  const filler = new Set([
+    'mana', 'shu', 'shuni', 'buni', 'iltimos', 'qil', 'qilib', 'qiling', 'qilgin',
+    'kerak', "bo'lsin", 'bo‘lsin', 'hal', 'et', 'ber', 'bering', 'chiq', 'davom',
+    'keyin', 'endi', 'uchun', 'menga', 'men', 'bizda', 'bizning', 'please', 'the',
+    'a', 'an', 'to', 'this', 'that', 'fix', 'do', 'make',
+  ]);
+
+  const meaningful = words.filter((word, index) => {
+    if (index < 2) return true;
+    const normalized = word.toLowerCase().replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
+    return normalized.length > 1 && !filler.has(normalized);
+  });
+
+  let title = (meaningful.length ? meaningful : words).slice(0, 6).join(' ').trim();
+  if (title.length > TITLE_MAX_CHARS) {
+    const shortened = title.slice(0, TITLE_MAX_CHARS + 1);
+    title = shortened.slice(0, Math.max(shortened.lastIndexOf(' '), 18)).trim();
+  }
+  title = title.replace(/[,:;\-–—]+$/g, '').trim();
+  if (!title) return 'Yangi suhbat';
+  return title.charAt(0).toUpperCase() + title.slice(1);
 }
 
 function conversationPreview(conversation: AIConversation): string {
@@ -286,13 +325,37 @@ export default function AIPageV2() {
     void syncMemories();
   }, [user]);
 
-  const deriveTitle = useCallback((items: AIMessage[], id?: string): string => {
+  const deriveTitle = useCallback((items: AIMessage[], id?: string, persistedTitle?: string | null): string => {
     const overrides = readMap(TITLE_KEY);
     if (id && overrides[id]) return overrides[id];
-    const first = items.find((message) => message.role === 'user');
+    if (persistedTitle?.trim()) return persistedTitle.trim();
+    const first = items.find((message) => message.role === 'user' && message.content.trim());
     if (!first) return 'Yangi suhbat';
-    return first.content.slice(0, 48) + (first.content.length > 48 ? '…' : '');
+    return fallbackConversationTitle(first.content);
   }, []);
+
+  const refreshGeneratedTitle = useCallback(async (conversationId: string, items: AIMessage[]) => {
+    const first = items.find((message) => message.role === 'user' && message.content.trim());
+    if (!first) return;
+
+    const overridesBefore = readMap(TITLE_KEY);
+    if (overridesBefore[conversationId]) return;
+
+    const title = await generateConversationTitle(first.content, conversationId);
+    if (!title) return;
+
+    // A manual rename may happen while the title request is in flight. Never
+    // overwrite the user's explicit title with an automatic one.
+    const overridesAfter = readMap(TITLE_KEY);
+    if (overridesAfter[conversationId]) return;
+
+    setConversations((previous) =>
+      previous.map((conversation) =>
+        conversation.id === conversationId ? { ...conversation, title } : conversation,
+      ),
+    );
+  }, []);
+
 
   useEffect(() => {
     const load = async () => {
@@ -318,7 +381,7 @@ export default function AIPageV2() {
         const revived = reviveMessages(row.messages || []);
         return {
           id: String(row.id),
-          title: deriveTitle(revived, String(row.id)),
+          title: deriveTitle(revived, String(row.id), typeof row.title === 'string' ? row.title : null),
           messages: revived,
           updatedAt: new Date(row.updated_at || Date.now()),
           pinned: Boolean(pins[row.id]),
@@ -435,6 +498,7 @@ export default function AIPageV2() {
       },
       ...previous,
     ]);
+    void refreshGeneratedTitle(id, newMessages);
     return id;
   };
 
@@ -687,12 +751,21 @@ export default function AIPageV2() {
   };
 
   const renameConversation = (id: string, title: string) => {
+    const cleanTitle = title.trim();
+    if (!cleanTitle) return;
     const map = readMap(TITLE_KEY);
-    map[id] = title;
+    map[id] = cleanTitle;
     writeMap(TITLE_KEY, map);
     setConversations((previous) =>
-      previous.map((conversation) => (conversation.id === id ? { ...conversation, title } : conversation)),
+      previous.map((conversation) => (conversation.id === id ? { ...conversation, title: cleanTitle } : conversation)),
     );
+    if (user) {
+      void db
+        .from('ai_conversations')
+        .update({ title: cleanTitle } as any)
+        .eq('id', id)
+        .eq('user_id', user.id);
+    }
   };
 
   const togglePin = (id: string) => {
