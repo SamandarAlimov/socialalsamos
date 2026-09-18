@@ -19,10 +19,10 @@ import {
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
+import { tokenizeHttpUrls } from '@/lib/ai/links';
 import type { AIMessage } from './types';
 import { AIToolTimeline } from './AIToolTimeline';
 
-const GH_SPLIT_RE = /(https?:\/\/(?:www\.)?github\.com\/[A-Za-z0-9_.\-/#?=&%]+)/g;
 const isGithubUrl = (value: string) => /^https?:\/\/(?:www\.)?github\.com\//i.test(value);
 const shortGithubLabel = (href: string) =>
   href.replace(/^https?:\/\/(?:www\.)?github\.com\//i, '').replace(/\/$/, '').replace(/\.git$/i, '');
@@ -59,14 +59,33 @@ function GithubChip({ href, children, onUserBubble }: { href: string; children?:
   );
 }
 
-function linkifyGithub(text: string, onUserBubble?: boolean): React.ReactNode[] {
-  return text.split(GH_SPLIT_RE).map((part, index) =>
-    isGithubUrl(part) ? (
-      <GithubChip key={`gh-${index}`} href={part} onUserBubble={onUserBubble} />
-    ) : (
-      <span key={`text-${index}`}>{part}</span>
-    ),
-  );
+function linkifyUrls(text: string, onUserBubble?: boolean): React.ReactNode[] {
+  return tokenizeHttpUrls(text).map((token, index) => {
+    if (token.type === 'text') {
+      return <span key={`text-${index}`}>{token.value}</span>;
+    }
+
+    if (isGithubUrl(token.value)) {
+      return <GithubChip key={`gh-${index}`} href={token.value} onUserBubble={onUserBubble} />;
+    }
+
+    return (
+      <a
+        key={`url-${index}`}
+        href={token.value}
+        target="_blank"
+        rel="noreferrer noopener"
+        className={cn(
+          'break-all underline-offset-2 hover:underline',
+          onUserBubble
+            ? 'text-blue-300 hover:text-blue-200 dark:text-blue-600 dark:hover:text-blue-700'
+            : 'text-blue-600 dark:text-blue-400',
+        )}
+      >
+        {token.value}
+      </a>
+    );
+  });
 }
 
 function CodeBlock({ className, children }: { className?: string; children: React.ReactNode }) {
@@ -219,7 +238,7 @@ export function AIMessageBubble({ message, isStreaming, onRegenerate }: Props) {
       <div className="mb-4 flex min-w-0 flex-col items-end gap-1.5 overflow-hidden">
         <div className="min-w-0 max-w-[88%] overflow-hidden rounded-2xl rounded-br-md bg-foreground px-3.5 py-2.5 text-background shadow-sm sm:max-w-[82%]">
           <p className="whitespace-pre-wrap break-words text-sm leading-relaxed [overflow-wrap:anywhere]">
-            {linkifyGithub(message.content, true)}
+            {linkifyUrls(message.content, true)}
           </p>
         </div>
         {message.attachments && message.attachments.length > 0 && (
@@ -294,10 +313,10 @@ export function AIMessageBubble({ message, isStreaming, onRegenerate }: Props) {
                     <p>
                       {Array.isArray(children)
                         ? children.map((child: any, index: number) =>
-                            typeof child === 'string' ? <span key={index}>{linkifyGithub(child)}</span> : child,
+                            typeof child === 'string' ? <span key={index}>{linkifyUrls(child)}</span> : child,
                           )
                         : typeof children === 'string'
-                          ? linkifyGithub(children)
+                          ? linkifyUrls(children)
                           : children}
                     </p>
                   ),
@@ -344,7 +363,7 @@ export function AIMessageBubble({ message, isStreaming, onRegenerate }: Props) {
           )}
 
           {!message.error && !isStreaming && (
-            <div className="mt-2 flex flex-wrap items-center gap-0.5 opacity-100 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100 sm:focus-within:opacity-100">
+            <div className="mt-2 flex flex-wrap items-center gap-0.5 text-muted-foreground">
               <Button
                 size="icon"
                 variant="ghost"
