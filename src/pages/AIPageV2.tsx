@@ -1540,7 +1540,7 @@ export default function AIPageV2() {
             <div className="pointer-events-auto relative z-10">
               <div
                 aria-hidden="true"
-                className="pointer-events-none absolute bottom-0 left-1/2 h-4 w-[calc(100%-1rem)] max-w-3xl -translate-x-1/2 bg-gradient-to-b from-background/0 via-background/70 to-background backdrop-blur-[2px] sm:h-5 sm:w-[calc(100%-2rem)]"
+                className="pointer-events-none absolute bottom-0 left-1/2 h-4 w-[calc(100%_-_1rem)] max-w-3xl -translate-x-1/2 bg-gradient-to-b from-background/0 via-background/70 to-background backdrop-blur-[2px] sm:h-5 sm:w-[calc(100%_-_2rem)]"
               />
               <div className="relative z-10">
                 {composer}
