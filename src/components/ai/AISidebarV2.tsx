@@ -186,7 +186,7 @@ export function AISidebar({
           aria-label="AI yon panelini kengaytirish"
           title="AI yon panelini kengaytirish"
         >
-          <PanelLeftOpen className="h-4.5 w-4.5" />
+          <PanelLeftOpen className="h-[18px] w-[18px]" />
         </Button>
 
         <div className="my-2 h-px w-8 shrink-0 bg-border/60" />
@@ -201,7 +201,7 @@ export function AISidebar({
             aria-label="Yangi suhbat"
             title="Yangi suhbat"
           >
-            <Plus className="h-4.5 w-4.5" />
+            <Plus className="h-[18px] w-[18px]" />
           </Button>
 
           <Button
@@ -213,7 +213,7 @@ export function AISidebar({
             aria-label="Loyihalar"
             title="Loyihalar"
           >
-            <FolderKanban className="h-4.5 w-4.5" />
+            <FolderKanban className="h-[18px] w-[18px]" />
           </Button>
 
           {onOpenArtifacts && (
@@ -226,7 +226,7 @@ export function AISidebar({
               aria-label="Artefaktlar"
               title={artifactCount > 0 ? `Artefaktlar (${artifactCount})` : 'Artefaktlar'}
             >
-              <FileCode2 className="h-4.5 w-4.5" />
+              <FileCode2 className="h-[18px] w-[18px]" />
               {artifactCount > 0 && (
                 <span className="absolute right-1 top-1 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-foreground px-0.5 text-[8px] font-semibold text-background">
                   {artifactCount > 9 ? '9+' : artifactCount}
@@ -245,7 +245,7 @@ export function AISidebar({
               aria-label="Konnektorlar"
               title="Konnektorlar"
             >
-              <Plug className="h-4.5 w-4.5" />
+              <Plug className="h-[18px] w-[18px]" />
             </Button>
           )}
 
@@ -258,7 +258,7 @@ export function AISidebar({
             aria-label="Suhbatlar tarixini ochish"
             title="Suhbatlar"
           >
-            <History className="h-4.5 w-4.5" />
+            <History className="h-[18px] w-[18px]" />
           </Button>
         </nav>
       </div>
