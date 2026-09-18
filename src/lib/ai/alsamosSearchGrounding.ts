@@ -28,8 +28,23 @@ type SearchPayload = {
   error?: { code?: string; message?: string } | null;
 };
 
-const LIVE_WEB_INTENT = /\b(search|look\s*up|find\s+(?:on\s+)?(?:the\s+)?web|internet|latest|current|today|tonight|news|headline|price|weather|forecast|score|result|release|version|market|stock|exchange\s+rate|who\s+is|what\s+is|qidir|izla|internetdan|veb|so['’]nggi|oxirgi|bugun|hozir|yangilik|narx|ob[- ]?havo|kurs|natija|kim\s+bu|nima\s+bu|найд|поиск|интернет|последн|сегодня|сейчас|новост|цена|погод|курс|кто\s+это|что\s+это)\b/i;
+const EXPLICIT_WEB_INTENT = /\b(search|look\s*up|find\s+(?:on\s+)?(?:the\s+)?web|search\s+(?:the\s+)?web|internet(?:dan|da)?\s+(?:qidir(?:ib|ing)?|izla(?:b|ng)?|tekshir(?:ib|ing)?|top(?:ib|ing)?|ko['’]?r(?:ib|ing)?)|vebda\s+(?:qidir(?:ib|ing)?|izla(?:b|ng)?|tekshir(?:ib|ing)?)|webda\s+(?:qidir(?:ib|ing)?|izla(?:b|ng)?|tekshir(?:ib|ing)?)|google(?:da|dan)?\s+(?:qidir(?:ib|ing)?|izla(?:b|ng)?|tekshir(?:ib|ing)?)|qidirib\s+(?:ber|ko['’]?r)|найд(?:и|ите)?\s+в\s+интернете|поиск\s+в\s+интернете|проверь\s+в\s+интернете)\b/i;
+const CURRENT_WEB_INTENT = /\b(latest|current|today|tonight|news|headline|price|prices|release\s+notes?|changelog|market\s+trend|stock\s+price|exchange\s+rate|CVE-\d{4}-\d+|eng\s+yangi|so['’]nggi|oxirgi|bugun(?:gi)?|hozir(?:gi)?|joriy|yangilik(?:lar)?(?:ni|ini|larini)?|narx(?:lar)?(?:ni|ini)?|kurs(?:i|ni)?|последн(?:ий|яя|ие)|сегодня|сейчас|новост(?:и|ей)?|цена|курс)\b/i;
+const WEATHER_LOOKUP_INTENT = /\b(weather|forecast|ob[- ]?havo|погод|прогноз\s+погод)\b/i;
+const PRODUCT_BUILD_CONTEXT = /\b(platform|platforma|app|application|website|websayt|site|dashboard|project|loyiha|dastur|software|service|system|yarat|qur|build|create|develop|design|ui\/ux|frontend|backend|архитектур|платформ|приложен|сайт|созда|разработ)\b/i;
 const IMAGE_INTENT = /\b(image|images|photo|photos|picture|pictures|rasm|rasmlar|foto|surat|изображ|фото|картин)\b/i;
+
+function shouldUseLiveWeb(query: string): boolean {
+  if (EXPLICIT_WEB_INTENT.test(query)) return true;
+  if (CURRENT_WEB_INTENT.test(query)) return true;
+
+  // "weather platforma yaratamiz" is a product-design request, not a request
+  // for the current weather. Plain weather terms only trigger grounding when
+  // they are used as a lookup rather than as the subject of a product/project.
+  if (WEATHER_LOOKUP_INTENT.test(query) && !PRODUCT_BUILD_CONTEXT.test(query)) return true;
+
+  return false;
+}
 
 let githubConnectionSynced = false;
 let githubConnectionSyncInFlight: Promise<void> | null = null;
@@ -60,6 +75,7 @@ async function syncGithubConnectionBeforeRequest(toolGroups: ToolGroupId[]): Pro
 
 function stripInternalContext(value: string): string {
   return value
+    .replace(/\[ALSAMOS GITHUB KONTEKSTI[\s\S]*$/gi, ' ')
     .replace(/<alsamos_internal_context>[\s\S]*?<\/alsamos_internal_context>/gi, ' ')
     .replace(/Do not quote or mention the internal context\.[\s\S]*$/gi, ' ')
     .replace(/\s+/g, ' ')
@@ -170,7 +186,7 @@ export async function withAlsamosSearchGrounding<T extends GroundableAgentOption
   await syncGithubConnectionBeforeRequest(options.toolGroups);
 
   const originalQuery = latestUserMessage(options.messages);
-  if (!originalQuery || !options.toolGroups.includes('web') || !LIVE_WEB_INTENT.test(originalQuery)) {
+  if (!originalQuery || !options.toolGroups.includes('web') || !shouldUseLiveWeb(originalQuery)) {
     return options;
   }
 

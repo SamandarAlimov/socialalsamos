@@ -37,6 +37,42 @@ const RESERVED = new Set([
   'join',
 ]);
 
+const NON_REPO_SLASH_TERMS = new Set([
+  'ui/ux',
+  'ci/cd',
+  'api/sdk',
+  'tcp/ip',
+  'http/https',
+  'http/2',
+  'http/3',
+  'ssr/csr',
+  'csr/ssr',
+  'b2b/b2c',
+  'b2c/b2b',
+  'qa/qc',
+  'r&d/qa',
+]);
+
+function looksLikeBareRepo(owner: string, repo: string): boolean {
+  const candidate = `${owner}/${repo}`;
+  const lower = candidate.toLowerCase();
+  if (NON_REPO_SLASH_TERMS.has(lower)) return false;
+  if (/^\d+\/\d+$/.test(candidate)) return false;
+
+  // Short all-uppercase slash pairs are overwhelmingly technical concepts
+  // (UI/UX, CI/CD, QA/QC), not GitHub owner/repository identifiers.
+  if (
+    owner.length <= 4 &&
+    repo.length <= 4 &&
+    /^[A-Z0-9]+$/.test(owner) &&
+    /^[A-Z0-9]+$/.test(repo)
+  ) {
+    return false;
+  }
+
+  return true;
+}
+
 const REPO_URL_RE = /(?:https?:\/\/)?(?:www\.)?github\.com\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)/gi;
 const BARE_RE = /(?:^|[\s(«"'`])([A-Za-z0-9][A-Za-z0-9_.-]{0,38})\/([A-Za-z0-9][A-Za-z0-9_.-]{0,99})(?=$|[\s)»"'`,.:;!?])/g;
 
@@ -71,9 +107,9 @@ export function detectRepoRefs(text: string): RepoRef[] {
     BARE_RE.lastIndex = 0;
     while ((match = BARE_RE.exec(text)) !== null) {
       const candidate = `${match[1]}/${match[2]}`;
-      // Yo'l/sana/kasr kabi noto'g'ri mosliklarni chetlab o'tamiz.
-      if (/^\d+\/\d+$/.test(candidate)) continue;
+      // Yo'l/sana/kasr va UI/UX kabi texnik terminlarni repo deb qabul qilmaymiz.
       if (candidate.split('/').length !== 2) continue;
+      if (!looksLikeBareRepo(match[1], match[2])) continue;
       add(match[1], match[2]);
     }
   }
