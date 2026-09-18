@@ -1521,11 +1521,6 @@ export default function AIPageV2() {
             ref={composerDockRef}
             className="pointer-events-none absolute inset-x-0 bottom-0 z-30 pt-10 sm:pt-12"
           >
-            <div
-              aria-hidden="true"
-              className="absolute inset-0 bg-gradient-to-t from-background via-background/80 to-background/0 backdrop-blur-[2px]"
-            />
-
             {showScrollToLatest && (
               <div className="relative z-10 flex justify-center pb-1.5">
                 <Button
@@ -1543,7 +1538,13 @@ export default function AIPageV2() {
             )}
 
             <div className="pointer-events-auto relative z-10">
-              {composer}
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-x-0 bottom-0 h-4 bg-gradient-to-b from-background/0 via-background/70 to-background backdrop-blur-[2px] sm:h-5"
+              />
+              <div className="relative z-10">
+                {composer}
+              </div>
             </div>
           </div>
         )}
