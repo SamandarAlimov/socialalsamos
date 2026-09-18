@@ -64,7 +64,7 @@ function linkifyUserText(text: string) {
     return (
       <a
         key={`url-${index}`}
-        href={token.value}
+        href={token.href}
         target="_blank"
         rel="noreferrer noopener"
         className="break-all text-blue-300 underline-offset-2 hover:text-blue-200 hover:underline dark:text-blue-600 dark:hover:text-blue-700"

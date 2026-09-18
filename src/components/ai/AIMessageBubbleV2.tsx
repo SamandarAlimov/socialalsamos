@@ -65,14 +65,14 @@ function linkifyUrls(text: string, onUserBubble?: boolean): React.ReactNode[] {
       return <span key={`text-${index}`}>{token.value}</span>;
     }
 
-    if (isGithubUrl(token.value)) {
-      return <GithubChip key={`gh-${index}`} href={token.value} onUserBubble={onUserBubble} />;
+    if (isGithubUrl(token.href)) {
+      return <GithubChip key={`gh-${index}`} href={token.href} onUserBubble={onUserBubble} />;
     }
 
     return (
       <a
         key={`url-${index}`}
-        href={token.value}
+        href={token.href}
         target="_blank"
         rel="noreferrer noopener"
         className={cn(
