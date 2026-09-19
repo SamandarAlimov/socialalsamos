@@ -756,6 +756,107 @@ function providerFailureMessage(provider: string, status: number): string {
   return `AI xizmatida vaqtinchalik xatolik (provider: ${provider}, HTTP ${status}).`;
 }
 
+class ProviderUnavailableError extends Error {
+  provider: string;
+  status: number;
+
+  constructor(provider: string, status: number, message: string) {
+    super(message);
+    this.name = "ProviderUnavailableError";
+    this.provider = provider;
+    this.status = status;
+  }
+}
+
+function shouldUseProviderlessFallback(error: ProviderUnavailableError): boolean {
+  return error.status === 0 ||
+    error.status === 401 ||
+    error.status === 402 ||
+    error.status === 403 ||
+    error.status === 429 ||
+    error.status >= 500;
+}
+
+async function providerlessAlsamosAnswer(
+  userText: string,
+  ctx: ToolContext,
+): Promise<string | null> {
+  const query = originalUserIntent(userText).trim().replace(/\s+/g, " ").slice(0, 160);
+  if (!query) return null;
+
+  // Use an explicit public-only query because ctx.admin bypasses RLS. Never
+  // expose drafts/private/hidden posts while serving this degraded-mode path.
+  const postResult = await ctx.admin
+    .from("posts")
+    .select("id, content, created_at")
+    .eq("visibility", "public")
+    .eq("status", "published")
+    .or("is_hidden.eq.false,is_hidden.is.null")
+    .ilike("content", `%${query}%`)
+    .order("created_at", { ascending: false })
+    .limit(3);
+
+  if (!postResult.error && postResult.data?.length) {
+    const post = postResult.data[0] as { id?: unknown; content?: unknown };
+    const fullContent = String(post.content ?? "").trim();
+    if (fullContent) {
+      const maxChars = 12_000;
+      const content = fullContent.length > maxChars
+        ? `${fullContent.slice(0, maxChars).trimEnd()}…`
+        : fullContent;
+      const postId = String(post.id ?? "");
+      const link = postId ? `\n\n[Postni ochish](/post/${encodeURIComponent(postId)})` : "";
+      return `Alsamos ichida “${query}” bo‘yicha mos post topildi:\n\n${content}${link}`;
+    }
+  }
+
+  if (!ctx.enabled.has("search_alsamos_platform")) return null;
+  const platform = await executePlatformTool(
+    "search_alsamos_platform",
+    { query, scope: "all", limit: 5 },
+    ctx,
+  );
+  if (!platform?.ok) return null;
+
+  const search = (platform.data?.alsamosSearch ?? null) as Record<string, any> | null;
+  if (!search) return null;
+
+  const lines: string[] = [];
+  for (const product of Array.isArray(search.products) ? search.products.slice(0, 5) : []) {
+    const title = String(product?.title ?? "Mahsulot");
+    const path = typeof product?.product_path === "string" ? product.product_path : "";
+    const price = Number.isFinite(Number(product?.price))
+      ? ` — ${Number(product.price).toLocaleString()} ${String(product?.currency ?? "")}`.trimEnd()
+      : "";
+    lines.push(path ? `- [${title}](${path})${price}` : `- ${title}${price}`);
+  }
+  for (const store of Array.isArray(search.stores) ? search.stores.slice(0, 3) : []) {
+    const name = String(store?.name ?? store?.business_name ?? "Store");
+    const path = typeof store?.store_path === "string" ? store.store_path : "";
+    const location = typeof store?.location === "string" && store.location.trim()
+      ? ` — ${store.location.trim()}`
+      : "";
+    lines.push(path ? `- [${name}](${path})${location}` : `- ${name}${location}`);
+  }
+  for (const place of Array.isArray(search.places) ? search.places.slice(0, 3) : []) {
+    const name = String(place?.name ?? place?.address ?? "Joy");
+    const path = typeof place?.map_path === "string" ? place.map_path : "";
+    const address = typeof place?.address === "string" && place.address.trim()
+      ? ` — ${place.address.trim()}`
+      : "";
+    lines.push(path ? `- [${name}](${path})${address}` : `- ${name}${address}`);
+  }
+  for (const person of Array.isArray(search.people) ? search.people.slice(0, 3) : []) {
+    const name = String(person?.display_name ?? person?.username ?? "Profil");
+    const path = typeof person?.profile_path === "string" ? person.profile_path : "";
+    lines.push(path ? `- [${name}](${path})` : `- ${name}`);
+  }
+
+  return lines.length
+    ? `AI provayder vaqtincha mavjud emas, lekin Alsamos ichidan quyidagilar topildi:\n\n${lines.join("\n")}`
+    : null;
+}
+
 async function directChatResponse(
   req: Request,
   body: Record<string, any>,
@@ -765,8 +866,6 @@ async function directChatResponse(
   const inputMessages = normalizeInputMessages(body.messages);
   if (!inputMessages.length) return guardError(req, "INVALID_REQUEST", "messages massivi talab qilinadi.", 400);
   const lovableKey = Deno.env.get("LOVABLE_API_KEY") || "";
-  if (!hasGeminiKeys() && !hasOpenAIKey() && !lovableKey) return guardError(req, "SERVER_ERROR", "AI xizmati sozlanmagan.", 500);
-
   const groups = requestedGroups(body);
   const baseEnabled = enabledTools(groups);
   const userText = lastUserText(inputMessages);
@@ -830,7 +929,23 @@ async function directChatResponse(
           if (!res.ok || !res.body) {
             const detail = await res.text().catch(() => "");
             console.error("chat provider error", provider, res.status, detail.slice(0, 500));
-            send({ type: "error", message: providerFailureMessage(provider, res.status) });
+            const providerError = new ProviderUnavailableError(
+              provider,
+              res.status,
+              providerFailureMessage(provider, res.status),
+            );
+            if (shouldUseProviderlessFallback(providerError)) {
+              const degradedAnswer = await providerlessAlsamosAnswer(userText, runtime.ctx);
+              if (degradedAnswer) {
+                send({
+                  type: "notice",
+                  message: "AI provayder vaqtincha ishlamayapti; javob Alsamos ichidagi tasdiqlangan platforma ma’lumotidan berildi.",
+                });
+                send({ type: "delta", text: degradedAnswer });
+                break;
+              }
+            }
+            send({ type: "error", message: providerError.message });
             break;
           }
 
@@ -893,7 +1008,24 @@ async function directChatResponse(
         }
       } catch (error) {
         console.error("direct chat error", error);
-        send({ type: "error", message: error instanceof Error ? error.message : "Kutilmagan xatolik." });
+        const message = error instanceof Error ? error.message : "Kutilmagan xatolik.";
+        if (
+          error instanceof ProviderUnavailableError ||
+          /AI provider credentials unavailable|Barcha Gemini kalitlari ishlamadi|Google API ishlamadi/i.test(message)
+        ) {
+          const degradedAnswer = await providerlessAlsamosAnswer(userText, runtime.ctx).catch(() => null);
+          if (degradedAnswer) {
+            send({
+              type: "notice",
+              message: "AI provayder vaqtincha ishlamayapti; javob Alsamos ichidagi tasdiqlangan platforma ma’lumotidan berildi.",
+            });
+            send({ type: "delta", text: degradedAnswer });
+          } else {
+            send({ type: "error", message: error instanceof ProviderUnavailableError ? error.message : "AI provayderlar hozir mavjud emas." });
+          }
+        } else {
+          send({ type: "error", message });
+        }
       } finally {
         controller.enqueue(encoder.encode("data: [DONE]\n\n"));
         controller.close();
@@ -1117,7 +1249,6 @@ async function initializeRun(admin: SupabaseClient, run: AgentRun): Promise<{
   specs: ToolSpec[];
 }> {
   const lovableKey = Deno.env.get("LOVABLE_API_KEY") || "";
-  if (!hasGeminiKeys() && !hasOpenAIKey() && !lovableKey) throw new Error("AI credentials missing.");
   const inputMessages = normalizeInputMessages(run.input?.messages);
   const userText = lastUserText(inputMessages);
   const cls = await classify(lovableKey || undefined, userText);
@@ -1246,20 +1377,38 @@ async function streamWorkerModelRound(
   conversation: ChatMessage[],
   specs: ToolSpec[],
 ): Promise<{ assistantText: string; calls: PendingCall[] }> {
-  const { response, provider } = await aiFetch({
-    lovableKey: lovableKey || undefined,
-    body: {
-      model,
-      messages: conversation,
-      stream: true,
-      ...(specs.length ? { tools: specs, tool_choice: "auto" } : {}),
-    },
-  });
+  let response: Response;
+  let provider = "unknown";
+  try {
+    const result = await aiFetch({
+      lovableKey: lovableKey || undefined,
+      body: {
+        model,
+        messages: conversation,
+        stream: true,
+        ...(specs.length ? { tools: specs, tool_choice: "auto" } : {}),
+      },
+    });
+    response = result.response;
+    provider = result.provider;
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    console.error("agent provider request failed", detail);
+    throw new ProviderUnavailableError(
+      "none",
+      0,
+      "AI provayderlar hozir mavjud emas. Alsamos ichidagi ma’lumot bilan davom etishga urinaman.",
+    );
+  }
 
   if (!response.ok || !response.body) {
     const detail = await response.text().catch(() => "");
     console.error("agent provider error", provider, response.status, detail.slice(0, 500));
-    throw new Error(providerFailureMessage(provider, response.status));
+    throw new ProviderUnavailableError(
+      provider,
+      response.status,
+      providerFailureMessage(provider, response.status),
+    );
   }
 
   const reader = response.body.getReader();
@@ -1344,6 +1493,7 @@ async function processRunChunk(admin: SupabaseClient, claimed: AgentRun): Promis
   let runtime: Awaited<ReturnType<typeof runtimeContext>>;
   let specs: ToolSpec[];
   const lovableKey = Deno.env.get("LOVABLE_API_KEY") || "";
+  const runUserText = lastUserText(normalizeInputMessages(run.input?.messages));
 
   if (!Array.isArray(run.checkpoint?.conversation) || run.checkpoint.conversation.length === 0) {
     const initialized = await initializeRun(admin, run);
@@ -1353,13 +1503,12 @@ async function processRunChunk(admin: SupabaseClient, claimed: AgentRun): Promis
     specs = initialized.specs;
   } else {
     conversation = run.checkpoint.conversation as ChatMessage[];
-    const userText = lastUserText(normalizeInputMessages(run.input?.messages));
     const baseEnabled = enabledTools(Array.isArray(run.tool_groups) ? run.tool_groups : DEFAULT_GROUPS);
     runtime = await runtimeContext(admin, run.user_id, baseEnabled, lovableKey);
-    const enabled = effectiveToolsForRequest(baseEnabled, userText, runtime.githubConnection.connected);
+    const enabled = effectiveToolsForRequest(baseEnabled, runUserText, runtime.githubConnection.connected);
     runtime.ctx.enabled = enabled;
     runtime.ctx.githubConnected = runtime.githubConnection.connected;
-    runtime.ctx.userRequest = userText;
+    runtime.ctx.userRequest = runUserText;
     specs = toolSpecs(enabled);
   }
 
@@ -1396,14 +1545,41 @@ async function processRunChunk(admin: SupabaseClient, claimed: AgentRun): Promis
       return "queued";
     }
 
-    const { assistantText, calls } = await streamWorkerModelRound(
-      admin,
-      run.id,
-      lovableKey,
-      run.resolved_model || MODEL_ROUTES.balanced,
-      conversation,
-      specs,
-    );
+    let assistantText: string;
+    let calls: PendingCall[];
+    try {
+      ({ assistantText, calls } = await streamWorkerModelRound(
+        admin,
+        run.id,
+        lovableKey,
+        run.resolved_model || MODEL_ROUTES.balanced,
+        conversation,
+        specs,
+      ));
+    } catch (error) {
+      if (error instanceof ProviderUnavailableError && shouldUseProviderlessFallback(error)) {
+        const degradedAnswer = await providerlessAlsamosAnswer(runUserText, runtime.ctx).catch(() => null);
+        if (degradedAnswer) {
+          await emit(admin, run.id, "notice", {
+            message: "AI provayder vaqtincha ishlamayapti; javob Alsamos ichidagi tasdiqlangan platforma ma’lumotidan berildi.",
+          });
+          await emit(admin, run.id, "delta", { text: degradedAnswer });
+          const finalConversation = [...conversation, { role: "assistant" as const, content: degradedAnswer }];
+          await admin.from("ai_agent_runs").update({
+            status: "completed",
+            final_text: degradedAnswer,
+            checkpoint: durableCheckpoint(finalConversation),
+            lease_until: null,
+            last_error: null,
+            completed_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          }).eq("id", run.id);
+          await finalizeConversation(admin, run, degradedAnswer);
+          return "completed";
+        }
+      }
+      throw error;
+    }
 
     if (!calls.length) {
       const finalText = assistantText.trim() || "Vazifa yakunlandi.";
