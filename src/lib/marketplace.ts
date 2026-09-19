@@ -139,10 +139,20 @@ export const CHECKOUT_ERROR_MESSAGES: Record<string, string> = {
   product_unavailable: 'Mahsulot sotuvdan olingan. Savatni tekshiring.',
   insufficient_stock: 'Omborda yetarli mahsulot qolmadi. Sonini kamaytiring.',
   insufficient_balance: "Hamyonda mablag' yetarli emas. To'ldiring yoki boshqa usulni tanlang.",
+  pickup_not_available: "Olib ketish faqat bitta restorandan berilgan buyurtmada mavjud.",
+  checkout_failed: "Buyurtmani hozir yakunlab bo'lmadi. Qayta urinib ko'ring.",
 };
 
+export function checkoutErrorCode(raw?: string | null): string {
+  if (!raw) return 'checkout_failed';
+
+  const normalized = raw.replace(/^.*:\s*/, '').trim();
+  if (CHECKOUT_ERROR_MESSAGES[normalized]) return normalized;
+
+  const embeddedCode = Object.keys(CHECKOUT_ERROR_MESSAGES).find(code => raw.includes(code));
+  return embeddedCode ?? 'checkout_failed';
+}
+
 export function checkoutErrorMessage(raw?: string | null): string {
-  if (!raw) return "Kutilmagan xatolik yuz berdi. Qayta urinib ko'ring.";
-  const code = raw.replace(/^.*:\s*/, '').trim();
-  return CHECKOUT_ERROR_MESSAGES[code] ?? raw;
+  return CHECKOUT_ERROR_MESSAGES[checkoutErrorCode(raw)];
 }
