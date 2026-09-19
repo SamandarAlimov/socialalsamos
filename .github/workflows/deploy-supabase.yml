@@ -48,6 +48,7 @@ jobs:
       CRON_SECRET: ${{ secrets.CRON_SECRET }}
       GIPHY_API_KEY: ${{ secrets.GIPHY_API_KEY }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      LOVABLE_API_KEY: ${{ secrets.LOVABLE_API_KEY }}
       GEMINI_API_KEYS: ${{ secrets.GEMINI_API_KEYS }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       GEMINI_API_KEY_1: ${{ secrets.GEMINI_API_KEY_1 }}
@@ -167,6 +168,7 @@ jobs:
           sync_secret CRON_SECRET "${CRON_SECRET:-}"
           sync_secret GIPHY_API_KEY "${GIPHY_API_KEY:-}"
           sync_secret OPENAI_API_KEY "${OPENAI_API_KEY:-}"
+          sync_secret LOVABLE_API_KEY "${LOVABLE_API_KEY:-}"
           sync_secret GEMINI_API_KEYS "${GEMINI_API_KEYS:-}"
           sync_secret GEMINI_API_KEY "${GEMINI_API_KEY:-}"
           sync_secret GEMINI_API_KEY_1 "${GEMINI_API_KEY_1:-}"
@@ -202,21 +204,25 @@ jobs:
           remote_secrets="$(supabase secrets list --project-ref "$SUPABASE_PROJECT_REF" 2>/dev/null || true)"
           gemini_count="$(printf '%s\n' "$remote_secrets" | grep -E -c '(^|[[:space:]])GEMINI_API_KEYS([[:space:]]|$)|(^|[[:space:]])GEMINI_API_KEY(_[0-9]+)?([[:space:]]|$)' || true)"
           openai_count="$(printf '%s\n' "$remote_secrets" | grep -E -c '(^|[[:space:]])OPENAI_API_KEY([[:space:]]|$)' || true)"
+          lovable_count="$(printf '%s\n' "$remote_secrets" | grep -E -c '(^|[[:space:]])LOVABLE_API_KEY([[:space:]]|$)' || true)"
+          legacy_alsamos_count="$(printf '%s\n' "$remote_secrets" | grep -E -c '(^|[[:space:]])Alsamos([[:space:]]|$)' || true)"
 
-          echo "Remote AI secret names: Gemini=$gemini_count OpenAI=$openai_count"
+          echo "Remote AI secret names: Gemini=$gemini_count OpenAI=$openai_count Lovable=$lovable_count LegacyAlsamos=$legacy_alsamos_count"
           {
             echo '### AI provider secret check'
             echo
             echo "- Gemini secret names: $gemini_count"
             echo "- OpenAI secret names: $openai_count"
+            echo "- Lovable secret names: $lovable_count"
+            echo "- Legacy Alsamos bundle names: $legacy_alsamos_count"
             echo
             echo 'Secret values are never printed.'
           } >> "$GITHUB_STEP_SUMMARY"
 
-          if [ "$gemini_count" -eq 0 ]; then
-            echo "::warning::No Gemini secret name exists in the target Supabase project. Gemini routing cannot use the configured key pool."
+          if [ "$gemini_count" -eq 0 ] && [ "$legacy_alsamos_count" -eq 0 ]; then
+            echo "::warning::No canonical Gemini secret name exists in the target Supabase project."
           fi
-          if [ "$gemini_count" -eq 0 ] && [ "$openai_count" -eq 0 ]; then
+          if [ "$gemini_count" -eq 0 ] && [ "$openai_count" -eq 0 ] && [ "$lovable_count" -eq 0 ] && [ "$legacy_alsamos_count" -eq 0 ]; then
             echo "::error::No AI provider secret is configured in the target Supabase project."
             exit 1
           fi
