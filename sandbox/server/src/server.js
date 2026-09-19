@@ -9,11 +9,25 @@ const port = Number(process.env.PORT || 8787);
 const apiKey = process.env.SANDBOX_API_KEY;
 const image = process.env.SANDBOX_IMAGE || 'alsamos-ai-runner:latest';
 const maxCodeBytes = 128 * 1024;
+const maxGeneratedFiles = 8;
+const maxGeneratedFileBytes = 10 * 1024 * 1024;
+const maxGeneratedTotalBytes = 20 * 1024 * 1024;
+
+const GENERATED_MIME_BY_EXT = new Map([
+  ['.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'],
+  ['.docx', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+  ['.pptx', 'application/vnd.openxmlformats-officedocument.presentationml.presentation'],
+  ['.pdf', 'application/pdf'],
+  ['.csv', 'text/csv'],
+  ['.md', 'text/markdown'],
+  ['.txt', 'text/plain'],
+  ['.json', 'application/json'],
+]);
 
 const server = http.createServer(async (req, res) => {
   try {
     if (req.method === 'GET' && req.url === '/health') {
-      sendJson(res, 200, { ok: true });
+      sendJson(res, 200, { ok: true, generatedFiles: true });
       return;
     }
 
@@ -50,11 +64,28 @@ const server = http.createServer(async (req, res) => {
 
     const runId = crypto.randomUUID();
     const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), `alsamos-sandbox-${runId}-`));
+    const outputDir = path.join(tmpDir, 'outputs');
 
     try {
-      await fs.writeFile(path.join(tmpDir, spec.file), code, 'utf8');
+      // The runner executes as "nobody". The directory is unique per request,
+      // has no network access, and is deleted immediately after collection.
+      await fs.chmod(tmpDir, 0o777);
+      await fs.mkdir(outputDir, { mode: 0o777 });
+      await fs.chmod(outputDir, 0o777);
+      await fs.writeFile(path.join(tmpDir, spec.file), code, { encoding: 'utf8', mode: 0o644 });
+
       const result = await runDocker(tmpDir, spec, stdin, timeoutMs);
-      sendJson(res, 200, { id: runId, language, ...result });
+      const generated = !result.timedOut && result.exitCode === 0
+        ? await collectGeneratedFiles(outputDir)
+        : { files: [], warnings: [] };
+
+      sendJson(res, 200, {
+        id: runId,
+        language,
+        ...result,
+        files: generated.files,
+        fileWarnings: generated.warnings,
+      });
     } finally {
       await fs.rm(tmpDir, { recursive: true, force: true });
     }
@@ -123,8 +154,10 @@ function runDocker(tmpDir, spec, stdin, timeoutMs) {
       '--cpus', '1',
       '--pids-limit', '128',
       '--read-only',
+      '--cap-drop', 'ALL',
+      '--security-opt', 'no-new-privileges',
       '--tmpfs', '/tmp:rw,noexec,nosuid,size=64m',
-      '-v', `${tmpDir}:/workspace:ro`,
+      '-v', `${tmpDir}:/workspace:rw`,
       image,
       ...spec.command,
     ];
@@ -160,6 +193,65 @@ function runDocker(tmpDir, spec, stdin, timeoutMs) {
 
     child.stdin.end(stdin);
   });
+}
+
+async function collectGeneratedFiles(outputDir) {
+  const files = [];
+  const warnings = [];
+  let totalBytes = 0;
+
+  const entries = (await fs.readdir(outputDir, { withFileTypes: true }))
+    .filter((entry) => entry.isFile())
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  for (const entry of entries.slice(0, 64)) {
+    if (files.length >= maxGeneratedFiles) {
+      warnings.push(`Only the first ${maxGeneratedFiles} generated files were collected.`);
+      break;
+    }
+
+    const ext = path.extname(entry.name).toLowerCase();
+    const mimeType = GENERATED_MIME_BY_EXT.get(ext);
+    if (!mimeType) {
+      warnings.push(`${entry.name}: unsupported generated-file type.`);
+      continue;
+    }
+
+    const filePath = path.join(outputDir, entry.name);
+    const stat = await fs.stat(filePath);
+    if (!stat.isFile()) continue;
+    if (stat.size <= 0) {
+      warnings.push(`${entry.name}: empty file was ignored.`);
+      continue;
+    }
+    if (stat.size > maxGeneratedFileBytes) {
+      warnings.push(`${entry.name}: file is larger than 10 MB.`);
+      continue;
+    }
+    if (totalBytes + stat.size > maxGeneratedTotalBytes) {
+      warnings.push('Generated-file total is larger than 20 MB.');
+      break;
+    }
+
+    const content = await fs.readFile(filePath);
+    totalBytes += content.byteLength;
+    files.push({
+      name: sanitizeOutputName(entry.name),
+      mimeType,
+      size: content.byteLength,
+      contentBase64: content.toString('base64'),
+    });
+  }
+
+  return { files, warnings };
+}
+
+function sanitizeOutputName(value) {
+  const base = path.basename(String(value || 'file'))
+    .replace(/[\u0000-\u001f\u007f]/g, '')
+    .replace(/[^\p{L}\p{N}._ ()\-]+/gu, '_')
+    .trim();
+  return (base || 'file').slice(0, 140);
 }
 
 function appendLimited(current, chunk) {
