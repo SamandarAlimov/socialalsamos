@@ -125,7 +125,7 @@ async function requestAgent(
   payload: Record<string, unknown>,
   signal: AbortSignal | undefined,
   onEvent: (event: AgentEvent) => void,
-): Promise<{ runId: string | null; eventId: number; status: string | null; sawText: boolean; sawMedia: boolean; failure: string | null }> {
+): Promise<{ runId: string | null; eventId: number; status: string | null; sawText: boolean; sawMedia: boolean; sawClarification: boolean; failure: string | null }> {
   let response: Response;
   try {
     response = await fetch(`${FUNCTIONS_BASE}/ai-agent`, {
@@ -158,6 +158,7 @@ async function requestAgent(
   let status: string | null = null;
   let sawText = false;
   let sawMedia = false;
+  let sawClarification = false;
   let failure: string | null = null;
 
   await readSse(response.body, (raw) => {
@@ -167,6 +168,7 @@ async function requestAgent(
       if (typeof anyEvent.eventId === 'number') eventId = Math.max(eventId, anyEvent.eventId);
       if (anyEvent.runId) runId = anyEvent.runId;
       if (event.type === 'delta' && event.text.trim()) sawText = true;
+      if (event.type === 'clarification') sawClarification = true;
       if (event.type === 'run_state') {
         status = event.status;
         runId = event.runId;
@@ -192,7 +194,7 @@ async function requestAgent(
     }
   });
 
-  return { runId, eventId, status, sawText, sawMedia, failure };
+  return { runId, eventId, status, sawText, sawMedia, sawClarification, failure };
 }
 
 async function streamDurableAgent(options: StreamAgentOptions): Promise<void> {
@@ -222,6 +224,7 @@ async function streamDurableAgent(options: StreamAgentOptions): Promise<void> {
 
     let sawText = state.sawText;
     let sawMedia = state.sawMedia;
+    let sawClarification = state.sawClarification;
     let failure = state.failure;
     let reconnects = 0;
 
@@ -241,13 +244,14 @@ async function streamDurableAgent(options: StreamAgentOptions): Promise<void> {
       );
       sawText ||= state.sawText;
       sawMedia ||= state.sawMedia;
+      sawClarification ||= state.sawClarification;
       failure = state.failure ?? failure;
     }
 
     if (!sawText && !sawMedia && failure && state.status !== 'awaiting_continue') {
       prepared.onEvent({ type: 'error', message: failure });
     }
-    if (state.status === 'awaiting_continue' && state.runId) {
+    if (state.status === 'awaiting_continue' && state.runId && !sawClarification) {
       prepared.onEvent({
         type: 'notice',
         message: `Agent checkpoint qilindi. Run ${state.runId.slice(0, 8)} uchun davom ettirish mumkin.`,
@@ -274,7 +278,7 @@ async function streamDirectChat(options: StreamAgentOptions): Promise<void> {
     prepared.signal,
     prepared.onEvent,
   );
-  if (!state.sawText && !state.sawMedia) {
+  if (!state.sawText && !state.sawMedia && !state.sawClarification) {
     prepared.onEvent({
       type: 'error',
       message: state.failure || 'AI stream tugadi, lekin server matn yoki media qaytarmadi. Qayta urinib ko‘ring.',
@@ -367,6 +371,42 @@ export async function generateConversationTitle(
     return null;
   }
 }
+export async function answerAgentClarification(
+  runId: string,
+  clarificationId: string,
+  answers: Record<string, string | string[]>,
+  onEvent: (event: AgentEvent) => void,
+  afterEventId = 0,
+  signal?: AbortSignal,
+): Promise<void> {
+  let state = await requestAgent(
+    {
+      action: 'answer_clarification',
+      runId,
+      clarificationId,
+      answers,
+      afterEventId,
+      mode: 'agent',
+    },
+    signal,
+    onEvent,
+  );
+
+  while (
+    state.runId &&
+    !signal?.aborted &&
+    state.status &&
+    !['completed', 'failed', 'cancelled', 'awaiting_continue'].includes(state.status)
+  ) {
+    await new Promise((resolve) => window.setTimeout(resolve, 350));
+    state = await requestAgent(
+      { action: 'resume', runId: state.runId, afterEventId: state.eventId, mode: 'agent' },
+      signal,
+      onEvent,
+    );
+  }
+}
+
 export async function continueAgentRun(
   runId: string,
   onEvent: (event: AgentEvent) => void,
