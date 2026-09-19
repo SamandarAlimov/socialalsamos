@@ -4,7 +4,7 @@ import {
   useState,
   type KeyboardEvent,
   type MouseEvent,
-  type TouchEvent,
+  type PointerEvent,
 } from 'react';
 import {
   Check,
@@ -80,8 +80,9 @@ export function ProductCard({
   const [isAddingToCart, setIsAddingToCart] = useState(false);
   const [justAdded, setJustAdded] = useState(false);
 
-  const touchStartX = useRef<number | null>(null);
-  const touchStartY = useRef<number | null>(null);
+  const pointerStartX = useRef<number | null>(null);
+  const pointerStartY = useRef<number | null>(null);
+  const activePointerId = useRef<number | null>(null);
   const suppressSelectRef = useRef(false);
   const suppressTimerRef = useRef<number | null>(null);
   const addedTimerRef = useRef<number | null>(null);
@@ -117,7 +118,6 @@ export function ProductCard({
     : 'Olib ketish';
   const productCondition = conditionLabel(product.condition);
   const views = Number(product.views_count ?? 0);
-  const likes = Number(product.likes_count ?? 0);
   const imageCount = product.images?.length ?? 0;
   const dotCount = Math.min(5, imageCount);
   const activeDotIndex =
@@ -155,23 +155,47 @@ export function ProductCard({
     triggerHaptic('light');
   };
 
-  const handleMediaTouchStart = (event: TouchEvent<HTMLDivElement>) => {
-    const touch = event.touches[0];
-    touchStartX.current = touch?.clientX ?? null;
-    touchStartY.current = touch?.clientY ?? null;
+  const handleMediaPointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    if (imageCount <= 1) return;
+    if ((event.target as HTMLElement).closest('button')) return;
+
+    pointerStartX.current = event.clientX;
+    pointerStartY.current = event.clientY;
+    activePointerId.current = event.pointerId;
+
+    if (event.pointerType === 'mouse') {
+      event.preventDefault();
+    }
+
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } catch {
+      // Some embedded browsers do not expose pointer capture.
+    }
   };
 
-  const handleMediaTouchEnd = (event: TouchEvent<HTMLDivElement>) => {
-    if (imageCount <= 1 || touchStartX.current == null || touchStartY.current == null) return;
-    const touch = event.changedTouches[0];
-    if (!touch) return;
+  const resetPointerGesture = () => {
+    pointerStartX.current = null;
+    pointerStartY.current = null;
+    activePointerId.current = null;
+  };
 
-    const deltaX = touch.clientX - touchStartX.current;
-    const deltaY = touch.clientY - touchStartY.current;
-    touchStartX.current = null;
-    touchStartY.current = null;
+  const handleMediaPointerUp = (event: PointerEvent<HTMLDivElement>) => {
+    if (
+      imageCount <= 1 ||
+      activePointerId.current !== event.pointerId ||
+      pointerStartX.current == null ||
+      pointerStartY.current == null
+    ) {
+      resetPointerGesture();
+      return;
+    }
 
-    if (Math.abs(deltaX) < 38 || Math.abs(deltaX) <= Math.abs(deltaY) * 1.1) return;
+    const deltaX = event.clientX - pointerStartX.current;
+    const deltaY = event.clientY - pointerStartY.current;
+    resetPointerGesture();
+
+    if (Math.abs(deltaX) < 32 || Math.abs(deltaX) <= Math.abs(deltaY) * 1.05) return;
     shiftImage(deltaX < 0 ? 1 : -1);
   };
 
@@ -233,9 +257,11 @@ export function ProductCard({
         onKeyDown={handleKeyDown}
       >
         <div
-          className="relative h-24 w-24 shrink-0 touch-pan-y overflow-hidden rounded-xl bg-muted"
-          onTouchStart={handleMediaTouchStart}
-          onTouchEnd={handleMediaTouchEnd}
+          className="relative h-24 w-24 shrink-0 touch-pan-y select-none overflow-hidden rounded-xl bg-muted"
+          onPointerDown={handleMediaPointerDown}
+          onPointerUp={handleMediaPointerUp}
+          onPointerCancel={resetPointerGesture}
+          onDragStart={event => event.preventDefault()}
         >
           <MarketplaceProductImage
             product={product}
@@ -331,7 +357,12 @@ export function ProductCard({
                 <Button
                   type="button"
                   size="sm"
-                  className="h-8 rounded-xl bg-violet-600 px-2.5 text-[11px] font-bold text-white hover:bg-violet-700"
+                  className={cn(
+                    'h-8 rounded-xl px-2.5 text-[11px] font-bold text-white shadow-sm transition',
+                    justAdded
+                      ? 'bg-emerald-600 hover:bg-emerald-600'
+                      : 'bg-zinc-950 hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200',
+                  )}
                   onClick={handleAddToCart}
                   disabled={isAddingToCart || isSoldOut}
                   aria-label={marketplaceUz.card.addToCart}
@@ -369,9 +400,11 @@ export function ProductCard({
       onKeyDown={handleKeyDown}
     >
       <div
-        className="relative aspect-square touch-pan-y overflow-hidden bg-muted"
-        onTouchStart={handleMediaTouchStart}
-        onTouchEnd={handleMediaTouchEnd}
+        className="relative aspect-square touch-pan-y select-none overflow-hidden bg-muted"
+        onPointerDown={handleMediaPointerDown}
+        onPointerUp={handleMediaPointerUp}
+        onPointerCancel={resetPointerGesture}
+        onDragStart={event => event.preventDefault()}
       >
         <MarketplaceProductImage
           product={product}
@@ -484,6 +517,13 @@ export function ProductCard({
             </span>
           </div>
         )}
+
+        {views > 0 && (
+          <div className="absolute bottom-2 right-2 z-10 inline-flex items-center gap-1 rounded-full bg-black/45 px-2 py-1 text-[9px] font-semibold text-white backdrop-blur-md">
+            <Eye className="h-3 w-3" />
+            <span className="tabular-nums">{formatCount(views)}</span>
+          </div>
+        )}
       </div>
 
       <div className="flex flex-1 flex-col gap-1.5 p-2.5">
@@ -523,26 +563,6 @@ export function ProductCard({
           </span>
         </div>
 
-        {(sellerRating > 0 || views > 0 || likes > 0) && (
-          <div className="flex min-w-0 items-center gap-2 text-[10px] text-muted-foreground">
-            {sellerRating > 0 && (
-              <span className="inline-flex items-center gap-0.5">
-                <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
-                <span className="font-semibold tabular-nums text-foreground/85">
-                  {sellerRating.toFixed(1)}
-                </span>
-              </span>
-            )}
-            {views > 0 && (
-              <span className="inline-flex items-center gap-0.5">
-                <Eye className="h-3 w-3" />
-                {formatCount(views)}
-              </span>
-            )}
-            {likes > 0 && <span className="truncate">{formatCount(likes)} saqlash</span>}
-          </div>
-        )}
-
         {product.location && (
           <div className="flex min-w-0 items-center gap-1 text-[10px] text-muted-foreground">
             <MapPin className="h-3 w-3 shrink-0" />
@@ -554,8 +574,16 @@ export function ProductCard({
           <div className="mt-auto flex items-center gap-1 border-t border-border/30 pt-1 text-[11px] text-muted-foreground">
             <span className="min-w-0 flex-1 truncate">{product.seller.business_name}</span>
             {product.seller.is_verified && <VerifiedMerchantMark />}
+            {sellerRating > 0 && (
+              <span className="inline-flex shrink-0 items-center gap-0.5 text-[10px]">
+                <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
+                <span className="font-semibold tabular-nums text-foreground/80">
+                  {sellerRating.toFixed(1)}
+                </span>
+              </span>
+            )}
             {(product.seller.total_sales ?? 0) > 0 && (
-              <span className="shrink-0 text-[9px]">
+              <span className="hidden shrink-0 text-[9px] sm:inline">
                 {marketplaceUz.card.sales(product.seller.total_sales ?? 0)}
               </span>
             )}
@@ -565,7 +593,12 @@ export function ProductCard({
         {onAddToCart && (
           <Button
             type="button"
-            className="mt-1 h-9 w-full rounded-xl bg-violet-600 text-xs font-extrabold text-white shadow-sm hover:bg-violet-700 active:scale-[0.99]"
+            className={cn(
+              'mt-1 h-9 w-full rounded-xl text-xs font-extrabold text-white shadow-sm transition active:scale-[0.99]',
+              justAdded
+                ? 'bg-emerald-600 hover:bg-emerald-600'
+                : 'bg-zinc-950 hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200',
+            )}
             onClick={handleAddToCart}
             disabled={isAddingToCart || isSoldOut}
             aria-label={marketplaceUz.card.addToCart}
