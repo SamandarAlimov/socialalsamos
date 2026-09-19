@@ -191,7 +191,11 @@ async function requestAgent(
             : `${event.name} bajarilmadi.`;
         } else {
           const data = event.data as Record<string, unknown> | null;
-          if (typeof data?.imageUrl === 'string' || typeof data?.videoUrl === 'string') sawMedia = true;
+          if (
+            typeof data?.imageUrl === 'string' ||
+            typeof data?.videoUrl === 'string' ||
+            (Array.isArray(data?.files) && data.files.length > 0)
+          ) sawMedia = true;
         }
       }
       onEvent(event);

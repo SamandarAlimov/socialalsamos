@@ -31,6 +31,7 @@ import { AIConnectorsDialog } from '@/components/ai/AIConnectorsDialog';
 import { AIGithubDialog } from '@/components/ai/AIGithubDialog';
 import { AIClarificationDialog, type AIClarificationAnswers } from '@/components/ai/AIClarificationDialog';
 import type {
+  AIAttachmentMeta,
   AIConversation,
   AIMessage,
   AIProject,
@@ -936,6 +937,7 @@ export default function AIPageV2() {
     const planSteps: string[] = [];
     const images: string[] = [];
     const videos: string[] = [];
+    const generatedFiles: AIAttachmentMeta[] = [];
     const sources: AISource[] = [];
     const pendingVideoJobs: string[] = [];
     let usedModel: string | null = null;
@@ -951,6 +953,7 @@ export default function AIPageV2() {
         content,
         images: images.length ? [...images] : undefined,
         videos: videos.length ? [...videos] : undefined,
+        attachments: generatedFiles.length ? generatedFiles.map((file) => ({ ...file })) : undefined,
         sources: sources.length ? [...sources] : undefined,
         tools: tools.length ? tools.map((tool) => ({ ...tool })) : undefined,
         plan: planSteps.length ? [...planSteps] : undefined,
@@ -1102,6 +1105,29 @@ export default function AIPageV2() {
               const videoUrl = (event.data as any)?.videoUrl;
               if (typeof videoUrl === 'string' && !videos.includes(videoUrl)) videos.push(videoUrl);
 
+              const foundFiles = (event.data as any)?.files;
+              if (Array.isArray(foundFiles)) {
+                for (const rawFile of foundFiles) {
+                  const name = typeof rawFile?.name === 'string' ? rawFile.name : '';
+                  const url = typeof rawFile?.url === 'string' ? rawFile.url : '';
+                  const storagePath = typeof rawFile?.storagePath === 'string' ? rawFile.storagePath : undefined;
+                  if (!name || (!url && !storagePath)) continue;
+                  if (generatedFiles.some((file) =>
+                    (storagePath && file.storagePath === storagePath) || (!storagePath && url && file.url === url)
+                  )) continue;
+                  generatedFiles.push({
+                    url,
+                    name,
+                    type: typeof rawFile?.type === 'string' ? rawFile.type : 'file',
+                    size: typeof rawFile?.size === 'number' ? rawFile.size : undefined,
+                    mimeType: typeof rawFile?.mimeType === 'string' ? rawFile.mimeType : undefined,
+                    bucket: typeof rawFile?.bucket === 'string' ? rawFile.bucket : undefined,
+                    storagePath,
+                    presented: true,
+                  });
+                }
+              }
+
               const foundSources = (event.data as any)?.sources;
               if (Array.isArray(foundSources)) {
                 for (const source of foundSources as AISource[]) {
@@ -1167,13 +1193,13 @@ export default function AIPageV2() {
       }
 
       if (clarificationRequest) {
-        const partial = content || images.length || videos.length || tools.length || notice ? flush() : null;
+        const partial = content || images.length || videos.length || generatedFiles.length || tools.length || notice ? flush() : null;
         await saveConversation(partial ? [...baseMessages, partial] : baseMessages);
         setForwardedPost(null);
         return;
       }
 
-      if (!content && !images.length && !videos.length) {
+      if (!content && !images.length && !videos.length && !generatedFiles.length) {
         content = "Javob bo‘sh qaytdi. Iltimos, qaytadan urinib ko‘ring.";
       }
       const final = flush();
@@ -1187,7 +1213,7 @@ export default function AIPageV2() {
       }
     } catch (error: any) {
       if (error?.name === 'AbortError') {
-        if (content || images.length || videos.length) {
+        if (content || images.length || videos.length || generatedFiles.length) {
           const partial = flush();
           await saveConversation([...baseMessages, partial]);
         }

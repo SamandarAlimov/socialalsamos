@@ -21,6 +21,10 @@ export type AIAttachmentMeta = {
   name: string;
   type: string;
   size?: number;
+  mimeType?: string;
+  bucket?: string;
+  storagePath?: string;
+  presented?: boolean;
 };
 
 export interface AIMessage {

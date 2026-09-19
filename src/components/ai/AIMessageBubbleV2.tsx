@@ -9,12 +9,16 @@ import {
   ChevronRight,
   Copy,
   Download,
+  File as FileIcon,
+  FileSpreadsheet,
+  FileText,
   Github,
   Info,
   Loader2,
   Maximize2,
   Paperclip,
   Play,
+  Presentation,
   RotateCcw,
   Volume2,
   VolumeX,
@@ -22,8 +26,9 @@ import {
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
+import { supabase } from '@/integrations/supabase/client';
 import { tokenizeHttpUrls } from '@/lib/ai/links';
-import type { AIMessage } from './types';
+import type { AIAttachmentMeta, AIMessage } from './types';
 import { AIToolTimeline } from './AIToolTimeline';
 
 const isGithubUrl = (value: string) => /^https?:\/\/(?:www\.)?github\.com\//i.test(value);
@@ -197,6 +202,91 @@ function VideoCard({ url }: { url: string }) {
   );
 }
 
+function readableBytes(value?: number) {
+  const bytes = Math.max(0, Number(value) || 0);
+  if (!bytes) return '';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(bytes < 10 * 1024 ? 1 : 0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function presentedFileIcon(name: string) {
+  const lower = name.toLowerCase();
+  if (lower.endsWith('.xlsx') || lower.endsWith('.csv')) return FileSpreadsheet;
+  if (lower.endsWith('.pptx')) return Presentation;
+  if (lower.endsWith('.docx') || lower.endsWith('.pdf') || lower.endsWith('.md') || lower.endsWith('.txt')) return FileText;
+  return FileIcon;
+}
+
+function PresentedFileCard({ file }: { file: AIAttachmentMeta }) {
+  const [href, setHref] = useState(file.url || '');
+  const [resolving, setResolving] = useState(Boolean(file.bucket && file.storagePath));
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!file.bucket || !file.storagePath) {
+      setHref(file.url || '');
+      setResolving(false);
+      return () => { cancelled = true; };
+    }
+
+    setResolving(true);
+    void supabase.storage
+      .from(file.bucket)
+      .createSignedUrl(file.storagePath, 60 * 60)
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        if (!error && data?.signedUrl) setHref(data.signedUrl);
+        else setHref(file.url || '');
+        setResolving(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [file.bucket, file.storagePath, file.url]);
+
+  const Icon = presentedFileIcon(file.name);
+  const ext = file.name.includes('.') ? file.name.split('.').pop()?.toUpperCase() : 'FILE';
+  const meta = [ext, readableBytes(file.size)].filter(Boolean).join(' · ');
+
+  return (
+    <div className="mt-3 w-full max-w-xl overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm">
+      <div className="flex min-w-0 items-center gap-3 p-3">
+        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-border/50 bg-muted/45">
+          <Icon className="h-5 w-5 text-muted-foreground" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold">{file.name}</p>
+          <p className="mt-0.5 text-[11px] text-muted-foreground">
+            {meta || file.mimeType || 'Tayyor fayl'}
+          </p>
+        </div>
+        <Button
+          size="sm"
+          variant="secondary"
+          className="h-9 shrink-0 gap-1.5 rounded-xl px-3 text-xs"
+          disabled={resolving || !href}
+          asChild={Boolean(href) && !resolving}
+        >
+          {href && !resolving ? (
+            <a href={href} target="_blank" rel="noreferrer noopener" download={file.name}>
+              <Download className="h-3.5 w-3.5" />
+              Yuklab olish
+            </a>
+          ) : (
+            <span className="inline-flex items-center gap-1.5">
+              {resolving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+              {resolving ? 'Tayyorlanmoqda' : 'Yuklab olish'}
+            </span>
+          )}
+        </Button>
+      </div>
+      <div className="border-t border-border/40 px-3 py-1.5 text-[10px] font-medium text-muted-foreground">
+        Presented file
+      </div>
+    </div>
+  );
+}
+
 interface Props {
   message: AIMessage;
   isStreaming?: boolean;
@@ -340,6 +430,9 @@ export function AIMessageBubble({ message, isStreaming, onRegenerate }: Props) {
 
           {images.map((url) => <ImageCard key={url} url={url} id={message.id} />)}
           {videos.map((url) => <VideoCard key={url} url={url} />)}
+          {message.attachments?.map((file, index) => (
+            <PresentedFileCard key={file.storagePath || file.url || `${file.name}-${index}`} file={file} />
+          ))}
 
           {message.sources && message.sources.length > 0 && sourcesOpen && (
             <div className="mt-3 max-w-full overflow-hidden rounded-xl border border-border/50 bg-muted/15 p-2.5">
