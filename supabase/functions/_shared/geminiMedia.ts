@@ -11,8 +11,6 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { googleFetch } from "./geminiPool.ts";
 
-const LOVABLE_GATEWAY = "https://" + "ai.gateway.lovable.dev" + "/v1/chat/completions";
-
 // Google'ning 2026-09 hujjatlaridagi amaldagi generative-media modellari.
 // Retired gemini-3-pro-image-preview / Imagen 4 defaultlardan olib tashlandi.
 const DEFAULT_IMAGE_MODELS = [
@@ -100,26 +98,6 @@ function extForMime(mimeType: string): string {
 
 export type GeneratedImage = { base64: string; mimeType: string; model: string };
 
-/** Oxirgi chora: eski Lovable gateway (agar kaliti hali mavjud bo'lsa). */
-async function lovableImage(prompt: string, lovableKey: string): Promise<GeneratedImage> {
-  const res = await fetch(LOVABLE_GATEWAY, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${lovableKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: "google/gemini-2.5-flash-image",
-      modalities: ["image", "text"],
-      messages: [{ role: "user", content: prompt }],
-    }),
-  });
-  if (!res.ok) throw new Error(`lovable: HTTP ${res.status}`);
-  const json = await res.json();
-  const dataUrl: string | null = json.choices?.[0]?.message?.images?.[0]?.image_url?.url ?? null;
-  if (!dataUrl) throw new Error("lovable: rasm qaytmadi");
-  const inline = await toInlineData(dataUrl);
-  if (!inline) throw new Error("lovable: rasm formati tushunarsiz");
-  return { base64: inline.data, mimeType: inline.mimeType, model: "lovable/gemini-2.5-flash-image" };
-}
-
 /**
  * Matndan (yoki mavjud rasmdan) rasm yaratadi. Model nomzodlari ketma-ket
  * sinaladi: `:generateContent` (Gemini image) va `:predict` (legacy Imagen override).
@@ -127,7 +105,6 @@ async function lovableImage(prompt: string, lovableKey: string): Promise<Generat
 export async function generateImageBytes(opts: {
   prompt: string;
   imageUrl?: string | null;
-  lovableKey?: string;
 }): Promise<GeneratedImage> {
   const inline = opts.imageUrl ? await toInlineData(opts.imageUrl) : null;
   const errors: string[] = [];
@@ -188,13 +165,6 @@ export async function generateImageBytes(opts: {
     }
   }
 
-  if (opts.lovableKey) {
-    try {
-      return await lovableImage(opts.prompt, opts.lovableKey);
-    } catch (error) {
-      errors.push(error instanceof Error ? error.message : String(error));
-    }
-  }
 
   throw new Error(`Rasm yaratilmadi. ${errors.join("; ")}`.slice(0, 600));
 }
