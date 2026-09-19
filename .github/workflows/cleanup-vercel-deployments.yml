@@ -2,10 +2,11 @@ name: Cleanup Vercel Deployments
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - ".github/workflows/cleanup-vercel-deployments.yml"
+    inputs:
+      confirm:
+        description: "Type DELETE_OLD_DEPLOYMENTS to allow deletion"
+        required: true
+        type: string
 
 # A newly triggered cleanup cancels any older long-running cleanup. This is
 # critical because an old deletion loop must never keep deleting deployments
@@ -19,6 +20,7 @@ permissions:
 
 jobs:
   cleanup:
+    if: ${{ inputs.confirm == 'DELETE_OLD_DEPLOYMENTS' }}
     runs-on: ubuntu-latest
     timeout-minutes: 180
     env:
