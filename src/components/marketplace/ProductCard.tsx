@@ -207,6 +207,7 @@ export function ProductCard({
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.target !== event.currentTarget) return;
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
       selectProduct();
@@ -463,10 +464,12 @@ export function ProductCard({
                   )}
                   onClick={event => {
                     event.stopPropagation();
-                    if (imageCount <= 5) {
-                      temporarilySuppressSelect();
-                      setCurrentImageIndex(index);
-                    }
+                    temporarilySuppressSelect();
+                    const targetIndex =
+                      dotCount <= 1
+                        ? 0
+                        : Math.round((index / (dotCount - 1)) * (imageCount - 1));
+                    setCurrentImageIndex(targetIndex);
                   }}
                 />
               ))}
