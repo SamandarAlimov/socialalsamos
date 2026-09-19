@@ -127,12 +127,38 @@ export const MODEL_OPTIONS: ModelOption[] = [
 
 export type AIMode = "chat" | "agent";
 
+export type AIClarificationOption = {
+  label: string;
+  value: string;
+  description?: string;
+};
+
+export type AIClarificationQuestion = {
+  id: string;
+  question: string;
+  type: "single" | "multi" | "text";
+  options?: AIClarificationOption[];
+  required?: boolean;
+  placeholder?: string;
+};
+
+export type AIClarificationRequest = {
+  type: "clarification";
+  id: string;
+  title?: string;
+  message?: string;
+  questions: AIClarificationQuestion[];
+  runId?: string;
+  eventId?: number;
+};
+
 export const MODE_OPTIONS: Array<{ id: AIMode; label: string; hint: string }> = [
   { id: "chat", label: "Suhbat", hint: "Tez javob; minimal tool budget va qisqa orchestration" },
   { id: "agent", label: "Agent", hint: "Durable vazifa; plan, checkpoint, background davom etish va ko'p qadamli ish" },
 ];
 
 export type AgentEvent =
+  | AIClarificationRequest
   | { type: "meta"; model: string; task: string; language: string; tools: string[]; mode?: AIMode; keyPool?: string }
   | { type: "plan"; steps: string[]; runId?: string; eventId?: number }
   | { type: "delta"; text: string; runId?: string; eventId?: number }
@@ -196,6 +222,7 @@ export const TOOL_LABELS: Record<string, string> = {
   connector_call: "Plugin vositasini chaqirmoqda",
   computer_task: "Kompyuter vazifasini navbatga qo'ymoqda",
   computer_task_result: "Vazifa natijasini olmoqda",
+  ask_user: "Aniqlik kiritish uchun savol bermoqda",
 };
 
 export function toolLabel(name: string): string {
