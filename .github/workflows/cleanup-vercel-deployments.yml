@@ -13,7 +13,7 @@ permissions:
 jobs:
   cleanup:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 180
     env:
       VERCEL_TOKEN: ${{ secrets.Alsamos || secrets.ALSAMOS || secrets.VERCEL_TOKEN || secrets.VERCEL_TOLEN || secrets.VERCEL_API_TOKEN || vars.Alsamos || vars.ALSAMOS || vars.VERCEL_TOKEN || vars.VERCEL_TOLEN || vars.VERCEL_API_TOKEN }}
       VERCEL_PROJECT_ID: prj_tHXhupcKJ12WyZbmMuYT9Rxr3Av7
@@ -89,45 +89,6 @@ jobs:
           echo "keep_id=$KEEP_ID" >> "$GITHUB_OUTPUT"
           echo "keep_url=$KEEP_URL" >> "$GITHUB_OUTPUT"
 
-      - name: Inventory old deployments
-        id: inventory
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          api() {
-            curl --fail-with-body --silent --show-error               -H "Authorization: Bearer ${VERCEL_TOKEN}"               "$@"
-          }
-
-          : > /tmp/vercel-deployments.txt
-          until_value=""
-
-          while true; do
-            endpoint="https://api.vercel.com/v6/deployments?projectId=${VERCEL_PROJECT_ID}&teamId=${VERCEL_TEAM_ID}&limit=100"
-            if [ -n "$until_value" ]; then
-              endpoint="$endpoint&until=$until_value"
-            fi
-
-            json="$(api "$endpoint")"
-
-            printf '%s' "$json" | jq -r '.deployments[].uid' >> /tmp/vercel-deployments.txt
-
-            next="$(printf '%s' "$json" | jq -r '.pagination.next // empty')"
-            if [ -z "$next" ]; then
-              break
-            fi
-            until_value="$next"
-          done
-
-          sort -u /tmp/vercel-deployments.txt -o /tmp/vercel-deployments.txt
-          total="$(wc -l < /tmp/vercel-deployments.txt | tr -d ' ')"
-          old="$(grep -vFx "${{ steps.keep.outputs.keep_id }}" /tmp/vercel-deployments.txt | wc -l | tr -d ' ' || true)"
-
-          echo "Total deployments: $total"
-          echo "Old deployments to delete: $old"
-          echo "total=$total" >> "$GITHUB_OUTPUT"
-          echo "old=$old" >> "$GITHUB_OUTPUT"
-
       - name: Delete every old deployment
         shell: bash
         run: |
@@ -135,48 +96,104 @@ jobs:
 
           keep="${{ steps.keep.outputs.keep_id }}"
           deleted=0
-          failed=0
+          rate_waits=0
 
-          while IFS= read -r id; do
-            [ -z "$id" ] && continue
-            [ "$id" = "$keep" ] && continue
+          api_list() {
+            curl --fail-with-body --silent --show-error \
+              -H "Authorization: Bearer ${VERCEL_TOKEN}" \
+              "https://api.vercel.com/v6/deployments?projectId=${VERCEL_PROJECT_ID}&teamId=${VERCEL_TEAM_ID}&limit=100"
+          }
 
-            code="$(curl --silent --show-error               --output /tmp/delete-response.json               --write-out "%{http_code}"               --request DELETE               --header "Authorization: Bearer ${VERCEL_TOKEN}"               "https://api.vercel.com/v13/deployments/$id?teamId=${VERCEL_TEAM_ID}")"
+          delete_one() {
+            local id="$1"
 
-            if [ "$code" = "200" ] || [ "$code" = "204" ] || [ "$code" = "404" ]; then
-              deleted=$((deleted + 1))
-            else
-              echo "::warning::Failed deleting $id (HTTP $code)"
+            while true; do
+              code="$(curl --silent --show-error \
+                --output /tmp/delete-response.json \
+                --write-out "%{http_code}" \
+                --request DELETE \
+                --header "Authorization: Bearer ${VERCEL_TOKEN}" \
+                "https://api.vercel.com/v13/deployments/$id?teamId=${VERCEL_TEAM_ID}")"
+
+              if [ "$code" = "200" ] || [ "$code" = "204" ] || [ "$code" = "404" ]; then
+                deleted=$((deleted + 1))
+                return 0
+              fi
+
+              if [ "$code" = "429" ]; then
+                reset_ms="$(jq -r '.error.limit.reset // empty' /tmp/delete-response.json 2>/dev/null || true)"
+                if [ -n "$reset_ms" ] && [ "$reset_ms" != "null" ]; then
+                  now_s="$(date +%s)"
+                  reset_s=$((reset_ms / 1000))
+                  wait_s=$((reset_s - now_s + 3))
+                  if [ "$wait_s" -lt 5 ]; then wait_s=5; fi
+                else
+                  wait_s=610
+                fi
+                rate_waits=$((rate_waits + 1))
+                echo "Vercel delete rate-limit reached. Waiting ${wait_s}s, then continuing..."
+                sleep "$wait_s"
+                continue
+              fi
+
+              echo "::warning::Delete failed for $id (HTTP $code). Response:"
               cat /tmp/delete-response.json || true
-              failed=$((failed + 1))
+              return 1
+            done
+          }
+
+          # Keep refreshing page 1. As old deployments disappear, older ones move
+          # into page 1. This avoids stale pagination and continues until only the
+          # current production deployment remains.
+          while true; do
+            json="$(api_list)"
+            mapfile -t ids < <(printf '%s' "$json" | jq -r --arg keep "$keep" '.deployments[].uid | select(. != $keep)')
+
+            if [ "${#ids[@]}" -eq 0 ]; then
+              total="$(printf '%s' "$json" | jq '.deployments | length')"
+              if [ "$total" -le 1 ]; then
+                break
+              fi
+              echo "No deletable deployment found on the first page; refreshing..."
+              sleep 2
+              continue
             fi
 
-            # Avoid hitting Vercel API burst limits.
-            sleep 0.15
-          done < /tmp/vercel-deployments.txt
+            echo "Deleting ${#ids[@]} old deployment(s) from the current page..."
+            for id in "${ids[@]}"; do
+              delete_one "$id"
+            done
 
+            echo "Deleted so far: $deleted; rate-limit waits: $rate_waits"
+            sleep 1
+          done
+
+          echo "Cleanup deletion loop finished."
           echo "Deleted deployments: $deleted"
-          echo "Failed deletions: $failed"
-
-          if [ "$failed" -gt 0 ]; then
-            echo "::error::$failed deployment(s) could not be deleted."
-            exit 1
-          fi
+          echo "Rate-limit waits: $rate_waits"
 
       - name: Verify cleanup
         shell: bash
         run: |
           set -euo pipefail
 
-          json="$(curl --fail-with-body --silent --show-error             -H "Authorization: Bearer ${VERCEL_TOKEN}"             "https://api.vercel.com/v6/deployments?projectId=${VERCEL_PROJECT_ID}&teamId=${VERCEL_TEAM_ID}&limit=100")"
+          json="$(curl --fail-with-body --silent --show-error \
+            -H "Authorization: Bearer ${VERCEL_TOKEN}" \
+            "https://api.vercel.com/v6/deployments?projectId=${VERCEL_PROJECT_ID}&teamId=${VERCEL_TEAM_ID}&limit=100")"
 
           count="$(printf '%s' "$json" | jq '.deployments | length')"
           keep_present="$(printf '%s' "$json" | jq -r --arg keep "${{ steps.keep.outputs.keep_id }}" 'any(.deployments[]; .uid == $keep)')"
 
-          echo "Remaining deployments on first page: $count"
+          echo "Remaining deployments: $count"
           echo "Current production preserved: $keep_present"
 
           if [ "$keep_present" != "true" ]; then
             echo "::error::Expected production deployment is not present after cleanup."
             exit 1
           fi
+
+          if [ "$count" -ne 1 ]; then
+            echo "::error::Cleanup incomplete: expected exactly 1 deployment, found $count."
+            exit 1
+          fi
+
