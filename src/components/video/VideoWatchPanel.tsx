@@ -31,6 +31,13 @@ import { cn } from '@/lib/utils';
 import { UI_LAYER } from '@/lib/uiLayers';
 import { resolveVideoDigitSeekTarget } from '@/lib/videoKeyboardControls';
 import {
+  buildVideoPlaybackCandidates,
+  getNextVideoSourceIndex,
+  resolvePlayableDuration,
+  VIDEO_LOAD_RECOVERY_TIMEOUT_MS,
+  VIDEO_STALL_RECOVERY_TIMEOUT_MS,
+} from '@/lib/videoPlaybackRecovery';
+import {
   resolveWatchSurfaceTapAction,
   shouldHandleWatchDesktopDoubleClick,
   shouldRevealWatchControlsOnPointerMove,
@@ -49,6 +56,18 @@ import {
 
 const HOLD_TO_SPEED_MS = 300;
 const PLAYBACK_RATES = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2] as const;
+
+function readVideoDuration(el: HTMLVideoElement): number {
+  let seekableEnd: number | null = null;
+  if (el.seekable.length > 0) {
+    try {
+      seekableEnd = el.seekable.end(el.seekable.length - 1);
+    } catch {
+      seekableEnd = null;
+    }
+  }
+  return resolvePlayableDuration(el.duration, seekableEnd);
+}
 
 export interface VideoPlaybackSnapshot {
   time: number;
@@ -103,6 +122,10 @@ export function VideoWatchPanel({
   const playerRef = useRef<HTMLDivElement>(null);
   const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mediaRecoveryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sourceIndexRef = useRef(0);
+  const sourceRetryRef = useRef(0);
+  const recoveringMediaRef = useRef(false);
   const holdActiveRef = useRef(false);
   const lastPointerTypeRef = useRef('mouse');
   const holdStartedPausedRef = useRef(false);
@@ -113,6 +136,8 @@ export function VideoWatchPanel({
   const initialPlaybackRef = useRef<VideoPlaybackSnapshot | null>(initialPlayback);
   const pendingPlaybackRef = useRef<VideoPlaybackSnapshot | null>(initialPlayback);
   const desiredPausedRef = useRef(initialPlayback?.paused ?? false);
+  const currentTimeRef = useRef(initialPlayback?.time ?? 0);
+  const isPlayingRef = useRef(!(initialPlayback?.paused ?? false));
   const autoAdvanceRef = useRef(false);
   const zoom = usePinchZoom(2.5, 1, playerRef);
 
@@ -126,10 +151,22 @@ export function VideoWatchPanel({
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(initialPlayback?.time ?? 0);
   const [buffered, setBuffered] = useState(0);
+  const [sourceIndex, setSourceIndex] = useState(0);
+  const [sourceRetry, setSourceRetry] = useState(0);
+  const [mediaLoadError, setMediaLoadError] = useState(false);
   const [ratio, setRatio] = useState<number | null>(null);
   const [showControls, setShowControls] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [descriptionOpen, setDescriptionOpen] = useState(false);
+
+  useEffect(() => {
+    currentTimeRef.current = currentTime;
+  }, [currentTime]);
+
+  useEffect(() => {
+    isPlayingRef.current = isPlaying;
+  }, [isPlaying]);
+
   const {
     isAutoplayEnabled,
     isLoading: isAutoplayPreferenceLoading,
@@ -139,8 +176,15 @@ export function VideoWatchPanel({
 
   const { lightTap, mediumTap } = useHapticFeedback();
   const heatmap = useVideoHeatmap(activeVideoId || 'video', 56);
-  const videoUrl = video?.media_urls?.[0];
-  const posterUrl = video?.media_urls?.[1];
+  const videoCandidates = useMemo(
+    () => buildVideoPlaybackCandidates(
+      video?.media_urls?.[0] ? [video.media_urls[0]] : [],
+      video?.media_candidates,
+    ),
+    [video],
+  );
+  const videoUrl = videoCandidates[sourceIndex] ?? video?.media_urls?.[0];
+  const posterUrl = video?.poster_url ?? video?.media_urls?.[1];
   const aspectKind = resolveAspectKind(ratio);
 
   const hideControls = useCallback(() => {
@@ -167,28 +211,113 @@ export function VideoWatchPanel({
 
   const getCurrentPlayback = useCallback((): VideoPlaybackSnapshot => {
     const el = videoRef.current;
-    const time = el && Number.isFinite(el.currentTime) ? el.currentTime : currentTime;
-    const paused = el ? el.paused : !isPlaying;
+    const time = el && Number.isFinite(el.currentTime)
+      ? el.currentTime
+      : currentTimeRef.current;
+    const paused = el ? el.paused : !isPlayingRef.current;
     return { time: Math.max(0, time || 0), paused };
-  }, [currentTime, isPlaying]);
+  }, []);
 
   const publishPlayback = useCallback((playback = getCurrentPlayback()) => {
     onPlaybackChange?.(activeVideoId, playback);
     return playback;
   }, [activeVideoId, getCurrentPlayback, onPlaybackChange]);
 
+  const clearMediaRecoveryTimer = useCallback(() => {
+    if (mediaRecoveryTimerRef.current) {
+      clearTimeout(mediaRecoveryTimerRef.current);
+      mediaRecoveryTimerRef.current = null;
+    }
+  }, []);
+
+  const handleMediaFailure = useCallback(() => {
+    if (recoveringMediaRef.current) return;
+    recoveringMediaRef.current = true;
+    clearMediaRecoveryTimer();
+
+    const el = videoRef.current;
+    const time = el && Number.isFinite(el.currentTime)
+      ? el.currentTime
+      : currentTimeRef.current;
+    pendingPlaybackRef.current = {
+      time: Math.max(0, time || 0),
+      paused: desiredPausedRef.current,
+    };
+
+    const nextIndex = getNextVideoSourceIndex(
+      sourceIndexRef.current,
+      videoCandidates.length,
+    );
+
+    setDuration(0);
+    setBuffered(0);
+    setIsPlaying(false);
+    setIsPlayPending(!desiredPausedRef.current);
+
+    if (nextIndex !== null) {
+      sourceIndexRef.current = nextIndex;
+      sourceRetryRef.current = 0;
+      setSourceIndex(nextIndex);
+      setSourceRetry(0);
+      setMediaLoadError(false);
+      return;
+    }
+
+    if (sourceRetryRef.current < 1) {
+      const nextRetry = sourceRetryRef.current + 1;
+      sourceRetryRef.current = nextRetry;
+      setSourceRetry(nextRetry);
+      setMediaLoadError(false);
+      return;
+    }
+
+    desiredPausedRef.current = true;
+    setIsPlayPending(false);
+    setMediaLoadError(true);
+    revealControls();
+  }, [clearMediaRecoveryTimer, revealControls, videoCandidates.length]);
+
+  const scheduleMediaRecovery = useCallback((delay = VIDEO_LOAD_RECOVERY_TIMEOUT_MS) => {
+    clearMediaRecoveryTimer();
+    if (desiredPausedRef.current) return;
+
+    mediaRecoveryTimerRef.current = setTimeout(() => {
+      mediaRecoveryTimerRef.current = null;
+      handleMediaFailure();
+    }, delay);
+  }, [clearMediaRecoveryTimer, handleMediaFailure]);
+
   const requestPlay = useCallback((el: HTMLVideoElement) => {
     desiredPausedRef.current = false;
+    setMediaLoadError(false);
     setIsPlayPending(true);
-    void el.play().catch(() => {
+    scheduleMediaRecovery(VIDEO_LOAD_RECOVERY_TIMEOUT_MS);
+
+    void el.play().catch((error: unknown) => {
+      const name = error instanceof DOMException ? error.name : '';
+      if (name === 'AbortError') return;
+
+      if (name !== 'NotAllowedError') {
+        scheduleMediaRecovery(VIDEO_STALL_RECOVERY_TIMEOUT_MS);
+        return;
+      }
+
+      clearMediaRecoveryTimer();
       desiredPausedRef.current = true;
       setIsPlayPending(false);
       setIsPlaying(false);
-      const time = Number.isFinite(el.currentTime) ? el.currentTime : currentTime;
+      const time = Number.isFinite(el.currentTime)
+        ? el.currentTime
+        : currentTimeRef.current;
       publishPlayback({ time, paused: true });
       revealControls();
     });
-  }, [currentTime, publishPlayback, revealControls]);
+  }, [
+    clearMediaRecoveryTimer,
+    publishPlayback,
+    revealControls,
+    scheduleMediaRecovery,
+  ]);
 
   const applyPendingPlayback = useCallback((el: HTMLVideoElement) => {
     const playback = pendingPlaybackRef.current;
@@ -278,6 +407,13 @@ export function VideoWatchPanel({
     setCurrentTime(playback.time);
     setDuration(0);
     setBuffered(0);
+    sourceIndexRef.current = 0;
+    sourceRetryRef.current = 0;
+    recoveringMediaRef.current = false;
+    setSourceIndex(0);
+    setSourceRetry(0);
+    setMediaLoadError(false);
+    clearMediaRecoveryTimer();
     setRatio(null);
     setDescriptionOpen(false);
     setIsEnded(false);
@@ -293,8 +429,29 @@ export function VideoWatchPanel({
       if (!el) return;
       if (el.readyState >= 1) applyPendingPlayback(el);
       else if (playback.paused) el.pause();
+      else scheduleMediaRecovery(VIDEO_LOAD_RECOVERY_TIMEOUT_MS);
     });
-  }, [activeVideoId, applyPendingPlayback, revealControls, zoom.resetZoom]);
+  }, [
+    activeVideoId,
+    applyPendingPlayback,
+    clearMediaRecoveryTimer,
+    revealControls,
+    scheduleMediaRecovery,
+    zoom.resetZoom,
+  ]);
+
+  useEffect(() => {
+    recoveringMediaRef.current = false;
+    if (!videoUrl || desiredPausedRef.current || mediaLoadError) return;
+    scheduleMediaRecovery(VIDEO_LOAD_RECOVERY_TIMEOUT_MS);
+    return clearMediaRecoveryTimer;
+  }, [
+    clearMediaRecoveryTimer,
+    mediaLoadError,
+    scheduleMediaRecovery,
+    sourceRetry,
+    videoUrl,
+  ]);
 
   useEffect(() => {
     const handler = () => setIsFullscreen(Boolean(document.fullscreenElement));
@@ -305,7 +462,8 @@ export function VideoWatchPanel({
   useEffect(() => () => {
     if (holdTimerRef.current) clearTimeout(holdTimerRef.current);
     if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
-  }, []);
+    clearMediaRecoveryTimer();
+  }, [clearMediaRecoveryTimer]);
 
   const togglePlay = useCallback(() => {
     const el = videoRef.current;
@@ -428,6 +586,25 @@ export function VideoWatchPanel({
       // Optional platform capability.
     }
   }, []);
+
+  const retryPlayback = useCallback(() => {
+    clearMediaRecoveryTimer();
+    sourceIndexRef.current = 0;
+    sourceRetryRef.current = 0;
+    recoveringMediaRef.current = false;
+    pendingPlaybackRef.current = {
+      time: Math.max(0, currentTimeRef.current || 0),
+      paused: false,
+    };
+    desiredPausedRef.current = false;
+    setSourceIndex(0);
+    setSourceRetry(0);
+    setMediaLoadError(false);
+    setIsEnded(false);
+    setIsPlaying(false);
+    setIsPlayPending(true);
+    revealControls();
+  }, [clearMediaRecoveryTimer, revealControls]);
 
   useEffect(() => {
     if (!keyboardEnabled) return;
@@ -574,25 +751,54 @@ export function VideoWatchPanel({
           )}
 
           <video
+            key={`${activeVideoId}:${sourceIndex}:${sourceRetry}`}
             ref={videoRef}
             src={videoUrl}
             poster={posterUrl}
             className="relative z-[1] h-full w-full object-contain will-change-transform"
             style={{ transform: `translate3d(${zoom.translateX}px, ${zoom.translateY}px, 0) scale(${zoom.scale})`, transformOrigin: 'center center' }}
             playsInline
+            preload="auto"
             muted={isMuted}
             onLoadedMetadata={(event) => {
               const el = event.currentTarget;
-              setDuration(Number.isFinite(el.duration) ? el.duration : 0);
+              recoveringMediaRef.current = false;
+              clearMediaRecoveryTimer();
+              setDuration(readVideoDuration(el));
               if (el.videoWidth && el.videoHeight) setRatio(el.videoWidth / el.videoHeight);
               applyPendingPlayback(el);
             }}
+            onDurationChange={(event) => {
+              const nextDuration = readVideoDuration(event.currentTarget);
+              if (nextDuration > 0) setDuration(nextDuration);
+            }}
             onCanPlay={(event) => {
+              recoveringMediaRef.current = false;
+              clearMediaRecoveryTimer();
               if (!desiredPausedRef.current && !isEnded && event.currentTarget.paused) requestPlay(event.currentTarget);
+            }}
+            onPlaying={() => {
+              recoveringMediaRef.current = false;
+              clearMediaRecoveryTimer();
+              setIsPlayPending(false);
+              setIsPlaying(true);
+              setMediaLoadError(false);
+            }}
+            onWaiting={() => {
+              scheduleMediaRecovery(VIDEO_STALL_RECOVERY_TIMEOUT_MS);
+            }}
+            onStalled={() => {
+              scheduleMediaRecovery(VIDEO_STALL_RECOVERY_TIMEOUT_MS);
+            }}
+            onError={() => {
+              handleMediaFailure();
             }}
             onTimeUpdate={(event) => {
               const el = event.currentTarget;
+              if (!el.paused) clearMediaRecoveryTimer();
               setCurrentTime(el.currentTime);
+              const nextDuration = readVideoDuration(el);
+              if (nextDuration > 0 && nextDuration !== duration) setDuration(nextDuration);
               onPlaybackChange?.(activeVideoId, { time: el.currentTime, paused: el.paused });
             }}
             onProgress={(event) => { const el = event.currentTarget; if (el.buffered.length) setBuffered(el.buffered.end(el.buffered.length - 1)); }}
@@ -601,11 +807,15 @@ export function VideoWatchPanel({
               setIsPlayPending(false);
               setIsPlaying(true);
               setIsEnded(false);
+              setMediaLoadError(false);
               onPlaybackChange?.(activeVideoId, { time: event.currentTarget.currentTime, paused: false });
             }}
             onPause={() => {
               setIsPlaying(false);
-              if (desiredPausedRef.current) setIsPlayPending(false);
+              if (desiredPausedRef.current) {
+                clearMediaRecoveryTimer();
+                setIsPlayPending(false);
+              }
             }}
             onEnded={(event) => {
               const endTime = event.currentTarget.duration || duration;
@@ -623,6 +833,27 @@ export function VideoWatchPanel({
               if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
             }}
           />
+
+          {mediaLoadError && (
+            <div className="absolute inset-0 z-[26] flex items-center justify-center bg-black/65 px-6 text-center text-white backdrop-blur-sm">
+              <div className="max-w-sm">
+                <RotateCcw className="mx-auto h-9 w-9 text-white/85" />
+                <p className="mt-3 text-sm font-semibold">Video yuklanishi to‘xtab qoldi</p>
+                <p className="mt-1 text-xs text-white/65">Manbani qayta ulab, oxirgi joydan davom ettirishga urinib ko‘ring.</p>
+                <button
+                  type="button"
+                  data-video-interactive="true"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    retryPlayback();
+                  }}
+                  className="mt-4 rounded-full bg-white px-4 py-2 text-xs font-semibold text-black transition active:scale-95"
+                >
+                  Qayta urinish
+                </button>
+              </div>
+            </div>
+          )}
 
           <div className={cn('pointer-events-none absolute inset-x-0 top-0 z-30 flex items-center justify-between bg-gradient-to-b from-black/70 to-transparent p-3 transition-opacity', showControls ? 'opacity-100' : 'opacity-0')}>
             <Button variant="ghost" size="icon" onClick={(event) => { event.stopPropagation(); closeWithPlayback(); }} className={cn('h-10 w-10 rounded-full bg-black/30 text-white hover:bg-white/15', showControls ? 'pointer-events-auto' : 'pointer-events-none')} aria-label="Videolarga qaytish"><ArrowLeft className="h-5 w-5" /></Button>
@@ -653,7 +884,7 @@ export function VideoWatchPanel({
               <div className="flex items-center gap-1">
                 <Button variant="ghost" size="icon" onClick={togglePlay} className="h-9 w-9 rounded-full text-white hover:bg-white/15" aria-label={isEnded ? 'Qayta ijro' : playbackLooksPlaying ? 'Pauza' : 'Ijro'}>{isEnded ? <RotateCcw className="h-5 w-5" /> : playbackLooksPlaying ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}</Button>
                 <Button variant="ghost" size="icon" onClick={toggleMute} className="h-9 w-9 rounded-full text-white hover:bg-white/15" aria-label={isMuted ? 'Ovozni yoqish' : 'Ovozni o‘chirish'}>{isMuted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}</Button>
-                <span className="ml-1 text-[11px] tabular-nums text-white/90">{formatMediaTime(currentTime)} / {formatMediaTime(duration)}</span>
+                <span className="ml-1 text-[11px] tabular-nums text-white/90">{formatMediaTime(currentTime)} / {duration > 0 ? formatMediaTime(duration) : '--:--'}</span>
               </div>
               <div className="flex items-center gap-1">
                 <Button
