@@ -694,19 +694,21 @@ export function MarketplaceQuickFilters({
           Ommabop
         </button>
 
-        <button
-          type="button"
-          onClick={() => onConditionChange(conditionFilter === 'all' ? 'new' : 'all')}
-          className={cn(
-            'inline-flex h-10 shrink-0 items-center gap-1.5 rounded-full border px-3.5 text-xs font-extrabold transition',
-            conditionFilter === 'new'
-              ? 'border-zinc-950 bg-zinc-950 text-white dark:border-white dark:bg-white dark:text-zinc-950'
-              : 'border-border/60 bg-background hover:border-foreground/20',
-          )}
-        >
-          <PackageCheck className="h-4 w-4" />
-          {selectedCondition || 'Yangi'}
-        </button>
+        {availableConditions.includes('new') && (
+          <button
+            type="button"
+            onClick={() => onConditionChange(conditionFilter === 'all' ? 'new' : 'all')}
+            className={cn(
+              'inline-flex h-10 shrink-0 items-center gap-1.5 rounded-full border px-3.5 text-xs font-extrabold transition',
+              conditionFilter !== 'all'
+                ? 'border-zinc-950 bg-zinc-950 text-white dark:border-white dark:bg-white dark:text-zinc-950'
+                : 'border-border/60 bg-background hover:border-foreground/20',
+            )}
+          >
+            <PackageCheck className="h-4 w-4" />
+            {selectedCondition || 'Yangi'}
+          </button>
+        )}
 
         <button
           type="button"
