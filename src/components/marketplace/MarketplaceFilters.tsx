@@ -21,7 +21,7 @@ import { Slider } from '@/components/ui/slider';
 import { cn } from '@/lib/utils';
 import { conditionLabel, formatPriceCompact } from '@/lib/marketplace';
 
-export type MarketplaceSortMode = 'newest' | 'popular' | 'price_low' | 'price_high';
+export type MarketplaceSortMode = 'recommended' | 'newest' | 'popular' | 'price_low' | 'price_high';
 export type MarketplaceDeliveryMode = 'all' | 'shipping' | 'free_shipping' | 'pickup';
 
 interface FilterStateProps {
@@ -61,6 +61,7 @@ const SORT_OPTIONS: Array<{
   description: string;
   icon: typeof Clock3;
 }> = [
+  { id: 'recommended', label: 'Tavsiya etiladi', description: 'Sifat va qiziqish balansi', icon: Sparkles },
   { id: 'newest', label: 'Eng yangi', description: 'Yangi e’lonlar avval', icon: Clock3 },
   { id: 'popular', label: 'Mashhur', description: 'Ko‘p qiziqish olganlar', icon: Sparkles },
   { id: 'price_low', label: 'Arzon → Qimmat', description: 'Past narxdan boshlash', icon: ArrowDownUp },
@@ -356,6 +357,7 @@ export function MarketplaceFilters({
                     onClick={() => onSortChange(option.id)}
                     className={cn(
                       'relative min-h-[76px] rounded-2xl border p-3 text-left transition-all',
+                      option.id === 'recommended' && 'col-span-2',
                       active
                         ? 'border-zinc-950 bg-zinc-950 text-white shadow-[0_10px_24px_rgba(0,0,0,0.12)] dark:border-white dark:bg-white dark:text-zinc-950'
                         : 'border-border/55 bg-background hover:border-foreground/20 hover:shadow-sm',
@@ -616,7 +618,7 @@ export function MarketplaceFilters({
             variant="outline"
             className="h-12 rounded-2xl font-extrabold"
             onClick={onReset}
-            disabled={activeFilterCount === 0 && sortBy === 'newest'}
+            disabled={activeFilterCount === 0 && sortBy === 'recommended'}
           >
             <RotateCcw className="mr-2 h-4 w-4" />
             Tozalash
