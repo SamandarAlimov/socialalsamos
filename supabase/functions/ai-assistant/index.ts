@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { guard, preflight, jsonResponse, corsHeaders, guardError } from "../_shared/guard.ts";
-import { aiFetch, hasGeminiKeys, hasOpenAIKey, poolStatus } from "../_shared/geminiPool.ts";
+import { aiFetch, hasGeminiKeys, hasOpenAIKey, hasLovableKey, poolStatus } from "../_shared/geminiPool.ts";
 
 const FUNCTION_NAME = "ai-assistant";
 const RATE_LIMIT = 60;
@@ -177,8 +177,8 @@ serve(async (req) => {
     const admin = gate.admin;
 
     const pool = poolStatus();
-    if (!hasGeminiKeys() && !hasOpenAIKey()) {
-      console.error("No AI credentials: set GEMINI_API_KEYS or OPENAI_API_KEY");
+    if (!hasGeminiKeys() && !hasOpenAIKey() && !hasLovableKey()) {
+      console.error("No AI credentials: set GEMINI_API_KEYS, OPENAI_API_KEY, or LOVABLE_API_KEY");
       return guardError(req, "SERVER_ERROR", "AI xizmati sozlanmagan.", 500);
     }
 
