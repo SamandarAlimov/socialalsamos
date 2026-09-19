@@ -1387,7 +1387,7 @@ export function ProductDetail({
                     <div className="alsamos-scrollbar -mx-4 flex gap-3 overflow-x-auto px-4 pb-2 md:mx-0 md:px-0">
                       {relatedProducts.map(related => (
                         <div key={related.id} className="w-40 shrink-0">
-                          <ProductCard product={related} onSelect={openRelated} />
+                          <ProductCard product={related} onSelect={openRelated} onAddToCart={addToCart} />
                         </div>
                       ))}
                     </div>
@@ -1412,7 +1412,7 @@ export function ProductDetail({
                       <div className="alsamos-scrollbar -mx-1 flex gap-3 overflow-x-auto px-1 pb-2">
                         {recentlyViewedProducts.map(recent => (
                           <div key={recent.id} className="w-40 shrink-0">
-                            <ProductCard product={recent} onSelect={openRelated} />
+                            <ProductCard product={recent} onSelect={openRelated} onAddToCart={addToCart} />
                           </div>
                         ))}
                       </div>
