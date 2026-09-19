@@ -300,6 +300,16 @@ export default function MarketplacePage() {
       .slice(0, 10),
     [products],
   );
+  const highestDiscount = useMemo(
+    () => discountedProducts.reduce((max, product) => Math.max(max, discountRate(product)), 0),
+    [discountedProducts],
+  );
+  const hasBrowseCriteria = Boolean(
+    searchQuery ||
+    selectedCategory !== 'all' ||
+    activeFilterCount > 0 ||
+    nearCenter,
+  );
   const trendingProducts = useMemo(
     () =>
       [...products]
@@ -528,18 +538,44 @@ export default function MarketplacePage() {
 
       {discountedProducts.length > 0 && selectedCategory === 'all' && !searchQuery && (
         <section className="space-y-3">
-          <div className="rounded-2xl bg-gradient-to-r from-red-500/[0.07] via-orange-500/[0.035] to-transparent px-3 py-3 sm:px-4">
-            <SectionHeading
-              title="Chegirmalar"
-              icon={<BadgePercent className="h-4 w-4 text-red-500" />}
-              action="Barchasini ko‘rish"
-              onAction={() => {
-                setDiscountOnly(true);
-                window.setTimeout(() => window.scrollTo({ top: document.body.scrollHeight * 0.45, behavior: 'smooth' }), 0);
-              }}
-            />
-            <p className="mt-1 text-xs text-muted-foreground">Eski narx bilan solishtirilgan, cardda foizi ko‘rinadigan takliflar.</p>
+          <div className="relative overflow-hidden rounded-[26px] border border-white/10 bg-zinc-950 px-4 py-4 text-white shadow-[0_20px_56px_rgba(0,0,0,0.12)] sm:px-5 sm:py-5">
+            <div className="pointer-events-none absolute -right-12 -top-16 h-44 w-44 rounded-full bg-red-500/25 blur-3xl" />
+            <div className="pointer-events-none absolute -bottom-16 left-1/3 h-40 w-40 rounded-full bg-orange-400/15 blur-3xl" />
+            <div className="relative flex min-w-0 flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <div className="inline-flex items-center gap-2 rounded-full border border-red-400/25 bg-red-500/15 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-red-100">
+                  <BadgePercent className="h-3.5 w-3.5" />
+                  Alsamos Deals
+                </div>
+                <h2 className="mt-2 text-xl font-black tracking-tight sm:text-2xl">
+                  Narxi tushgan mahsulotlar
+                </h2>
+                <p className="mt-1 max-w-2xl text-xs leading-5 text-white/60 sm:text-sm">
+                  Trenddagi va turkumlar bo‘yicha saralangan real chegirmalar. Eski narx va yangi narx bir qarashda.
+                </p>
+                <div className="mt-3 flex flex-wrap items-center gap-2 text-[10px] font-bold text-white/65">
+                  <span className="rounded-full border border-white/10 bg-white/[0.07] px-2.5 py-1">
+                    {discountedProducts.length} ta tanlangan taklif
+                  </span>
+                  {highestDiscount > 0 && (
+                    <span className="rounded-full border border-red-400/20 bg-red-500/15 px-2.5 py-1 text-red-100">
+                      −{highestDiscount}% gacha
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <Button
+                type="button"
+                className="h-10 shrink-0 rounded-xl bg-white px-4 text-xs font-extrabold text-zinc-950 hover:bg-zinc-100"
+                onClick={() => navigate('/marketplace/deals')}
+              >
+                Barchasini ko‘rish
+                <ChevronRight className="ml-1 h-4 w-4" />
+              </Button>
+            </div>
           </div>
+
           <div className="marketplace-x-rail -mx-4 flex gap-3 overflow-x-auto px-4 pb-2 sm:mx-0 sm:px-0">
             {discountedProducts.map(product => (
               <div key={product.id} className="w-[46vw] min-w-[158px] max-w-[210px] shrink-0 sm:w-48 lg:w-52">
@@ -582,7 +618,9 @@ export default function MarketplacePage() {
 
       <div className="flex min-w-0 items-end justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-xs text-muted-foreground">Natijalar</p>
+          <p className="text-xs text-muted-foreground">
+            {hasBrowseCriteria ? 'Natijalar' : 'Barcha mahsulotlar'}
+          </p>
           <p className="truncate text-sm font-bold">
             {sortedProducts.length} ta mahsulot
             {selectedCategory !== 'all' && (
