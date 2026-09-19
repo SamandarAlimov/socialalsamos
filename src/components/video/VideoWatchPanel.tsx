@@ -136,6 +136,8 @@ export function VideoWatchPanel({
   const initialPlaybackRef = useRef<VideoPlaybackSnapshot | null>(initialPlayback);
   const pendingPlaybackRef = useRef<VideoPlaybackSnapshot | null>(initialPlayback);
   const desiredPausedRef = useRef(initialPlayback?.paused ?? false);
+  const currentTimeRef = useRef(initialPlayback?.time ?? 0);
+  const isPlayingRef = useRef(!(initialPlayback?.paused ?? false));
   const autoAdvanceRef = useRef(false);
   const zoom = usePinchZoom(2.5, 1, playerRef);
 
@@ -156,6 +158,15 @@ export function VideoWatchPanel({
   const [showControls, setShowControls] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [descriptionOpen, setDescriptionOpen] = useState(false);
+
+  useEffect(() => {
+    currentTimeRef.current = currentTime;
+  }, [currentTime]);
+
+  useEffect(() => {
+    isPlayingRef.current = isPlaying;
+  }, [isPlaying]);
+
   const {
     isAutoplayEnabled,
     isLoading: isAutoplayPreferenceLoading,
@@ -200,10 +211,12 @@ export function VideoWatchPanel({
 
   const getCurrentPlayback = useCallback((): VideoPlaybackSnapshot => {
     const el = videoRef.current;
-    const time = el && Number.isFinite(el.currentTime) ? el.currentTime : currentTime;
-    const paused = el ? el.paused : !isPlaying;
+    const time = el && Number.isFinite(el.currentTime)
+      ? el.currentTime
+      : currentTimeRef.current;
+    const paused = el ? el.paused : !isPlayingRef.current;
     return { time: Math.max(0, time || 0), paused };
-  }, [currentTime, isPlaying]);
+  }, []);
 
   const publishPlayback = useCallback((playback = getCurrentPlayback()) => {
     onPlaybackChange?.(activeVideoId, playback);
@@ -223,7 +236,9 @@ export function VideoWatchPanel({
     clearMediaRecoveryTimer();
 
     const el = videoRef.current;
-    const time = el && Number.isFinite(el.currentTime) ? el.currentTime : currentTime;
+    const time = el && Number.isFinite(el.currentTime)
+      ? el.currentTime
+      : currentTimeRef.current;
     pendingPlaybackRef.current = {
       time: Math.max(0, time || 0),
       paused: desiredPausedRef.current,
@@ -260,17 +275,17 @@ export function VideoWatchPanel({
     setIsPlayPending(false);
     setMediaLoadError(true);
     revealControls();
-  }, [clearMediaRecoveryTimer, currentTime, revealControls, videoCandidates.length]);
+  }, [clearMediaRecoveryTimer, revealControls, videoCandidates.length]);
 
   const scheduleMediaRecovery = useCallback((delay = VIDEO_LOAD_RECOVERY_TIMEOUT_MS) => {
     clearMediaRecoveryTimer();
-    if (desiredPausedRef.current || isEnded || mediaLoadError) return;
+    if (desiredPausedRef.current) return;
 
     mediaRecoveryTimerRef.current = setTimeout(() => {
       mediaRecoveryTimerRef.current = null;
       handleMediaFailure();
     }, delay);
-  }, [clearMediaRecoveryTimer, handleMediaFailure, isEnded, mediaLoadError]);
+  }, [clearMediaRecoveryTimer, handleMediaFailure]);
 
   const requestPlay = useCallback((el: HTMLVideoElement) => {
     desiredPausedRef.current = false;
@@ -291,13 +306,14 @@ export function VideoWatchPanel({
       desiredPausedRef.current = true;
       setIsPlayPending(false);
       setIsPlaying(false);
-      const time = Number.isFinite(el.currentTime) ? el.currentTime : currentTime;
+      const time = Number.isFinite(el.currentTime)
+        ? el.currentTime
+        : currentTimeRef.current;
       publishPlayback({ time, paused: true });
       revealControls();
     });
   }, [
     clearMediaRecoveryTimer,
-    currentTime,
     publishPlayback,
     revealControls,
     scheduleMediaRecovery,
@@ -577,7 +593,7 @@ export function VideoWatchPanel({
     sourceRetryRef.current = 0;
     recoveringMediaRef.current = false;
     pendingPlaybackRef.current = {
-      time: Math.max(0, currentTime || 0),
+      time: Math.max(0, currentTimeRef.current || 0),
       paused: false,
     };
     desiredPausedRef.current = false;
@@ -588,7 +604,7 @@ export function VideoWatchPanel({
     setIsPlaying(false);
     setIsPlayPending(true);
     revealControls();
-  }, [clearMediaRecoveryTimer, currentTime, revealControls]);
+  }, [clearMediaRecoveryTimer, revealControls]);
 
   useEffect(() => {
     if (!keyboardEnabled) return;
