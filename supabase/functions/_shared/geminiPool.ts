@@ -23,6 +23,7 @@
 const GOOGLE_HOST = 'https://' + 'generativelanguage.googleapis.com';
 const GOOGLE_OPENAI_PATH = '/v1beta/openai/chat/completions';
 const OPENAI_CHAT_COMPLETIONS = 'https://api.openai.com/v1/chat/completions';
+const LOVABLE_GATEWAY = 'https://' + 'ai.gateway.lovable.dev' + '/v1/chat/completions';
 const DEFAULT_OPENAI_FALLBACK_MODEL = 'gpt-4o-mini';
 
 /** Limitga urilgan kalit shuncha vaqt chetda turadi. */
@@ -99,8 +100,16 @@ export function hasOpenAIKey(): boolean {
   return Boolean(Deno.env.get('OPENAI_API_KEY')?.trim());
 }
 
+export function hasLovableKey(): boolean {
+  return Boolean(Deno.env.get('LOVABLE_API_KEY')?.trim());
+}
+
 function openAIKey(): string {
   return Deno.env.get('OPENAI_API_KEY')?.trim() || '';
+}
+
+function lovableKey(): string {
+  return Deno.env.get('LOVABLE_API_KEY')?.trim() || '';
 }
 
 /* ------------------------------ navbat va sovutish ------------------------- */
@@ -132,7 +141,7 @@ export type AiFetchOptions = {
 export type AiFetchResult = {
   response: Response;
   /** Qaysi manba javob berdi — loglar va X-AI-Provider sarlavhasi uchun. */
-  provider: 'gemini' | 'openai';
+  provider: 'gemini' | 'openai' | 'lovable';
   /** Nechanchi Gemini kalit ishlatildi (1 dan boshlab). Secondary provider uchun 0. */
   keyIndex: number;
 };
@@ -161,13 +170,47 @@ async function openAIFetch(
   return { response, provider: 'openai', keyIndex: 0 };
 }
 
+async function lovableFetch(
+  body: Record<string, unknown>,
+  apiKey: string,
+  signal?: AbortSignal,
+): Promise<AiFetchResult> {
+  const response = await fetch(LOVABLE_GATEWAY, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+    signal,
+  });
+  return { response, provider: 'lovable', keyIndex: 0 };
+}
+
 async function fallbackFetch(
   body: Record<string, unknown>,
   signal?: AbortSignal,
 ): Promise<AiFetchResult | null> {
   const openai = openAIKey();
-  if (!openai) return null;
-  return openAIFetch(body, openai, signal);
+  const lovable = lovableKey();
+
+  if (openai) {
+    try {
+      const result = await openAIFetch(body, openai, signal);
+      if (result.response.ok || !lovable) return result;
+      console.warn(
+        `OpenAI fallback failed with HTTP ${result.response.status}; trying Lovable gateway.`,
+      );
+    } catch (error) {
+      if (!lovable) throw error;
+      console.warn(
+        `OpenAI fallback network error; trying Lovable gateway: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
+  if (lovable) return lovableFetch(body, lovable, signal);
+  return null;
 }
 
 /**
@@ -252,7 +295,7 @@ export async function aiFetch(options: AiFetchOptions): Promise<AiFetchResult> {
 
   throw new Error(
     `AI provider credentials unavailable (Gemini last HTTP ${lastStatus || '?'}). ` +
-      'GEMINI_API_KEYS yoki OPENAI_API_KEY ni sozlang.',
+      'GEMINI_API_KEYS, OPENAI_API_KEY yoki LOVABLE_API_KEY ni sozlang.',
   );
 }
 
