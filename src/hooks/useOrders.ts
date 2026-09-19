@@ -422,9 +422,11 @@ export function useCheckout() {
         total,
       };
     } catch (err: any) {
-      const msg = err?.message || 'Kutilmagan xatolik';
-      toast({ title: 'Xatolik', description: msg, variant: 'destructive' });
-      return { success: false, order_ids: [], payment_status: 'failed', total: 0, error: msg };
+      console.error('Marketplace checkout unexpected failure:', err);
+      const code = checkoutErrorCode(err?.message);
+      const friendly = checkoutErrorMessage(code);
+      toast({ title: 'Buyurtma amalga oshmadi', description: friendly, variant: 'destructive' });
+      return { success: false, order_ids: [], payment_status: 'failed', total: 0, error: code };
     } finally {
       setIsProcessing(false);
     }
