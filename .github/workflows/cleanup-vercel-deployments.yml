@@ -1,0 +1,182 @@
+name: Cleanup Vercel Deployments
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/cleanup-vercel-deployments.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_PROJECT_ID: prj_tHXhupcKJ12WyZbmMuYT9Rxr3Av7
+      VERCEL_TEAM_ID: team_0fG0uQFrIhfa3pnXHCWRNTmd
+
+    steps:
+      - name: Verify token exists
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${VERCEL_TOKEN:-}" ]; then
+            echo "::error::VERCEL_TOKEN GitHub Actions secret topilmadi."
+            exit 1
+          fi
+
+      - name: Wait for this commit's production deployment
+        id: keep
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          api() {
+            curl --fail-with-body --silent --show-error               -H "Authorization: Bearer ${VERCEL_TOKEN}"               "$@"
+          }
+
+          echo "Waiting for Vercel deployment for commit ${GITHUB_SHA}..."
+          KEEP_ID=""
+          KEEP_URL=""
+
+          for attempt in $(seq 1 90); do
+            json="$(api "https://api.vercel.com/v6/deployments?projectId=${VERCEL_PROJECT_ID}&teamId=${VERCEL_TEAM_ID}&limit=100")"
+
+            row="$(printf '%s' "$json" | jq -r --arg sha "$GITHUB_SHA" '
+              [.deployments[]
+                | select(.meta.githubCommitSha == $sha)
+                | {uid, url, state, target, created}]
+              | sort_by(.created)
+              | reverse
+              | .[0] // empty
+              | @base64
+            ')"
+
+            if [ -n "$row" ]; then
+              decoded="$(printf '%s' "$row" | base64 -d)"
+              state="$(printf '%s' "$decoded" | jq -r '.state')"
+              target="$(printf '%s' "$decoded" | jq -r '.target // ""')"
+              id="$(printf '%s' "$decoded" | jq -r '.uid')"
+              url="$(printf '%s' "$decoded" | jq -r '.url')"
+
+              echo "Found deployment: $id state=$state target=$target"
+
+              if [ "$state" = "READY" ] && [ "$target" = "production" ]; then
+                KEEP_ID="$id"
+                KEEP_URL="$url"
+                break
+              fi
+
+              if [ "$state" = "ERROR" ] || [ "$state" = "CANCELED" ]; then
+                echo "::error::Current commit deployment failed ($state). Cleanup aborted so the last working deployment is preserved."
+                exit 1
+              fi
+            fi
+
+            sleep 10
+          done
+
+          if [ -z "$KEEP_ID" ]; then
+            echo "::error::Could not confirm a READY production deployment for this commit. Cleanup aborted."
+            exit 1
+          fi
+
+          echo "Keeping deployment: $KEEP_ID ($KEEP_URL)"
+          echo "keep_id=$KEEP_ID" >> "$GITHUB_OUTPUT"
+          echo "keep_url=$KEEP_URL" >> "$GITHUB_OUTPUT"
+
+      - name: Inventory old deployments
+        id: inventory
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          api() {
+            curl --fail-with-body --silent --show-error               -H "Authorization: Bearer ${VERCEL_TOKEN}"               "$@"
+          }
+
+          : > /tmp/vercel-deployments.txt
+          until_value=""
+
+          while true; do
+            endpoint="https://api.vercel.com/v6/deployments?projectId=${VERCEL_PROJECT_ID}&teamId=${VERCEL_TEAM_ID}&limit=100"
+            if [ -n "$until_value" ]; then
+              endpoint="$endpoint&until=$until_value"
+            fi
+
+            json="$(api "$endpoint")"
+
+            printf '%s' "$json" | jq -r '.deployments[].uid' >> /tmp/vercel-deployments.txt
+
+            next="$(printf '%s' "$json" | jq -r '.pagination.next // empty')"
+            if [ -z "$next" ]; then
+              break
+            fi
+            until_value="$next"
+          done
+
+          sort -u /tmp/vercel-deployments.txt -o /tmp/vercel-deployments.txt
+          total="$(wc -l < /tmp/vercel-deployments.txt | tr -d ' ')"
+          old="$(grep -vFx "${{ steps.keep.outputs.keep_id }}" /tmp/vercel-deployments.txt | wc -l | tr -d ' ' || true)"
+
+          echo "Total deployments: $total"
+          echo "Old deployments to delete: $old"
+          echo "total=$total" >> "$GITHUB_OUTPUT"
+          echo "old=$old" >> "$GITHUB_OUTPUT"
+
+      - name: Delete every old deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          keep="${{ steps.keep.outputs.keep_id }}"
+          deleted=0
+          failed=0
+
+          while IFS= read -r id; do
+            [ -z "$id" ] && continue
+            [ "$id" = "$keep" ] && continue
+
+            code="$(curl --silent --show-error               --output /tmp/delete-response.json               --write-out "%{http_code}"               --request DELETE               --header "Authorization: Bearer ${VERCEL_TOKEN}"               "https://api.vercel.com/v13/deployments/$id?teamId=${VERCEL_TEAM_ID}")"
+
+            if [ "$code" = "200" ] || [ "$code" = "204" ] || [ "$code" = "404" ]; then
+              deleted=$((deleted + 1))
+            else
+              echo "::warning::Failed deleting $id (HTTP $code)"
+              cat /tmp/delete-response.json || true
+              failed=$((failed + 1))
+            fi
+
+            # Avoid hitting Vercel API burst limits.
+            sleep 0.15
+          done < /tmp/vercel-deployments.txt
+
+          echo "Deleted deployments: $deleted"
+          echo "Failed deletions: $failed"
+
+          if [ "$failed" -gt 0 ]; then
+            echo "::error::$failed deployment(s) could not be deleted."
+            exit 1
+          fi
+
+      - name: Verify cleanup
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          json="$(curl --fail-with-body --silent --show-error             -H "Authorization: Bearer ${VERCEL_TOKEN}"             "https://api.vercel.com/v6/deployments?projectId=${VERCEL_PROJECT_ID}&teamId=${VERCEL_TEAM_ID}&limit=100")"
+
+          count="$(printf '%s' "$json" | jq '.deployments | length')"
+          keep_present="$(printf '%s' "$json" | jq -r --arg keep "${{ steps.keep.outputs.keep_id }}" 'any(.deployments[]; .uid == $keep)')"
+
+          echo "Remaining deployments on first page: $count"
+          echo "Current production preserved: $keep_present"
+
+          if [ "$keep_present" != "true" ]; then
+            echo "::error::Expected production deployment is not present after cleanup."
+            exit 1
+          fi
