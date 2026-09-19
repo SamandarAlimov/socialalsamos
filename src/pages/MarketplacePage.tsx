@@ -56,7 +56,7 @@ import {
 } from '@/components/marketplace/MarketplaceFilters';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Sheet, SheetContent } from '@/components/ui/sheet';
+import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import { cn } from '@/lib/utils';
 import { conditionLabel, formatPrice } from '@/lib/marketplace';
 import { marketplaceUz } from '@/i18n/marketplace';
@@ -1103,6 +1103,7 @@ export default function MarketplacePage() {
               : 'h-full w-[460px] border-l border-border/60 sm:max-w-[460px]',
           )}
         >
+          <SheetTitle className="sr-only">Filtr va saralash</SheetTitle>
           <MarketplaceFilters
             categories={categories}
             selectedCategory={selectedCategory}
