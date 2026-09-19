@@ -192,7 +192,7 @@ export default function MarketplacePage() {
     isLoading: savedLoading,
     refresh: refreshSaved,
   } = useSavedProducts();
-  const { itemCount } = useCart();
+  const { itemCount, addToCart } = useCart();
 
   const handleRefresh = useCallback(async () => {
     if (activeTab === 'browse') await refreshProducts();
@@ -543,7 +543,7 @@ export default function MarketplacePage() {
           <div className="marketplace-x-rail -mx-4 flex gap-3 overflow-x-auto px-4 pb-2 sm:mx-0 sm:px-0">
             {discountedProducts.map(product => (
               <div key={product.id} className="w-[46vw] min-w-[158px] max-w-[210px] shrink-0 sm:w-48 lg:w-52">
-                <ProductCard product={product} onSelect={handleProductSelect} onLikeChange={refreshProducts} />
+                <ProductCard product={product} onSelect={handleProductSelect} onLikeChange={refreshProducts} onAddToCart={addToCart} />
               </div>
             ))}
           </div>
@@ -560,23 +560,17 @@ export default function MarketplacePage() {
           />
           <div className="marketplace-x-rail -mx-4 flex gap-3 overflow-x-auto px-4 pb-2 sm:mx-0 sm:px-0">
             {trendingProducts.map(product => (
-              <button
-                type="button"
+              <div
                 key={product.id}
-                className="w-[46vw] min-w-[154px] max-w-[200px] shrink-0 snap-start text-left sm:w-44 lg:w-48"
-                onClick={() => handleProductSelect(product)}
+                className="w-[46vw] min-w-[158px] max-w-[210px] shrink-0 snap-start sm:w-48 lg:w-52"
               >
-                <div className="aspect-square overflow-hidden rounded-2xl border border-border/40 bg-muted">
-                  <MarketplaceProductImage
-                    product={product}
-                    className="h-full w-full object-cover transition duration-500 hover:scale-105"
-                  />
-                </div>
-                <p className="mt-2 line-clamp-1 text-xs font-semibold">{product.title}</p>
-                <p className="mt-0.5 text-sm font-extrabold tabular-nums">
-                  {formatPrice(product.price, product.currency)}
-                </p>
-              </button>
+                <ProductCard
+                  product={product}
+                  onSelect={handleProductSelect}
+                  onLikeChange={refreshProducts}
+                  onAddToCart={addToCart}
+                />
+              </div>
             ))}
           </div>
         </section>
@@ -658,6 +652,7 @@ export default function MarketplacePage() {
                 product={product}
                 onSelect={handleProductSelect}
                 onLikeChange={refreshProducts}
+                onAddToCart={addToCart}
                 layout={gridLayout}
               />
             </motion.div>
@@ -1018,7 +1013,7 @@ export default function MarketplacePage() {
                         <div className="grid min-w-0 grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
                           {sellerProducts.map(product => (
                             <div key={product.id} className="min-w-0">
-                              <ProductCard product={product} onSelect={handleProductSelect} />
+                              <ProductCard product={product} onSelect={handleProductSelect} onAddToCart={addToCart} />
                             </div>
                           ))}
                         </div>
@@ -1061,6 +1056,7 @@ export default function MarketplacePage() {
                         product={product}
                         onSelect={handleProductSelect}
                         onLikeChange={refreshSaved}
+                        onAddToCart={addToCart}
                       />
                     </div>
                   ))}

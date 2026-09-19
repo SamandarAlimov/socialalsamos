@@ -27,7 +27,7 @@ export default function MarketplaceCatalogPage() {
     refresh: refreshCategories,
   } = useCategories();
   const { products, isLoading: productsLoading } = useProducts('all', '');
-  const { itemCount } = useCart();
+  const { itemCount, addToCart } = useCart();
   const { products: savedProducts } = useSavedProducts();
 
   const productCountByCategory = useMemo(() => {
@@ -192,6 +192,7 @@ export default function MarketplaceCatalogPage() {
                   <ProductCard
                     product={product}
                     onSelect={selected => navigate(`/marketplace/product/${selected.id}`)}
+                    onAddToCart={addToCart}
                   />
                 </div>
               ))}

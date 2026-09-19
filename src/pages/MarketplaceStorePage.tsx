@@ -29,7 +29,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ProductCard } from '@/components/marketplace/ProductCard';
 import { useAuth } from '@/contexts/AuthContext';
-import { type Product } from '@/hooks/useMarketplace';
+import { type Product, useCart } from '@/hooks/useMarketplace';
 import { useSellerStore } from '@/hooks/useOrders';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
@@ -50,6 +50,7 @@ export default function MarketplaceStorePage() {
   const { sellerId } = useParams<{ sellerId: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { addToCart } = useCart();
   const { seller, products, reviews, isLoading } = useSellerStore(sellerId);
   const [tab, setTab] = useState<'products' | 'reviews'>('products');
   const [layout, setLayout] = useState<'grid' | 'list'>('grid');
@@ -346,7 +347,7 @@ export default function MarketplaceStorePage() {
 
                 {visibleProducts.length > 0 ? (
                   <div className={cn(layout === 'grid' ? 'grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4' : 'space-y-3')}>
-                    {visibleProducts.map(product => <ProductCard key={product.id} product={product} onSelect={openProduct} layout={layout} />)}
+                    {visibleProducts.map(product => <ProductCard key={product.id} product={product} onSelect={openProduct} onAddToCart={addToCart} layout={layout} />)}
                   </div>
                 ) : (
                   <div className="flex min-h-72 flex-col items-center justify-center rounded-3xl border border-dashed border-border text-center"><Package className="h-10 w-10 text-muted-foreground/30" /><h3 className="mt-3 font-semibold">{isRestaurant ? 'Taom topilmadi' : 'Mahsulot topilmadi'}</h3><p className="mt-1 text-sm text-muted-foreground">Qidiruv yoki bo‘limni o‘zgartirib ko‘ring.</p></div>
