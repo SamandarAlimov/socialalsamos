@@ -23,6 +23,8 @@
 const GOOGLE_HOST = 'https://' + 'generativelanguage.googleapis.com';
 const GOOGLE_OPENAI_PATH = '/v1beta/openai/chat/completions';
 const LOVABLE_GATEWAY = 'https://' + 'ai.gateway.lovable.dev' + '/v1/chat/completions';
+const OPENAI_CHAT_COMPLETIONS = 'https://api.openai.com/v1/chat/completions';
+const DEFAULT_OPENAI_FALLBACK_MODEL = 'gpt-4o-mini';
 
 /** Limitga urilgan kalit shuncha vaqt chetda turadi. */
 const COOLDOWN_MS = 60_000;
@@ -94,6 +96,14 @@ export function hasGeminiKeys(): boolean {
   return geminiKeys().length > 0;
 }
 
+export function hasOpenAIKey(): boolean {
+  return Boolean(Deno.env.get('OPENAI_API_KEY')?.trim());
+}
+
+function openAIKey(): string {
+  return Deno.env.get('OPENAI_API_KEY')?.trim() || '';
+}
+
 /* ------------------------------ navbat va sovutish ------------------------- */
 
 let cursor = 0;
@@ -125,7 +135,7 @@ export type AiFetchOptions = {
 export type AiFetchResult = {
   response: Response;
   /** Qaysi manba javob berdi — loglar va X-AI-Provider sarlavhasi uchun. */
-  provider: 'gemini' | 'lovable';
+  provider: 'gemini' | 'openai' | 'lovable';
   /** Nechanchi kalit ishlatildi (1 dan boshlab). Lovable uchun 0. */
   keyIndex: number;
 };
@@ -146,6 +156,55 @@ async function lovableFetch(
     signal,
   });
   return { response, provider: 'lovable', keyIndex: 0 };
+}
+
+/**
+ * Secondary provider fallback. The request already uses OpenAI chat-completions
+ * format, so only the model id must be replaced.
+ */
+async function openAIFetch(
+  body: Record<string, unknown>,
+  apiKey: string,
+  signal?: AbortSignal,
+): Promise<AiFetchResult> {
+  const model =
+    Deno.env.get('OPENAI_FALLBACK_MODEL')?.trim() ||
+    DEFAULT_OPENAI_FALLBACK_MODEL;
+  const response = await fetch(OPENAI_CHAT_COMPLETIONS, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ ...body, model }),
+    signal,
+  });
+  return { response, provider: 'openai', keyIndex: 0 };
+}
+
+async function fallbackFetch(
+  body: Record<string, unknown>,
+  lovableKey: string | undefined,
+  signal?: AbortSignal,
+): Promise<AiFetchResult | null> {
+  const openai = openAIKey();
+  if (openai) {
+    try {
+      const result = await openAIFetch(body, openai, signal);
+      if (result.response.ok || !lovableKey) return result;
+      console.warn(
+        `OpenAI fallback failed with HTTP ${result.response.status}; trying Lovable gateway.`,
+      );
+    } catch (error) {
+      if (!lovableKey) throw error;
+      console.warn(
+        `OpenAI fallback network error; trying Lovable gateway: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
+  if (lovableKey) return lovableFetch(body, lovableKey, signal);
+  return null;
 }
 
 /**
@@ -208,27 +267,29 @@ export async function aiFetch(options: AiFetchOptions): Promise<AiFetchResult> {
     // (tools, tool_choice, response_format) qo'llab-quvvatlamasligi bo'ladi.
     // Shunday holatda zaxira gateway'ga o'tamiz, aks holda agentik so'rovlar
     // butunlay ishlamay qoladi.
-    if (lovableKey) {
+    const fallback = await fallbackFetch(body, lovableKey, signal);
+    if (fallback) {
       console.warn(
-        `gemini rejected the request (HTTP ${response.status}) — falling back to Lovable gateway: ${lastDetail.slice(0, 200)}`,
+        `gemini rejected the request (HTTP ${response.status}) — using secondary AI provider: ${lastDetail.slice(0, 200)}`,
       );
-      return lovableFetch(body, lovableKey, signal);
+      return fallback;
     }
 
     return { response, provider: 'gemini', keyIndex: attempt + 1 };
   }
 
-  // Barcha kalitlar ishlamadi — eski yo'lga qaytamiz.
-  if (lovableKey) {
+  // Gemini yo'q yoki barcha kalitlar ishlamadi — secondary providerlarga o'tamiz.
+  const fallback = await fallbackFetch(body, lovableKey, signal);
+  if (fallback) {
     console.warn(
-      `all gemini keys exhausted (last HTTP ${lastStatus}) — falling back to Lovable gateway`,
+      `Gemini unavailable/exhausted (last HTTP ${lastStatus || '?'}) — using ${fallback.provider} fallback`,
     );
-    return lovableFetch(body, lovableKey, signal);
+    return fallback;
   }
 
   throw new Error(
-    `Barcha Gemini kalitlari ishlamadi (oxirgi holat: HTTP ${lastStatus || '?'}). ` +
-      'Kalitlarni yoki limitlarni tekshiring.',
+    `AI provider credentials unavailable (Gemini last HTTP ${lastStatus || '?'}). ` +
+      'GEMINI_API_KEYS, OPENAI_API_KEY yoki LOVABLE_API_KEY ni sozlang.',
   );
 }
 
