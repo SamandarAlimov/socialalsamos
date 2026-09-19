@@ -48,6 +48,10 @@ jobs:
       CRON_SECRET: ${{ secrets.CRON_SECRET }}
       GIPHY_API_KEY: ${{ secrets.GIPHY_API_KEY }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      GEMINI_API_KEYS: ${{ secrets.GEMINI_API_KEYS }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      LOVABLE_API_KEY: ${{ secrets.LOVABLE_API_KEY }}
+      OPENAI_FALLBACK_MODEL: ${{ secrets.OPENAI_FALLBACK_MODEL }}
       PAYME_MERCHANT_ID: ${{ secrets.PAYME_MERCHANT_ID }}
       PAYME_LOGIN: ${{ secrets.PAYME_LOGIN }}
       PAYME_KEY: ${{ secrets.PAYME_KEY }}
@@ -154,6 +158,10 @@ jobs:
           sync_secret CRON_SECRET "${CRON_SECRET:-}"
           sync_secret GIPHY_API_KEY "${GIPHY_API_KEY:-}"
           sync_secret OPENAI_API_KEY "${OPENAI_API_KEY:-}"
+          sync_secret GEMINI_API_KEYS "${GEMINI_API_KEYS:-}"
+          sync_secret GEMINI_API_KEY "${GEMINI_API_KEY:-}"
+          sync_secret LOVABLE_API_KEY "${LOVABLE_API_KEY:-}"
+          sync_secret OPENAI_FALLBACK_MODEL "${OPENAI_FALLBACK_MODEL:-}"
           sync_secret PAYME_MERCHANT_ID "${PAYME_MERCHANT_ID:-}"
           sync_secret PAYME_LOGIN "${PAYME_LOGIN:-}"
           sync_secret PAYME_KEY "${PAYME_KEY:-}"
