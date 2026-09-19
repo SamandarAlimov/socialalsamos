@@ -24,6 +24,7 @@ import {
   useSavedProducts,
 } from '@/hooks/useMarketplace';
 import {
+  catalogCategoryLabel,
   categoryMatchesCatalogQuery,
   getCatalogGuide,
 } from '@/lib/marketplaceCatalog';
@@ -172,7 +173,7 @@ export default function MarketplaceCatalogPage() {
                   Katalog
                 </p>
                 <h1 className="mt-1 text-xl font-black tracking-tight">
-                  {selectedCategory?.name || 'Barcha turkumlar'}
+                  {selectedCategory ? catalogCategoryLabel(selectedCategory) : 'Barcha turkumlar'}
                 </h1>
               </div>
               <span className="rounded-full bg-muted px-2.5 py-1 text-[10px] font-bold text-muted-foreground">
@@ -207,7 +208,7 @@ export default function MarketplaceCatalogPage() {
                     <CategoryNavItem
                       key={category.id}
                       active={selectedCategorySlug === category.slug}
-                      label={category.name}
+                      label={catalogCategoryLabel(category)}
                       count={productCountByCategory.get(category.id) || 0}
                       icon={
                         <CategoryIcon
@@ -414,7 +415,7 @@ function CategoryDetail({
               Katalog
             </p>
             <h1 className="truncate text-2xl font-black tracking-tight sm:text-3xl">
-              {category.name}
+              {catalogCategoryLabel(category)}
             </h1>
             <p className="mt-1 text-xs text-muted-foreground">
               {count} ta mahsulot
@@ -546,7 +547,7 @@ function AllCategoriesDirectory({
                 />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-extrabold">
-                    {category.name}
+                    {catalogCategoryLabel(category)}
                   </span>
                   <span className="mt-0.5 block text-[10px] text-muted-foreground">
                     {count > 0 ? `${count} ta mahsulot` : 'Turkumni ochish'}
