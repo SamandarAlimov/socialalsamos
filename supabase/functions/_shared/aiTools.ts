@@ -6,7 +6,7 @@
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { fetchPageText, isPublicHttpUrl } from "./net.ts";
-import { runSandboxCode } from "./sandbox.ts";
+import { runSandboxCode, type SandboxGeneratedFile } from "./sandbox.ts";
 import { duckDuckGoSearch, type WebHit } from "./webFallback.ts";
 import {
   generateImageBytes,
@@ -148,7 +148,7 @@ export const TOOL_SPECS: Record<string, ToolSpec> = {
     function: {
       name: "run_code",
       description:
-        "Execute code in an isolated Ubuntu Docker sandbox when configured, otherwise JavaScript in a restricted Deno fallback. Use for calculations, data transforms, algorithm checks and verifying code you wrote. When a full PUBLIC GitHub repository is needed for broad read-only analysis, bash may shallow-clone it into the temporary sandbox if network access is available; do not treat that clone as persistent user storage.",
+        "Execute code in an isolated Ubuntu Docker sandbox when configured, otherwise JavaScript in a restricted Deno fallback. Use for calculations, data transforms, algorithm checks, verifying code, and creating real downloadable files. When the user asks for .xlsx, .docx, .pptx, .pdf, .csv, .md, .txt or .json, prefer Python and save each final deliverable inside /workspace/outputs/<filename>; the runtime will collect it and present it to the user as a downloadable file. Python has openpyxl, python-docx, python-pptx and reportlab available in the remote runner. When a full PUBLIC GitHub repository is needed for broad read-only analysis, bash may shallow-clone it into the temporary sandbox if network access is available; do not treat that clone as persistent user storage.",
       parameters: {
         type: "object",
         properties: {
@@ -576,7 +576,84 @@ async function mediaJobStatus(args: Record<string, unknown>, ctx: ToolContext): 
 
 // ------------------------------------------------------------------ code
 
-async function runCode(args: Record<string, unknown>): Promise<ToolOutcome> {
+const AI_GENERATED_FILES_BUCKET = "ai-generated-files";
+
+function safeGeneratedFileName(value: string): string {
+  const base = value
+    .split(/[\\/]/)
+    .pop()
+    ?.replace(/[\u0000-\u001f\u007f]/g, "")
+    .replace(/[^\p{L}\p{N}._ ()\-]+/gu, "_")
+    .trim() || "file";
+  return base.slice(0, 140);
+}
+
+function decodeBase64(value: string): Uint8Array {
+  const binary = atob(value);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  return bytes;
+}
+
+async function persistGeneratedFiles(
+  files: SandboxGeneratedFile[],
+  ctx: ToolContext,
+): Promise<{ presented: Record<string, unknown>[]; errors: string[] }> {
+  if (!files.length) return { presented: [], errors: [] };
+  if (!ctx.userId) {
+    return { presented: [], errors: ["Yaratilgan fayllarni saqlash uchun tizimga kirish kerak."] };
+  }
+
+  const batchId = crypto.randomUUID();
+  const presented: Record<string, unknown>[] = [];
+  const errors: string[] = [];
+
+  for (let index = 0; index < files.length; index += 1) {
+    const file = files[index];
+    try {
+      const name = safeGeneratedFileName(file.name);
+      const bytes = decodeBase64(file.contentBase64);
+      if (!bytes.byteLength || bytes.byteLength > 10 * 1024 * 1024) {
+        errors.push(`${name}: fayl hajmi ruxsat etilmagan.`);
+        continue;
+      }
+
+      const objectPath = `${ctx.userId}/${batchId}/${String(index + 1).padStart(2, "0")}-${name}`;
+      const { error: uploadError } = await ctx.admin.storage
+        .from(AI_GENERATED_FILES_BUCKET)
+        .upload(objectPath, bytes, {
+          contentType: file.mimeType,
+          cacheControl: "3600",
+          upsert: false,
+        });
+      if (uploadError) {
+        errors.push(`${name}: ${uploadError.message}`);
+        continue;
+      }
+
+      const { data: signed, error: signError } = await ctx.admin.storage
+        .from(AI_GENERATED_FILES_BUCKET)
+        .createSignedUrl(objectPath, 60 * 60);
+
+      presented.push({
+        url: signError ? "" : (signed?.signedUrl ?? ""),
+        name,
+        type: "file",
+        mimeType: file.mimeType,
+        size: bytes.byteLength,
+        bucket: AI_GENERATED_FILES_BUCKET,
+        storagePath: objectPath,
+        presented: true,
+      });
+    } catch (error) {
+      errors.push(`${file.name || "file"}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  return { presented, errors };
+}
+
+async function runCode(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolOutcome> {
   const code = String(args.code ?? "");
   if (!code.trim()) return fail("code bo'sh.");
   const timeout = clamp(args.timeout_ms, 200, 30000, 5000);
@@ -585,8 +662,13 @@ async function runCode(args: Record<string, unknown>): Promise<ToolOutcome> {
     timeoutMs: timeout,
     stdin: typeof args.stdin === "string" ? args.stdin : "",
   });
+
+  const sandboxFiles = result.ok ? (result.files ?? []) : [];
+  const { presented, errors: fileErrors } = await persistGeneratedFiles(sandboxFiles, ctx);
+  const { files: _binaryFiles, fileWarnings, ...safeExecution } = result;
+
   const parts = [
-    `ok: ${result.ok}`,
+    `ok: ${result.ok && fileErrors.length === 0}`,
     `language: ${result.language ?? args.language ?? "javascript"}`,
     result.stdout !== undefined
       ? `stdout:\n${result.stdout || "(bo'sh)"}`
@@ -598,10 +680,24 @@ async function runCode(args: Record<string, unknown>): Promise<ToolOutcome> {
     result.result !== null && result.result !== undefined
       ? `return: ${JSON.stringify(result.result).slice(0, 4000)}`
       : "return: undefined",
+    presented.length
+      ? `presented_files:\n${presented.map((file: any) => `- ${file.name} (${file.mimeType}, ${file.size} bytes)`).join("\n")}`
+      : "",
+    fileWarnings?.length ? `file_warnings:\n${fileWarnings.join("\n")}` : "",
+    fileErrors.length ? `file_upload_errors:\n${fileErrors.join("\n")}` : "",
     result.error ? `error: ${result.error}` : "",
     `duration: ${result.durationMs} ms`,
   ].filter(Boolean);
-  return { ok: result.ok, text: parts.join("\n"), data: { execution: result, code } };
+
+  return {
+    ok: result.ok && fileErrors.length === 0,
+    text: parts.join("\n"),
+    data: {
+      execution: safeExecution,
+      code,
+      ...(presented.length ? { files: presented } : {}),
+    },
+  };
 }
 
 // ------------------------------------------------------------------ alsamos
@@ -823,7 +919,7 @@ const EXECUTORS: Record<
   generate_image: generateImage,
   generate_video: generateVideo,
   media_job_status: mediaJobStatus,
-  run_code: (a) => runCode(a),
+  run_code: runCode,
   search_posts: searchPosts,
   search_marketplace: searchMarketplace,
   remember: remember,

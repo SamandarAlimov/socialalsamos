@@ -42,7 +42,8 @@ serve(async (req) => {
       timeoutMs,
       stdin: typeof body?.stdin === "string" ? body.stdin : "",
     });
-    return jsonResponse(req, result, 200);
+    const safeFiles = (result.files ?? []).map(({ contentBase64: _contentBase64, ...file }) => file);
+    return jsonResponse(req, { ...result, files: safeFiles }, 200);
   } catch (error) {
     console.error("code-sandbox error:", error);
     return guardError(req, "SERVER_ERROR", "Kutilmagan xatolik yuz berdi.", 500);

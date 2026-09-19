@@ -5,6 +5,13 @@
 //    `AsyncFunction` + qattiq timeout.
 // Ikkala holatda ham console chiqishi to'planadi va natija JSON qilinadi.
 
+export type SandboxGeneratedFile = {
+  name: string;
+  mimeType: string;
+  size: number;
+  contentBase64: string;
+};
+
 export type SandboxResult = {
   ok: boolean;
   logs: string[];
@@ -18,6 +25,8 @@ export type SandboxResult = {
   signal?: string | null;
   timedOut?: boolean;
   language?: string;
+  files?: SandboxGeneratedFile[];
+  fileWarnings?: string[];
 };
 
 const MAX_LOGS = 200;
@@ -209,6 +218,24 @@ async function runRemoteSandbox(
   const stderr = String(data.stderr ?? data.error ?? "");
   const exitCode = typeof data.exitCode === "number" ? data.exitCode : null;
   const timedOut = Boolean(data.timedOut);
+  const files: SandboxGeneratedFile[] = Array.isArray(data.files)
+    ? data.files
+      .slice(0, 8)
+      .map((raw: any) => ({
+        name: String(raw?.name ?? "").slice(0, 140),
+        mimeType: String(raw?.mimeType ?? "application/octet-stream").slice(0, 160),
+        size: Math.max(0, Number(raw?.size) || 0),
+        contentBase64: String(raw?.contentBase64 ?? ""),
+      }))
+      .filter((file: SandboxGeneratedFile) =>
+        Boolean(file.name && file.contentBase64) &&
+        file.size <= 10 * 1024 * 1024 &&
+        file.contentBase64.length <= 15 * 1024 * 1024
+      )
+    : [];
+  const fileWarnings = Array.isArray(data.fileWarnings)
+    ? data.fileWarnings.slice(0, 12).map((item) => String(item).slice(0, 300))
+    : [];
 
   return {
     ok: res.ok && !timedOut && (exitCode === 0 || exitCode === null),
@@ -223,6 +250,8 @@ async function runRemoteSandbox(
     signal: typeof data.signal === "string" ? data.signal : null,
     timedOut,
     language,
+    files,
+    fileWarnings,
   };
 }
 
