@@ -265,14 +265,12 @@ async function generateConversationTitleResponse(
   if (!prompt) return guardError(req, "INVALID_REQUEST", "Title uchun prompt talab qilinadi.", 400);
 
   const fallback = fallbackConversationTitle(prompt);
-  const lovableKey = Deno.env.get("LOVABLE_API_KEY") || "";
   let title = fallback;
   let source = "fallback";
 
-  if (hasGeminiKeys() || hasOpenAIKey() || lovableKey) {
+  if (hasGeminiKeys() || hasOpenAIKey()) {
     try {
       const { response } = await aiFetch({
-        lovableKey: lovableKey || undefined,
         body: {
           model: MODEL_ROUTES.fast,
           messages: [
@@ -324,7 +322,6 @@ async function generateConversationTitleResponse(
 }
 
 async function classify(
-  lovableKey: string | undefined,
   lastUserText: string,
 ): Promise<{ task: string; language: string }> {
   const userIntent = languageDetectionSample(lastUserText);
@@ -335,7 +332,6 @@ Return the language the user is actually writing now, even when it differs from 
 coding = programming/debugging/repository work. reasoning = math, deep analysis, planning, research. vision = image/media analysis. fast = trivial. balanced = everything else.`;
   try {
     const { response } = await aiFetch({
-      lovableKey,
       body: {
         model: MODEL_ROUTES.fast,
         messages: [
@@ -569,7 +565,6 @@ async function runtimeContext(
   admin: SupabaseClient,
   userId: string | null,
   enabled: Set<string>,
-  lovableKey: string,
 ): Promise<{
   ctx: ToolContext;
   userContext: string;
@@ -624,7 +619,7 @@ async function runtimeContext(
     githubConnection,
     userContext,
     memories,
-    ctx: { userId, admin, lovableKey, connectors, enabled, githubConnected: githubConnection.connected, mutationCache: new Map() },
+    ctx: { userId, admin, connectors, enabled, githubConnected: githubConnection.connected, mutationCache: new Map() },
   };
 }
 
@@ -865,11 +860,10 @@ async function directChatResponse(
 ): Promise<Response> {
   const inputMessages = normalizeInputMessages(body.messages);
   if (!inputMessages.length) return guardError(req, "INVALID_REQUEST", "messages massivi talab qilinadi.", 400);
-  const lovableKey = Deno.env.get("LOVABLE_API_KEY") || "";
   const groups = requestedGroups(body);
   const baseEnabled = enabledTools(groups);
   const userText = lastUserText(inputMessages);
-  const runtime = await runtimeContext(admin, userId, baseEnabled, lovableKey);
+  const runtime = await runtimeContext(admin, userId, baseEnabled);
   const enabled = effectiveToolsForRequest(baseEnabled, userText, runtime.githubConnection.connected);
   runtime.ctx.enabled = enabled;
   runtime.ctx.githubConnected = runtime.githubConnection.connected;
@@ -877,7 +871,7 @@ async function directChatResponse(
   const specs = toolSpecs(enabled);
   // Language classification always runs, even when the user manually selected
   // Coding/Reasoning/etc. Manual model selection changes task routing only.
-  const cls = await classify(lovableKey || undefined, userText);
+  const cls = await classify(userText);
   const requested = typeof body.model === "string" ? body.model : "auto";
   const route = modelFor(requested, cls.task);
   const policy = policyFor("chat", route.task, userText);
@@ -913,12 +907,11 @@ async function directChatResponse(
           language: cls.language,
           tools: [...enabled],
           keyPool: `${pool.ready}/${pool.total}`,
-          providers: { gemini: pool.total > 0, openai: hasOpenAIKey(), lovable: Boolean(lovableKey) },
+          providers: { gemini: pool.total > 0, openai: hasOpenAIKey() },
           mode: "chat",
         });
         for (let round = 0; round < policy.maxRounds; round += 1) {
           const { response: res, provider } = await aiFetch({
-            lovableKey: lovableKey || undefined,
             body: {
               model: route.model,
               messages: conversation,
@@ -1248,15 +1241,14 @@ async function initializeRun(admin: SupabaseClient, run: AgentRun): Promise<{
   runtime: Awaited<ReturnType<typeof runtimeContext>>;
   specs: ToolSpec[];
 }> {
-  const lovableKey = Deno.env.get("LOVABLE_API_KEY") || "";
   const inputMessages = normalizeInputMessages(run.input?.messages);
   const userText = lastUserText(inputMessages);
-  const cls = await classify(lovableKey || undefined, userText);
+  const cls = await classify(userText);
   const route = modelFor(run.requested_model || "auto", cls.task);
   const policy = policyFor("agent", route.task, userText);
   const groups = Array.isArray(run.tool_groups) && run.tool_groups.length ? run.tool_groups : DEFAULT_GROUPS;
   const baseEnabled = enabledTools(groups);
-  const runtime = await runtimeContext(admin, run.user_id, baseEnabled, lovableKey);
+  const runtime = await runtimeContext(admin, run.user_id, baseEnabled);
   const enabled = effectiveToolsForRequest(baseEnabled, userText, runtime.githubConnection.connected);
   runtime.ctx.enabled = enabled;
   runtime.ctx.githubConnected = runtime.githubConnection.connected;
@@ -1305,7 +1297,7 @@ async function initializeRun(admin: SupabaseClient, run: AgentRun): Promise<{
     tools: [...enabled],
     mode: "agent",
     keyPool: `${pool.ready}/${pool.total}`,
-    providers: { gemini: pool.total > 0, openai: hasOpenAIKey(), lovable: Boolean(lovableKey) },
+    providers: { gemini: pool.total > 0, openai: hasOpenAIKey() },
   });
   const steps = route.task === "coding"
     ? ["Repository/kontekstni tekshirish", "O'zgarishlarni bajarish", "Test yoki CI bilan tekshirish", "Natijani yakunlash"]
@@ -1356,12 +1348,10 @@ async function finalizeConversation(admin: SupabaseClient, run: AgentRun, finalT
 async function synthesizeFinal(
   run: AgentRun,
   conversation: ChatMessage[],
-  lovableKey: string,
   reason: string,
 ): Promise<string> {
   conversation.push({ role: "system", content: `Execution budget boundary reached (${reason}). Do not call tools. Give the best complete user-facing answer from the evidence and tool results already available. Clearly mention any unfinished part.` });
   const { response } = await aiFetch({
-    lovableKey: lovableKey || undefined,
     body: { model: run.resolved_model || MODEL_ROUTES.balanced, messages: conversation, stream: false },
   });
   if (!response.ok) return `Agent vazifasi ${reason} sabab to'xtadi. Mavjud vosita natijalari checkpointda saqlandi.`;
@@ -1372,7 +1362,6 @@ async function synthesizeFinal(
 async function streamWorkerModelRound(
   admin: SupabaseClient,
   runId: string,
-  lovableKey: string,
   model: string,
   conversation: ChatMessage[],
   specs: ToolSpec[],
@@ -1381,7 +1370,6 @@ async function streamWorkerModelRound(
   let provider = "unknown";
   try {
     const result = await aiFetch({
-      lovableKey: lovableKey || undefined,
       body: {
         model,
         messages: conversation,
@@ -1492,7 +1480,6 @@ async function processRunChunk(admin: SupabaseClient, claimed: AgentRun): Promis
   let conversation: ChatMessage[];
   let runtime: Awaited<ReturnType<typeof runtimeContext>>;
   let specs: ToolSpec[];
-  const lovableKey = Deno.env.get("LOVABLE_API_KEY") || "";
   const runUserText = lastUserText(normalizeInputMessages(run.input?.messages));
 
   if (!Array.isArray(run.checkpoint?.conversation) || run.checkpoint.conversation.length === 0) {
@@ -1504,7 +1491,7 @@ async function processRunChunk(admin: SupabaseClient, claimed: AgentRun): Promis
   } else {
     conversation = run.checkpoint.conversation as ChatMessage[];
     const baseEnabled = enabledTools(Array.isArray(run.tool_groups) ? run.tool_groups : DEFAULT_GROUPS);
-    runtime = await runtimeContext(admin, run.user_id, baseEnabled, lovableKey);
+    runtime = await runtimeContext(admin, run.user_id, baseEnabled);
     const enabled = effectiveToolsForRequest(baseEnabled, runUserText, runtime.githubConnection.connected);
     runtime.ctx.enabled = enabled;
     runtime.ctx.githubConnected = runtime.githubConnection.connected;
@@ -1532,7 +1519,7 @@ async function processRunChunk(admin: SupabaseClient, claimed: AgentRun): Promis
     }
     if (run.round_count >= run.max_rounds || run.tool_call_count >= run.max_tool_calls) {
       const reason = run.round_count >= run.max_rounds ? "round limit" : "tool budget";
-      const finalText = await synthesizeFinal(run, conversation, lovableKey, reason);
+      const finalText = await synthesizeFinal(run, conversation, reason);
       await emit(admin, run.id, "notice", { message: "Dynamic execution budget yakunlandi; mavjud natijalar bilan final javob sintez qilindi." });
       await emit(admin, run.id, "delta", { text: finalText });
       await admin.from("ai_agent_runs").update({ status: "completed", final_text: finalText, checkpoint: durableCheckpoint(conversation), lease_until: null, completed_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", run.id);
@@ -1551,7 +1538,6 @@ async function processRunChunk(admin: SupabaseClient, claimed: AgentRun): Promis
       ({ assistantText, calls } = await streamWorkerModelRound(
         admin,
         run.id,
-        lovableKey,
         run.resolved_model || MODEL_ROUTES.balanced,
         conversation,
         specs,
