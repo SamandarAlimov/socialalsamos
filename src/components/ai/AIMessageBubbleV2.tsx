@@ -5,10 +5,13 @@ import {
   AlertTriangle,
   BookOpen,
   Check,
+  ChevronDown,
+  ChevronRight,
   Copy,
   Download,
   Github,
   Info,
+  Loader2,
   Maximize2,
   Paperclip,
   Play,
@@ -267,7 +270,9 @@ export function AIMessageBubble({ message, isStreaming, onRegenerate }: Props) {
   return (
     <div className="group mb-6 w-full min-w-0 max-w-full overflow-x-hidden">
       <div className="min-w-0 max-w-full overflow-hidden">
-          {message.tools && message.tools.length > 0 && <AIToolTimeline events={message.tools} />}
+          {((message.plan && message.plan.length > 0) || (message.tools && message.tools.length > 0)) && (
+            <AIToolTimeline events={message.tools ?? []} plan={message.plan} defaultOpen={Boolean(isStreaming)} />
+          )}
 
           {message.error ? (
             <div className="flex max-w-full items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2.5">
@@ -416,17 +421,34 @@ export function AIMessageBubble({ message, isStreaming, onRegenerate }: Props) {
 }
 
 export function AIThinkingBubble({ label }: { label: string }) {
+  const [open, setOpen] = useState(false);
+
   return (
     <div className="mb-6 min-w-0 max-w-full overflow-x-hidden">
-      <div className="w-fit max-w-full rounded-2xl border border-border/50 bg-muted/20 px-3.5 py-2.5">
-        <div className="flex items-center gap-3">
-          <div className="flex gap-1">
-            {[0, 150, 300].map((delay) => (
-              <span key={delay} className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground" style={{ animationDelay: `${delay}ms` }} />
-            ))}
+      <div className="w-full max-w-xl overflow-hidden rounded-xl border border-border/50 bg-muted/10">
+        <button
+          type="button"
+          onClick={() => setOpen((value) => !value)}
+          className="flex w-full min-w-0 items-center gap-2.5 px-3 py-2.5 text-left hover:bg-muted/25"
+          aria-expanded={open}
+        >
+          <Loader2 className="h-4 w-4 shrink-0 animate-spin text-muted-foreground" />
+          <span className="min-w-0 flex-1 truncate text-xs font-medium text-muted-foreground">{label}</span>
+          {open
+            ? <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+            : <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />}
+        </button>
+        {open && (
+          <div className="border-t border-border/40 px-4 py-3">
+            <div className="flex items-start gap-2.5 text-xs text-muted-foreground">
+              <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-muted-foreground/70" />
+              <span className="break-words leading-relaxed">{label}</span>
+            </div>
+            <p className="mt-2 pl-4 text-[10px] leading-relaxed text-muted-foreground/75">
+              Bajariladigan tool va commandlar aniqlangach shu qator ichida jonli ko‘rinadi.
+            </p>
           </div>
-          <span className="text-xs text-muted-foreground">{label}</span>
-        </div>
+        )}
       </div>
     </div>
   );

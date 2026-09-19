@@ -933,6 +933,7 @@ export default function AIPageV2() {
     const assistantId = crypto.randomUUID();
     let content = '';
     const tools: AIToolEvent[] = [];
+    const planSteps: string[] = [];
     const images: string[] = [];
     const videos: string[] = [];
     const sources: AISource[] = [];
@@ -952,6 +953,7 @@ export default function AIPageV2() {
         videos: videos.length ? [...videos] : undefined,
         sources: sources.length ? [...sources] : undefined,
         tools: tools.length ? tools.map((tool) => ({ ...tool })) : undefined,
+        plan: planSteps.length ? [...planSteps] : undefined,
         model: usedModel ?? undefined,
         mode: responseMode,
         notice,
@@ -1059,6 +1061,18 @@ export default function AIPageV2() {
               content += event.text;
               flush();
               break;
+            case 'plan': {
+              for (const rawStep of event.steps ?? []) {
+                const step = String(rawStep || '').trim();
+                if (!step) continue;
+                const friendly = toolLabel(step);
+                const normalized = friendly === step ? step : friendly;
+                if (!planSteps.includes(normalized)) planSteps.push(normalized);
+              }
+              if (planSteps.length) setStatusLabel(planSteps[planSteps.length - 1]);
+              flush();
+              break;
+            }
             case 'tool_call': {
               const label = toolLabel(event.name);
               setStatusLabel(`${label}…`);

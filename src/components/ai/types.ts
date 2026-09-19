@@ -36,6 +36,7 @@ export interface AIMessage {
   model?: string;
   mode?: AIMode;
   tools?: AIToolEvent[];
+  plan?: string[];
   sources?: AISource[];
   attachments?: AIAttachmentMeta[];
   notice?: string;
