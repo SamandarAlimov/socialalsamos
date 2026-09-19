@@ -71,6 +71,59 @@ type ChatMessage = {
 };
 
 type PendingCall = { id: string; name: string; args: string };
+
+function completionText(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (!Array.isArray(value)) return "";
+  return value.map((part: any) => {
+    if (typeof part === "string") return part;
+    if (typeof part?.text === "string") return part.text;
+    if (typeof part?.content === "string") return part.content;
+    if (typeof part?.content?.text === "string") return part.content.text;
+    return "";
+  }).join("");
+}
+
+function completionToolCalls(value: unknown): PendingCall[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((tc: any) => {
+    const rawArgs = tc?.function?.arguments;
+    let args = "{}";
+    if (typeof rawArgs === "string") args = rawArgs || "{}";
+    else if (rawArgs && typeof rawArgs === "object") {
+      try { args = JSON.stringify(rawArgs); } catch (_) { args = "{}"; }
+    }
+    return {
+      id: String(tc?.id || crypto.randomUUID()),
+      name: String(tc?.function?.name || ""),
+      args,
+    };
+  }).filter((call) => call.name);
+}
+
+async function recoverEmptyCompletion(
+  body: Record<string, unknown>,
+): Promise<{ text: string; calls: PendingCall[]; provider: string; status: number; detail: string }> {
+  const { response, provider } = await aiFetch({
+    body: { ...body, stream: false },
+  });
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    return { text: "", calls: [], provider, status: response.status, detail };
+  }
+  let json: any = null;
+  try { json = await response.json(); } catch (_) {
+    return { text: "", calls: [], provider, status: response.status, detail: "invalid_json" };
+  }
+  const message = json?.choices?.[0]?.message ?? {};
+  return {
+    text: completionText(message.content),
+    calls: completionToolCalls(message.tool_calls),
+    provider,
+    status: response.status,
+    detail: String(json?.choices?.[0]?.finish_reason ?? ""),
+  };
+}
 type Mode = "chat" | "agent";
 type RunStatus = "queued" | "running" | "completed" | "failed" | "cancelled" | "awaiting_continue";
 
@@ -910,6 +963,22 @@ async function directChatResponse(
           providers: { gemini: pool.total > 0, openai: hasOpenAIKey() },
           mode: "chat",
         });
+        if (pool.total === 0 && !hasOpenAIKey()) {
+          const degradedAnswer = await providerlessAlsamosAnswer(userText, runtime.ctx).catch(() => null);
+          if (degradedAnswer) {
+            send({
+              type: "notice",
+              message: "AI provayder sozlanmagan; javob Alsamos ichidagi tasdiqlangan platforma ma’lumotidan berildi.",
+            });
+            send({ type: "delta", text: degradedAnswer });
+          } else {
+            send({
+              type: "error",
+              message: "AI provayder sozlanmagan: Gemini API kalitlari topilmadi. Administrator GEMINI_API_KEYS yoki GEMINI_API_KEY_1..10 ni sozlashi kerak.",
+            });
+          }
+          return;
+        }
         for (let round = 0; round < policy.maxRounds; round += 1) {
           const { response: res, provider } = await aiFetch({
             body: {
@@ -962,9 +1031,10 @@ async function directChatResponse(
               let parsed: any;
               try { parsed = JSON.parse(raw); } catch (_) { continue; }
               const delta = parsed.choices?.[0]?.delta ?? {};
-              if (typeof delta.content === "string" && delta.content) {
-                assistantText += delta.content;
-                send({ type: "delta", text: delta.content });
+              const deltaText = completionText(delta.content);
+              if (deltaText) {
+                assistantText += deltaText;
+                send({ type: "delta", text: deltaText });
               }
               for (const tc of delta.tool_calls ?? []) {
                 const index = Number(tc.index ?? 0);
@@ -977,7 +1047,35 @@ async function directChatResponse(
             }
           }
 
-          const calls = [...pending.entries()].sort((a, b) => a[0] - b[0]).map(([, c]) => c).filter((c) => c.name);
+          let calls = [...pending.entries()].sort((a, b) => a[0] - b[0]).map(([, c]) => c).filter((c) => c.name);
+
+          if (!assistantText.trim() && !calls.length) {
+            console.warn("chat provider returned an empty streamed turn; retrying non-streaming", { model: route.model, round });
+            const recovered = await recoverEmptyCompletion({
+              model: route.model,
+              messages: conversation,
+              ...(specs.length ? { tools: specs, tool_choice: "auto" } : {}),
+            });
+            if (recovered.text) {
+              assistantText = recovered.text;
+              send({ type: "delta", text: recovered.text });
+            }
+            if (recovered.calls.length) calls = recovered.calls;
+            if (!assistantText.trim() && !calls.length) {
+              console.error("chat provider returned empty output after recovery", {
+                provider: recovered.provider,
+                status: recovered.status,
+                detail: recovered.detail.slice(0, 200),
+                model: route.model,
+              });
+              send({
+                type: "error",
+                message: "AI modeli bo‘sh javob qaytardi. Server javobni qayta tekshirdi, lekin matn yoki vosita chaqiruvi topilmadi. Qayta urinib ko‘ring.",
+              });
+              break;
+            }
+          }
+
           if (!calls.length) break;
           if (toolCount + calls.length > policy.maxToolCalls) {
             send({ type: "notice", message: "Chat rejimi vositalar limitiga yetdi; mavjud natijalar bilan javob yakunlanadi." });
@@ -1433,9 +1531,10 @@ async function streamWorkerModelRound(
     }
 
     const delta = parsed.choices?.[0]?.delta ?? {};
-    if (typeof delta.content === "string" && delta.content) {
-      assistantText += delta.content;
-      pendingText += delta.content;
+    const deltaText = completionText(delta.content);
+    if (deltaText) {
+      assistantText += deltaText;
+      pendingText += deltaText;
       await flushText(false);
     }
 
@@ -1466,10 +1565,32 @@ async function streamWorkerModelRound(
   if (buffer.trim()) await consumeLine(buffer);
   await flushText(true);
 
-  const calls = [...pendingCalls.entries()]
+  let calls = [...pendingCalls.entries()]
     .sort((a, b) => a[0] - b[0])
     .map(([, call]) => call)
     .filter((call) => call.name);
+
+  if (!assistantText.trim() && !calls.length) {
+    console.warn("agent provider returned an empty streamed turn; retrying non-streaming", { model, runId });
+    const recovered = await recoverEmptyCompletion({
+      model,
+      messages: conversation,
+      ...(specs.length ? { tools: specs, tool_choice: "auto" } : {}),
+    });
+    if (recovered.text) {
+      assistantText = recovered.text;
+      pendingText += recovered.text;
+      await flushText(true);
+    }
+    if (recovered.calls.length) calls = recovered.calls;
+    if (!assistantText.trim() && !calls.length) {
+      throw new ProviderUnavailableError(
+        recovered.provider,
+        recovered.status || 502,
+        "AI modeli bo‘sh javob qaytardi: matn yoki vosita chaqiruvi topilmadi.",
+      );
+    }
+  }
 
   return { assistantText, calls };
 }
