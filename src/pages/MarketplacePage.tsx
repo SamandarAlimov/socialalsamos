@@ -239,7 +239,6 @@ export default function MarketplacePage() {
     return Math.ceil(maxProductPrice / step) * step;
   }, [maxProductPrice]);
 
-  const activeRange = priceRange ?? [0, sliderMax];
   const availableConditions = useMemo(
     () => Array.from(new Set(products.map(product => product.condition).filter(Boolean))),
     [products],
