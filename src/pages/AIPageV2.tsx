@@ -29,6 +29,7 @@ import { AIMessageBubble, AIThinkingBubble } from '@/components/ai/AIMessageBubb
 import { AIArtifactPanel } from '@/components/ai/AIArtifactPanel';
 import { AIConnectorsDialog } from '@/components/ai/AIConnectorsDialog';
 import { AIGithubDialog } from '@/components/ai/AIGithubDialog';
+import { AIClarificationDialog, type AIClarificationAnswers } from '@/components/ai/AIClarificationDialog';
 import type {
   AIConversation,
   AIMessage,
@@ -37,18 +38,41 @@ import type {
   AIToolEvent,
 } from '@/components/ai/types';
 import { extractArtifacts } from '@/lib/aiArtifacts';
-import { generateConversationTitle, streamAgent } from '@/lib/ai/agentClient';
+import { answerAgentClarification, generateConversationTitle, streamAgent } from '@/lib/ai/agentClient';
 import { buildRepoContext, detectRepoRefs, githubReady, githubRepoUrl } from '@/lib/ai/githubContext';
 import { buildBrainContext } from '@/lib/ai/brain';
 import { formatAIListDate } from '@/lib/ai/dateFormat';
 import { captureMemories, syncMemories } from '@/lib/ai/memory';
-import { toolLabel, type AIMode, type ModelId, type ToolGroupId } from '@/lib/ai/capabilities';
+import { toolLabel, type AIClarificationRequest, type AIMode, type ModelId, type ToolGroupId } from '@/lib/ai/capabilities';
 import { buildAIWorkspaceHref, parseAIWorkspaceLocation } from '@/lib/ai/workspaceUrl';
 
 const PIN_KEY = 'alsamos.ai.pinned';
 const TITLE_KEY = 'alsamos.ai.titles';
 const PREFS_KEY = 'alsamos.ai.prefs';
 const MODE_KEY = 'alsamos.ai.mode';
+
+type ClarificationContinuation = {
+  runId: string;
+  clarificationId: string;
+  answers: AIClarificationAnswers;
+  afterEventId: number;
+};
+
+function clarificationSummary(
+  request: AIClarificationRequest,
+  answers: AIClarificationAnswers,
+): string {
+  const blocks = request.questions.map((question) => {
+    const raw = answers[question.id];
+    const values = Array.isArray(raw) ? raw : raw ? [raw] : [];
+    const labels = values.map((value) => {
+      const option = question.options?.find((item) => item.value === value);
+      return option?.label || value;
+    });
+    return `Q: ${question.question}\nA: ${labels.length ? labels.join(', ') : '—'}`;
+  });
+  return blocks.join('\n\n');
+}
 
 const ALL_TOOL_GROUPS: ToolGroupId[] = [
   'web',
@@ -204,6 +228,9 @@ export default function AIPageV2() {
   });
   const [toolGroups, setToolGroups] = useState<ToolGroupId[]>(initialPrefs.toolGroups);
   const [activeModel, setActiveModel] = useState<string | null>(null);
+  const [clarification, setClarification] = useState<AIClarificationRequest | null>(null);
+  const [clarificationOpen, setClarificationOpen] = useState(false);
+  const [clarificationSubmitting, setClarificationSubmitting] = useState(false);
   const [showScrollToLatest, setShowScrollToLatest] = useState(false);
   const [composerDockHeight, setComposerDockHeight] = useState(0);
   const [forwardedPost, setForwardedPost] = useState<{
@@ -897,7 +924,7 @@ export default function AIPageV2() {
     }
   };
 
-  const runAgent = async (baseMessages: AIMessage[]) => {
+  const runAgent = async (baseMessages: AIMessage[], continuation?: ClarificationContinuation) => {
     setIsStreaming(true);
     setStatusLabel("O'ylayapman…");
 
@@ -913,6 +940,8 @@ export default function AIPageV2() {
     let usedModel: string | null = null;
     let notice: string | undefined;
     let created = false;
+    let clarificationRequest: AIClarificationRequest | null = null;
+    const responseMode: AIMode = continuation ? 'agent' : mode;
 
     const flush = () => {
       const assistant: AIMessage = {
@@ -924,7 +953,7 @@ export default function AIPageV2() {
         sources: sources.length ? [...sources] : undefined,
         tools: tools.length ? tools.map((tool) => ({ ...tool })) : undefined,
         model: usedModel ?? undefined,
-        mode,
+        mode: responseMode,
         notice,
         timestamp: new Date(),
       };
@@ -1020,15 +1049,8 @@ export default function AIPageV2() {
         };
       }
 
-      await streamAgent({
-        messages: history,
-        mode,
-        model,
-        toolGroups,
-        conversationId: currentConversationId,
-        signal: controller.signal,
-        onEvent: (event) => {
-          switch (event.type) {
+      const handleEvent = (event: Parameters<typeof streamAgent>[0]['onEvent'] extends (event: infer E) => void ? E : never) => {
+        switch (event.type) {
             case 'meta':
               usedModel = event.model;
               setActiveModel(event.model);
@@ -1094,6 +1116,12 @@ export default function AIPageV2() {
               flush();
               break;
             }
+            case 'clarification':
+              clarificationRequest = event;
+              setClarification(event);
+              setClarificationOpen(true);
+              setStatusLabel('Aniqlik kiritish kerak');
+              break;
             case 'notice':
               notice = event.message;
               flush();
@@ -1101,8 +1129,35 @@ export default function AIPageV2() {
             case 'error':
               throw new Error(event.message);
           }
-        },
-      });
+      };
+
+      if (continuation) {
+        await answerAgentClarification(
+          continuation.runId,
+          continuation.clarificationId,
+          continuation.answers,
+          handleEvent,
+          continuation.afterEventId,
+          controller.signal,
+        );
+      } else {
+        await streamAgent({
+          messages: history,
+          mode,
+          model,
+          toolGroups,
+          conversationId: currentConversationId,
+          signal: controller.signal,
+          onEvent: handleEvent,
+        });
+      }
+
+      if (clarificationRequest) {
+        const partial = content || images.length || videos.length || tools.length || notice ? flush() : null;
+        await saveConversation(partial ? [...baseMessages, partial] : baseMessages);
+        setForwardedPost(null);
+        return;
+      }
 
       if (!content && !images.length && !videos.length) {
         content = "Javob bo‘sh qaytdi. Iltimos, qaytadan urinib ko‘ring.";
@@ -1172,6 +1227,44 @@ export default function AIPageV2() {
     setInput('');
     setAttachments([]);
     await runAgent(base);
+  };
+
+  const submitClarification = async (answers: AIClarificationAnswers) => {
+    const request = clarification;
+    if (!request || clarificationSubmitting) return;
+
+    setClarificationSubmitting(true);
+    const answerMessage: AIMessage = {
+      id: crypto.randomUUID(),
+      role: 'user',
+      content: clarificationSummary(request, answers),
+      timestamp: new Date(),
+    };
+    const base = [...messages, answerMessage];
+    autoFollowRef.current = true;
+    setShowScrollToLatest(false);
+    setMessages(base);
+    setClarification(null);
+    setClarificationOpen(false);
+    setClarificationSubmitting(false);
+
+    if (request.runId) {
+      await runAgent(base, {
+        runId: request.runId,
+        clarificationId: request.id,
+        answers,
+        afterEventId: request.eventId ?? 0,
+      });
+      return;
+    }
+
+    const continuationNote: AIMessage = {
+      ...answerMessage,
+      content: `[CLARIFICATION ANSWERS]\n${answerMessage.content}\n\nContinue the original task using these answers. Do not ask the same questions again.`,
+    };
+    const directBase = [...messages, continuationNote];
+    setMessages(directBase);
+    await runAgent(directBase);
   };
 
   const regenerateFrom = async (index: number) => {
@@ -1516,6 +1609,18 @@ export default function AIPageV2() {
                   />
                 ))}
                 {isStreaming && messages[messages.length - 1]?.role === 'user' && <AIThinkingBubble label={statusLabel} />}
+                {clarification && !clarificationOpen && (
+                  <div className="mb-4 flex justify-start">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setClarificationOpen(true)}
+                      className="rounded-full"
+                    >
+                      Savollarga javob berish
+                    </Button>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -1579,6 +1684,13 @@ export default function AIPageV2() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      <AIClarificationDialog
+        request={clarificationOpen ? clarification : null}
+        submitting={clarificationSubmitting}
+        onClose={() => setClarificationOpen(false)}
+        onSubmit={submitClarification}
+      />
 
       <AIConnectorsDialog open={connectorsOpen} onOpenChange={setConnectorsOpen} userId={user?.id} />
 
