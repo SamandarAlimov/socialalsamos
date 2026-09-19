@@ -10,6 +10,48 @@ export interface CatalogGuide {
   groups: CatalogGuideGroup[];
 }
 
+const CATEGORY_LABELS: Record<string, string> = {
+  electronics: 'Elektronika',
+  'electronics-gadgets': 'Elektronika va gadjetlar',
+  phones: 'Telefonlar',
+  computers: 'Kompyuterlar',
+  fashion: 'Kiyim va moda',
+  clothing: 'Kiyim',
+  'home-garden': 'Uy va bog‘',
+  home: 'Uy-ro‘zg‘or',
+  furniture: 'Mebel',
+  'sports-outdoors': 'Sport va hordiq',
+  sports: 'Sport',
+  vehicles: 'Transport',
+  cars: 'Avtomobillar',
+  'books-media': 'Kitob va media',
+  books: 'Kitoblar',
+  'health-beauty': 'Go‘zallik va parvarish',
+  beauty: 'Go‘zallik',
+  health: 'Salomatlik',
+  'kids-baby': 'Bolalar',
+  kids: 'Bolalar',
+  baby: 'Chaqaloqlar',
+  pets: 'Hayvonlar uchun',
+  gaming: 'Gaming va o‘yinlar',
+  games: 'O‘yinlar',
+  tools: 'Asboblar',
+  services: 'Xizmatlar',
+  business: 'Biznes uchun',
+  food: 'Oziq-ovqat',
+  'food-drinks': 'Oziq-ovqat va ichimliklar',
+  art: 'Ijod va hunarmandchilik',
+  handmade: 'Qo‘l mehnati',
+  travel: 'Sayohat',
+  education: 'Ta’lim',
+  events: 'Tadbirlar',
+  tickets: 'Chiptalar',
+};
+
+export function catalogCategoryLabel(category: Category): string {
+  return CATEGORY_LABELS[category.slug.toLocaleLowerCase()] || category.name;
+}
+
 const GUIDES: Array<{
   match: RegExp;
   guide: CatalogGuide;
