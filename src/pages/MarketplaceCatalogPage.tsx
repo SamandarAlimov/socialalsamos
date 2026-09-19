@@ -16,8 +16,8 @@ import { CategoryIcon } from '@/components/marketplace/CategoryIcon';
 import { ProductCard } from '@/components/marketplace/ProductCard';
 import { Button } from '@/components/ui/button';
 import {
-  Category,
-  Product,
+  type Category,
+  type Product,
   useCart,
   useCategories,
   useProducts,
@@ -123,7 +123,10 @@ export default function MarketplaceCatalogPage() {
       <MarketplaceSectionHeader
         activeSection="catalog"
         searchValue={query}
-        onSearchValueChange={setQuery}
+        onSearchValueChange={value => {
+          setQuery(value);
+          if (value.trim()) setSelectedCategorySlug('all');
+        }}
         onSearchSubmit={submitSearch}
         hideFilter
         itemCount={itemCount}
