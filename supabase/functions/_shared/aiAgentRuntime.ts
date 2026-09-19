@@ -9,7 +9,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { guard, preflight, corsHeaders, guardError } from "./guard.ts";
-import { aiFetch, hasGeminiKeys, hasOpenAIKey, poolStatus } from "./geminiPool.ts";
+import { aiFetch, hasGeminiKeys, hasOpenAIKey, hasLovableKey, poolStatus } from "./geminiPool.ts";
 import {
   executeTool,
   specsFor,
@@ -321,7 +321,7 @@ async function generateConversationTitleResponse(
   let title = fallback;
   let source = "fallback";
 
-  if (hasGeminiKeys() || hasOpenAIKey()) {
+  if (hasGeminiKeys() || hasOpenAIKey() || hasLovableKey()) {
     try {
       const { response } = await aiFetch({
         body: {
@@ -960,10 +960,10 @@ async function directChatResponse(
           language: cls.language,
           tools: [...enabled],
           keyPool: `${pool.ready}/${pool.total}`,
-          providers: { gemini: pool.total > 0, openai: hasOpenAIKey() },
+          providers: { gemini: pool.total > 0, openai: hasOpenAIKey(), lovable: hasLovableKey() },
           mode: "chat",
         });
-        if (pool.total === 0 && !hasOpenAIKey()) {
+        if (pool.total === 0 && !hasOpenAIKey() && !hasLovableKey()) {
           const degradedAnswer = await providerlessAlsamosAnswer(userText, runtime.ctx).catch(() => null);
           if (degradedAnswer) {
             send({
@@ -974,7 +974,7 @@ async function directChatResponse(
           } else {
             send({
               type: "error",
-              message: "AI provayder sozlanmagan: Gemini API kalitlari topilmadi. Administrator GEMINI_API_KEYS yoki GEMINI_API_KEY_1..10 ni sozlashi kerak.",
+              message: "AI provayder sozlanmagan. Administrator GEMINI_API_KEYS, OPENAI_API_KEY yoki LOVABLE_API_KEY dan kamida bittasini sozlashi kerak.",
             });
           }
           return;
