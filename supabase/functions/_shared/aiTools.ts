@@ -38,7 +38,6 @@ export type ConnectorRow = {
 export type ToolContext = {
   userId: string | null;
   admin: SupabaseClient;
-  lovableKey: string;
   connectors: ConnectorRow[];
   /** Foydalanuvchi UI da yoqqan vositalar. */
   enabled: Set<string>;
@@ -444,7 +443,6 @@ async function generateImage(args: Record<string, unknown>, ctx: ToolContext): P
     image = await generateImageBytes({
       prompt,
       imageUrl: editUrl,
-      lovableKey: ctx.lovableKey || undefined,
     });
   } catch (error) {
     return fail(error instanceof Error ? error.message : String(error));
