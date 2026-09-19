@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { guard, preflight, jsonResponse, guardError } from "../_shared/guard.ts";
+import { aiFetch, hasGeminiKeys, hasOpenAIKey } from "../_shared/geminiPool.ts";
 
 const FUNCTION_NAME = "smart-reply";
 const RATE_LIMIT = 120;
@@ -34,9 +35,8 @@ serve(async (req) => {
     const fromName = String(body.fromName ?? "").slice(0, 200);
     const fromEmail = String(body.fromEmail ?? "").slice(0, 320);
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      console.error("LOVABLE_API_KEY is not configured");
+    if (!hasGeminiKeys() && !hasOpenAIKey()) {
+      console.error("No AI credentials: set GEMINI_API_KEYS or OPENAI_API_KEY");
       return guardError(req, "SERVER_ERROR", "AI xizmati sozlanmagan.", 500);
     }
 
@@ -65,13 +65,8 @@ Subject: ${subject}
 
 ${emailBody}`;
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
+    const { response, provider } = await aiFetch({
+      body: {
         model: "google/gemini-2.5-flash",
         messages: [
           { role: "system", content: systemPrompt },
@@ -79,25 +74,18 @@ ${emailBody}`;
         ],
         temperature: 0.7,
         response_format: { type: "json_object" },
-      }),
+      },
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("AI gateway error:", response.status, errorText);
+      console.error(`AI provider error (${provider}):`, response.status, errorText);
 
       if (response.status === 429) {
         return jsonResponse(
           req,
           { error: "Juda ko'p so'rov. Birozdan so'ng qayta urinib ko'ring.", code: "TOO_MANY_ATTEMPTS" },
           429,
-        );
-      }
-      if (response.status === 402) {
-        return jsonResponse(
-          req,
-          { error: "AI kreditlari tugagan. Billing bo'limida kredit qo'shing.", code: "SERVER_ERROR" },
-          402,
         );
       }
       return guardError(req, "SERVER_ERROR", "AI xizmatida xatolik.", 500);
