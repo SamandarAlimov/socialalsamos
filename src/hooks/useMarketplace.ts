@@ -1055,9 +1055,20 @@ export function useCart() {
     }
 
     const variantLabel = getVariantOptionsLabel(variant);
+    const productTitle = String(product.title || '').trim();
+    const hasMeaningfulTitle =
+      productTitle.length > 1 && /[A-Za-z0-9À-žА-яЁёЀ-ӿ]/.test(productTitle);
+    const cartDetails = [
+      hasMeaningfulTitle ? productTitle : null,
+      variantLabel || null,
+      `${nextQuantity} dona`,
+    ].filter(Boolean).join(' · ');
+
     toast({
-      title: "Savatga qo'shildi",
-      description: `${product.title}${variantLabel ? ` · ${variantLabel}` : ''} — ${nextQuantity} dona`,
+      title: "Savatga qo‘shildi",
+      description: cartDetails,
+      className:
+        'rounded-2xl border-white/10 bg-zinc-950 text-white shadow-[0_20px_55px_rgba(0,0,0,0.28)]',
     });
     await fetchCart();
     return true;
