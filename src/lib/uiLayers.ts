@@ -12,6 +12,7 @@
  * modal content       6010
  * modal popover       6020
  * media viewer        7000
+ * transient feedback  9000
  */
 export const UI_LAYER = {
   shellFloating: 'z-[1300]',
@@ -20,4 +21,5 @@ export const UI_LAYER = {
   modalContent: 'z-[6010]',
   modalPopover: 'z-[6020]',
   mediaViewer: 'z-[7000]',
+  toast: 'z-[9000]',
 } as const;
