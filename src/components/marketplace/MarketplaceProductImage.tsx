@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils';
 
 interface MarketplaceProductImageProps {
   product: Product;
+  imageIndex?: number;
   className?: string;
   fallbackClassName?: string;
 }
@@ -63,10 +64,11 @@ function resolveCandidatesOnce(rawSource: string) {
  */
 export function MarketplaceProductImage({
   product,
+  imageIndex = 0,
   className,
   fallbackClassName,
 }: MarketplaceProductImageProps) {
-  const rawSource = product.images?.[0]?.url?.trim() || '';
+  const rawSource = product.images?.[imageIndex]?.url?.trim() || '';
   const [candidates, setCandidates] = useState<string[]>(() => cachedCandidates(rawSource));
   const [candidateIndex, setCandidateIndex] = useState(0);
 
@@ -98,7 +100,7 @@ export function MarketplaceProductImage({
     return () => {
       cancelled = true;
     };
-  }, [product.id, rawSource]);
+  }, [product.id, imageIndex, rawSource]);
 
   const source = candidates[candidateIndex];
 
@@ -122,7 +124,7 @@ export function MarketplaceProductImage({
   return (
     <img
       src={source}
-      alt={product.title}
+      alt={product.images?.length > 1 ? product.title + ' — ' + (imageIndex + 1) : product.title}
       className={className}
       loading="lazy"
       decoding="async"
