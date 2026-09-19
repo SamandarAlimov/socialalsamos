@@ -47,10 +47,16 @@ import { SellerStorefront } from '@/components/marketplace/SellerStorefront';
 import { VideoCommerceSection } from '@/components/marketplace/VideoCommerceSection';
 import { CategoryIcon } from '@/components/marketplace/CategoryIcon';
 import { MarketplaceBottomNav } from '@/components/marketplace/MarketplaceBottomNav';
+import {
+  MarketplaceFilters,
+  MarketplaceQuickFilters,
+  marketplaceProductMatchesFilters,
+  type MarketplaceDeliveryMode,
+  type MarketplaceSortMode,
+} from '@/components/marketplace/MarketplaceFilters';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import { Slider } from '@/components/ui/slider';
+import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { cn } from '@/lib/utils';
 import { conditionLabel, formatPrice } from '@/lib/marketplace';
 import { marketplaceUz } from '@/i18n/marketplace';
@@ -95,12 +101,12 @@ export default function MarketplacePage() {
   const [showDashboard, setShowDashboard] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [gridLayout, setGridLayout] = useState<'grid' | 'list'>('grid');
-  const [sortBy, setSortBy] = useState('newest');
+  const [sortBy, setSortBy] = useState<MarketplaceSortMode>('newest');
   const [priceRange, setPriceRange] = useState<[number, number] | null>(null);
   const [conditionFilter, setConditionFilter] = useState('all');
   const [inStockOnly, setInStockOnly] = useState(false);
-  const [shippingOnly, setShippingOnly] = useState(false);
-  const [discountOnly, setDiscountOnly] = useState(false);
+  const [deliveryMode, setDeliveryMode] = useState<MarketplaceDeliveryMode>('all');
+  const [minDiscount, setMinDiscount] = useState(0);
   const [selectedSellerId, setSelectedSellerId] = useState<string | null>(null);
   const [sellingView, setSellingView] = useState<'products' | 'orders'>('products');
 
@@ -240,14 +246,15 @@ export default function MarketplacePage() {
   );
 
   const sortedProducts = useMemo(() => {
-    const filtered = products.filter(product => {
-      if (priceRange && (product.price < activeRange[0] || product.price > activeRange[1])) return false;
-      if (conditionFilter !== 'all' && product.condition !== conditionFilter) return false;
-      if (inStockOnly && Number(product.quantity) <= 0) return false;
-      if (shippingOnly && !product.shipping_available) return false;
-      if (discountOnly && discountRate(product) <= 0) return false;
-      return true;
-    });
+    const filtered = products.filter(product =>
+      marketplaceProductMatchesFilters(product, {
+        priceRange,
+        conditionFilter,
+        minDiscount,
+        inStockOnly,
+        deliveryMode,
+      }),
+    );
 
     return [...filtered].sort((a, b) => {
       switch (sortBy) {
@@ -256,38 +263,45 @@ export default function MarketplacePage() {
         case 'price_high':
           return b.price - a.price;
         case 'popular':
-          return (b.likes_count ?? 0) - (a.likes_count ?? 0);
+          return (
+            (b.views_count ?? 0) +
+            (b.likes_count ?? 0) * 4 -
+            ((a.views_count ?? 0) + (a.likes_count ?? 0) * 4)
+          );
         default:
           return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
       }
     });
   }, [
-    activeRange,
     conditionFilter,
-    discountOnly,
+    deliveryMode,
     inStockOnly,
+    minDiscount,
     priceRange,
     products,
-    shippingOnly,
     sortBy,
   ]);
 
   const activeFilterCount =
+    (selectedCategory !== 'all' ? 1 : 0) +
     (priceRange ? 1 : 0) +
     (conditionFilter !== 'all' ? 1 : 0) +
     (inStockOnly ? 1 : 0) +
-    (shippingOnly ? 1 : 0) +
-    (discountOnly ? 1 : 0) +
-    (sortBy !== 'newest' ? 1 : 0);
+    (deliveryMode !== 'all' ? 1 : 0) +
+    (minDiscount > 0 ? 1 : 0);
+
+  const nonCategoryFilterCount =
+    activeFilterCount - (selectedCategory !== 'all' ? 1 : 0);
 
   const resetFilters = useCallback(() => {
     setPriceRange(null);
     setConditionFilter('all');
     setInStockOnly(false);
-    setShippingOnly(false);
-    setDiscountOnly(false);
+    setDeliveryMode('all');
+    setMinDiscount(0);
     setSortBy('newest');
-  }, []);
+    if (selectedCategory !== 'all') handleCategorySelect('all');
+  }, [handleCategorySelect, selectedCategory]);
 
   const featuredProducts = useMemo(
     () => products.filter(product => product.is_featured),
@@ -347,112 +361,6 @@ export default function MarketplacePage() {
     { id: 'products' as const, label: seller?.business_type === 'restaurant' ? 'Menyu' : 'Mahsulotlar', icon: Package },
     { id: 'orders' as const, label: 'Buyurtmalar', icon: ClipboardList },
   ];
-
-  const filtersPanel = (
-    <div className="space-y-6">
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <p className="text-sm font-semibold">Saralash</p>
-          {activeFilterCount > 0 && (
-            <button
-              type="button"
-              onClick={resetFilters}
-              className="text-xs font-semibold text-muted-foreground transition hover:text-foreground"
-            >
-              Tiklash
-            </button>
-          )}
-        </div>
-        <div className="grid grid-cols-2 gap-2">
-          {[
-            { id: 'newest', label: 'Eng yangi' },
-            { id: 'popular', label: 'Mashhur' },
-            { id: 'price_low', label: 'Arzon → Qimmat' },
-            { id: 'price_high', label: 'Qimmat → Arzon' },
-          ].map(option => (
-            <button
-              key={option.id}
-              type="button"
-              onClick={() => setSortBy(option.id)}
-              className={cn(
-                'min-h-10 rounded-xl border px-3 py-2 text-xs font-semibold transition',
-                sortBy === option.id
-                  ? 'border-foreground bg-foreground text-background'
-                  : 'border-border/60 bg-background hover:border-foreground/30',
-              )}
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="space-y-3">
-        <p className="text-sm font-semibold">Holati</p>
-        <div className="flex flex-wrap gap-2">
-          <FilterChip
-            active={conditionFilter === 'all'}
-            onClick={() => setConditionFilter('all')}
-            label="Barchasi"
-          />
-          {availableConditions.map(condition => (
-            <FilterChip
-              key={condition}
-              active={conditionFilter === condition}
-              onClick={() => setConditionFilter(condition)}
-              label={conditionLabel(condition)}
-            />
-          ))}
-        </div>
-      </div>
-
-      <div className="space-y-3">
-        <div className="flex items-center justify-between gap-3">
-          <p className="text-sm font-semibold">Narx</p>
-          <span className="text-[11px] text-muted-foreground">
-            {formatPrice(activeRange[0])} — {formatPrice(activeRange[1])}
-          </span>
-        </div>
-        <Slider
-          value={activeRange}
-          min={0}
-          max={sliderMax}
-          step={Math.max(1, Math.round(sliderMax / 100))}
-          onValueChange={value => setPriceRange([value[0], value[1]])}
-        />
-        {priceRange && (
-          <button
-            type="button"
-            onClick={() => setPriceRange(null)}
-            className="text-xs font-semibold text-muted-foreground hover:text-foreground"
-          >
-            Narx filtrini tozalash
-          </button>
-        )}
-      </div>
-
-      <div className="space-y-2">
-        <ToggleRow
-          checked={discountOnly}
-          onChange={setDiscountOnly}
-          label="Faqat chegirmali"
-          description="Eski narxi ko‘rsatilgan real chegirmalar"
-        />
-        <ToggleRow
-          checked={inStockOnly}
-          onChange={setInStockOnly}
-          label="Faqat omborda bor"
-          description="Sotilib ketgan e’lonlarni yashiradi"
-        />
-        <ToggleRow
-          checked={shippingOnly}
-          onChange={setShippingOnly}
-          label="Yetkazib berish mavjud"
-          description="Yetkazish yoqilgan mahsulotlar"
-        />
-      </div>
-    </div>
-  );
 
   const browseContent = (
     <div className="min-w-0 space-y-6">
@@ -616,6 +524,30 @@ export default function MarketplacePage() {
         <VideoCommerceSection onProductSelect={handleProductSelect} />
       )}
 
+      <MarketplaceQuickFilters
+        categories={categories}
+        selectedCategory={selectedCategory}
+        onCategoryChange={handleCategorySelect}
+        sortBy={sortBy}
+        onSortChange={setSortBy}
+        priceRange={priceRange}
+        sliderMax={sliderMax}
+        onPriceRangeChange={setPriceRange}
+        conditionFilter={conditionFilter}
+        availableConditions={availableConditions}
+        onConditionChange={setConditionFilter}
+        minDiscount={minDiscount}
+        onMinDiscountChange={setMinDiscount}
+        inStockOnly={inStockOnly}
+        onInStockOnlyChange={setInStockOnly}
+        deliveryMode={deliveryMode}
+        onDeliveryModeChange={setDeliveryMode}
+        activeFilterCount={activeFilterCount}
+        resultCount={sortedProducts.length}
+        onReset={resetFilters}
+        onOpenAll={() => setShowFilters(true)}
+      />
+
       <div className="flex min-w-0 items-end justify-between gap-3">
         <div className="min-w-0">
           <p className="text-xs text-muted-foreground">
@@ -626,9 +558,9 @@ export default function MarketplacePage() {
             {selectedCategory !== 'all' && (
               <span className="ml-1.5 font-medium text-muted-foreground">· {selectedCategoryLabel}</span>
             )}
-            {activeFilterCount > 0 && (
+            {nonCategoryFilterCount > 0 && (
               <span className="ml-1.5 font-medium text-muted-foreground">
-                · {activeFilterCount} filtr
+                · {nonCategoryFilterCount} filtr
               </span>
             )}
           </p>
@@ -1147,29 +1079,35 @@ export default function MarketplacePage() {
         <SheetContent
           side={isMobile ? 'bottom' : 'right'}
           className={cn(
-            'p-0',
+            'flex overflow-hidden p-0',
             isMobile
-              ? 'max-h-[90dvh] rounded-t-[30px] border-x border-t border-border/60'
-              : 'w-[420px] border-l border-border/60 sm:max-w-[420px]',
+              ? 'h-[92dvh] max-h-[92dvh] rounded-t-[30px] border-x border-t border-border/60'
+              : 'h-full w-[460px] border-l border-border/60 sm:max-w-[460px]',
           )}
         >
-          <SheetHeader className="border-b border-border/50 px-5 py-4 text-left">
-            <SheetTitle>Filtr va saralash</SheetTitle>
-            <p className="text-xs text-muted-foreground">
-              Natijalarni sizga mos holatga keltiring.
-            </p>
-          </SheetHeader>
-          <div className="max-h-[calc(90dvh-82px)] overflow-y-auto px-5 py-5">
-            {filtersPanel}
-            <div className="sticky bottom-0 mt-6 grid grid-cols-2 gap-2 border-t border-border/50 bg-background pt-4">
-              <Button variant="outline" className="h-11 rounded-xl" onClick={resetFilters}>
-                Tiklash
-              </Button>
-              <Button className="h-11 rounded-xl" onClick={() => setShowFilters(false)}>
-                {sortedProducts.length} natijani ko‘rish
-              </Button>
-            </div>
-          </div>
+          <MarketplaceFilters
+            categories={categories}
+            selectedCategory={selectedCategory}
+            onCategoryChange={handleCategorySelect}
+            sortBy={sortBy}
+            onSortChange={setSortBy}
+            priceRange={priceRange}
+            sliderMax={sliderMax}
+            onPriceRangeChange={setPriceRange}
+            conditionFilter={conditionFilter}
+            availableConditions={availableConditions}
+            onConditionChange={setConditionFilter}
+            minDiscount={minDiscount}
+            onMinDiscountChange={setMinDiscount}
+            inStockOnly={inStockOnly}
+            onInStockOnlyChange={setInStockOnly}
+            deliveryMode={deliveryMode}
+            onDeliveryModeChange={setDeliveryMode}
+            activeFilterCount={activeFilterCount}
+            resultCount={sortedProducts.length}
+            onReset={resetFilters}
+            onApply={() => setShowFilters(false)}
+          />
         </SheetContent>
       </Sheet>
     </div>
@@ -1184,71 +1122,6 @@ export default function MarketplacePage() {
   }
 
   return pageContent;
-}
-
-function FilterChip({
-  active,
-  label,
-  onClick,
-}: {
-  active: boolean;
-  label: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        'rounded-full border px-3 py-1.5 text-xs font-semibold transition',
-        active
-          ? 'border-foreground bg-foreground text-background'
-          : 'border-border/60 bg-background text-muted-foreground hover:text-foreground',
-      )}
-    >
-      {label}
-    </button>
-  );
-}
-
-function ToggleRow({
-  checked,
-  label,
-  description,
-  onChange,
-}: {
-  checked: boolean;
-  label: string;
-  description: string;
-  onChange: (value: boolean) => void;
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      onClick={() => onChange(!checked)}
-      className="flex w-full items-center justify-between gap-3 rounded-2xl border border-border/50 bg-background p-3 text-left"
-    >
-      <span className="min-w-0">
-        <span className="block text-sm font-semibold">{label}</span>
-        <span className="block text-[11px] text-muted-foreground">{description}</span>
-      </span>
-      <span
-        className={cn(
-          'relative h-6 w-11 shrink-0 rounded-full transition',
-          checked ? 'bg-foreground' : 'bg-muted',
-        )}
-      >
-        <span
-          className={cn(
-            'absolute top-1 h-4 w-4 rounded-full bg-background shadow transition',
-            checked ? 'left-6' : 'left-1',
-          )}
-        />
-      </span>
-    </button>
-  );
 }
 
 function CategoryTile({
