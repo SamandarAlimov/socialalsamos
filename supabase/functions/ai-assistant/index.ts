@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { guard, preflight, jsonResponse, corsHeaders, guardError } from "../_shared/guard.ts";
-import { aiFetch, hasGeminiKeys, poolStatus } from "../_shared/geminiPool.ts";
+import { aiFetch, hasGeminiKeys, hasOpenAIKey, poolStatus } from "../_shared/geminiPool.ts";
 
 const FUNCTION_NAME = "ai-assistant";
 const RATE_LIMIT = 60;
@@ -98,7 +98,6 @@ function formatSearchEvidence(
 }
 
 async function classifyRequest(
-  lovableKey: string | undefined,
   lastUserText: string,
   currentTopics: string[] | null,
 ): Promise<{
@@ -127,7 +126,6 @@ Return ONLY the JSON object.`;
 
   try {
     const { response } = await aiFetch({
-      lovableKey,
       body: {
         model: "google/gemini-3.1-flash-lite",
         messages: [
@@ -178,10 +176,9 @@ serve(async (req) => {
     const userId = gate.userId;
     const admin = gate.admin;
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     const pool = poolStatus();
-    if (!hasGeminiKeys() && !LOVABLE_API_KEY) {
-      console.error("No AI credentials: set GEMINI_API_KEYS or LOVABLE_API_KEY");
+    if (!hasGeminiKeys() && !hasOpenAIKey()) {
+      console.error("No AI credentials: set GEMINI_API_KEYS or OPENAI_API_KEY");
       return guardError(req, "SERVER_ERROR", "AI xizmati sozlanmagan.", 500);
     }
 
@@ -210,7 +207,7 @@ Daily time limit: ${prefs?.daily_time_limit_minutes || "unlimited"} min`;
     }
 
     const lastUser = [...messages].reverse().find((m: any) => m.role === "user")?.content ?? "";
-    const cls = await classifyRequest(LOVABLE_API_KEY, String(lastUser), currentTopics);
+    const cls = await classifyRequest(String(lastUser), currentTopics);
 
     let recNote = "";
     if (userId && (cls.update_recommendations || cls.clear_recommendations)) {
@@ -276,7 +273,6 @@ ${userContext}${recNote}
 Extra context: ${context || "none"}${liveSearchContext}`;
 
     const { response, provider, keyIndex } = await aiFetch({
-      lovableKey: LOVABLE_API_KEY,
       body: {
         model,
         messages: [{ role: "system", content: systemPrompt }, ...messages],
@@ -290,13 +286,6 @@ Extra context: ${context || "none"}${liveSearchContext}`;
           req,
           { error: "Juda ko'p so'rov. Birozdan so'ng qayta urinib ko'ring.", code: "TOO_MANY_ATTEMPTS" },
           429,
-        );
-      }
-      if (response.status === 402) {
-        return jsonResponse(
-          req,
-          { error: "AI kreditlari tugagan. Billing bo'limida kredit qo'shing.", code: "SERVER_ERROR" },
-          402,
         );
       }
       const errorText = await response.text();
