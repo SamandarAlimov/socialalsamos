@@ -124,18 +124,6 @@ export default async function handler(req: any, res: any) {
     return;
   }
 
-  if (first(req.query?.__provider_probe) === 'gemini-count-20260919') {
-    const keys: string[] = [];
-    const bundle = env('GEMINI_API_KEYS');
-    if (bundle) for (const part of bundle.split(',')) { const key = part.trim(); if (key) keys.push(key); }
-    for (let i = 1; i <= 10; i += 1) { const key = env(`GEMINI_API_KEY_${i}`); if (key) keys.push(key); }
-    const single = env('GEMINI_API_KEY');
-    if (single) keys.push(single);
-    res.setHeader('Cache-Control', 'no-store');
-    res.status(200).json({ geminiKeyCount: [...new Set(keys)].length });
-    return;
-  }
-
   const kind = first(req.query?.kind).toLowerCase();
   const value = first(req.query?.value);
   const allowed = new Set(['profile', 'post', 'channel', 'group', 'product', 'hashtag']);
