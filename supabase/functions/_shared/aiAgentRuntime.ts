@@ -9,7 +9,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { guard, preflight, corsHeaders, guardError } from "./guard.ts";
-import { aiFetch, hasGeminiKeys, poolStatus } from "./geminiPool.ts";
+import { aiFetch, hasGeminiKeys, hasOpenAIKey, poolStatus } from "./geminiPool.ts";
 import {
   executeTool,
   specsFor,
@@ -269,7 +269,7 @@ async function generateConversationTitleResponse(
   let title = fallback;
   let source = "fallback";
 
-  if (hasGeminiKeys() || lovableKey) {
+  if (hasGeminiKeys() || hasOpenAIKey() || lovableKey) {
     try {
       const { response } = await aiFetch({
         lovableKey: lovableKey || undefined,
@@ -743,6 +743,19 @@ function normalizeInputMessages(value: unknown): ChatMessage[] {
     .map((m) => ({ role: m.role, content: typeof m.content === "string" ? m.content : "" }));
 }
 
+function providerFailureMessage(provider: string, status: number): string {
+  if (status === 402) {
+    return "AI provayder krediti tugagan va ishlaydigan zaxira provayder topilmadi. Administrator provider balansini yoki API kalitlarini tekshirishi kerak.";
+  }
+  if (status === 429) {
+    return "AI provayder limiti vaqtincha tugadi. Zaxira provayder ham javob bermadi; birozdan so'ng qayta urinib ko'ring.";
+  }
+  if (status === 401 || status === 403) {
+    return "AI provayder autentifikatsiyasi ishlamadi. API kalitlarini tekshirish kerak.";
+  }
+  return `AI xizmatida vaqtinchalik xatolik (provider: ${provider}, HTTP ${status}).`;
+}
+
 async function directChatResponse(
   req: Request,
   body: Record<string, any>,
@@ -752,7 +765,7 @@ async function directChatResponse(
   const inputMessages = normalizeInputMessages(body.messages);
   if (!inputMessages.length) return guardError(req, "INVALID_REQUEST", "messages massivi talab qilinadi.", 400);
   const lovableKey = Deno.env.get("LOVABLE_API_KEY") || "";
-  if (!hasGeminiKeys() && !lovableKey) return guardError(req, "SERVER_ERROR", "AI xizmati sozlanmagan.", 500);
+  if (!hasGeminiKeys() && !hasOpenAIKey() && !lovableKey) return guardError(req, "SERVER_ERROR", "AI xizmati sozlanmagan.", 500);
 
   const groups = requestedGroups(body);
   const baseEnabled = enabledTools(groups);
@@ -794,7 +807,16 @@ async function directChatResponse(
       const send = (payload: Record<string, unknown>) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`));
       let toolCount = 0;
       try {
-        send({ type: "meta", model: route.model, task: route.task, language: cls.language, tools: [...enabled], keyPool: `${pool.ready}/${pool.total}`, mode: "chat" });
+        send({
+          type: "meta",
+          model: route.model,
+          task: route.task,
+          language: cls.language,
+          tools: [...enabled],
+          keyPool: `${pool.ready}/${pool.total}`,
+          providers: { gemini: pool.total > 0, openai: hasOpenAIKey(), lovable: Boolean(lovableKey) },
+          mode: "chat",
+        });
         for (let round = 0; round < policy.maxRounds; round += 1) {
           const { response: res, provider } = await aiFetch({
             lovableKey: lovableKey || undefined,
@@ -808,7 +830,7 @@ async function directChatResponse(
           if (!res.ok || !res.body) {
             const detail = await res.text().catch(() => "");
             console.error("chat provider error", provider, res.status, detail.slice(0, 500));
-            send({ type: "error", message: res.status === 429 ? "Juda ko'p so'rov. Birozdan so'ng qayta urinib ko'ring." : `AI xizmatida xatolik (HTTP ${res.status}).` });
+            send({ type: "error", message: providerFailureMessage(provider, res.status) });
             break;
           }
 
@@ -1095,7 +1117,7 @@ async function initializeRun(admin: SupabaseClient, run: AgentRun): Promise<{
   specs: ToolSpec[];
 }> {
   const lovableKey = Deno.env.get("LOVABLE_API_KEY") || "";
-  if (!hasGeminiKeys() && !lovableKey) throw new Error("AI credentials missing.");
+  if (!hasGeminiKeys() && !hasOpenAIKey() && !lovableKey) throw new Error("AI credentials missing.");
   const inputMessages = normalizeInputMessages(run.input?.messages);
   const userText = lastUserText(inputMessages);
   const cls = await classify(lovableKey || undefined, userText);
@@ -1144,7 +1166,16 @@ async function initializeRun(admin: SupabaseClient, run: AgentRun): Promise<{
     .eq("id", run.id)
     .select("*")
     .single();
-  await emit(admin, run.id, "meta", { model: route.model, task: route.task, language: cls.language, tools: [...enabled], mode: "agent", keyPool: `${poolStatus().ready}/${poolStatus().total}` });
+  const pool = poolStatus();
+  await emit(admin, run.id, "meta", {
+    model: route.model,
+    task: route.task,
+    language: cls.language,
+    tools: [...enabled],
+    mode: "agent",
+    keyPool: `${pool.ready}/${pool.total}`,
+    providers: { gemini: pool.total > 0, openai: hasOpenAIKey(), lovable: Boolean(lovableKey) },
+  });
   const steps = route.task === "coding"
     ? ["Repository/kontekstni tekshirish", "O'zgarishlarni bajarish", "Test yoki CI bilan tekshirish", "Natijani yakunlash"]
     : route.task === "reasoning"
@@ -1227,7 +1258,8 @@ async function streamWorkerModelRound(
 
   if (!response.ok || !response.body) {
     const detail = await response.text().catch(() => "");
-    throw new Error(`AI provider ${provider} HTTP ${response.status}: ${detail.slice(0, 500)}`);
+    console.error("agent provider error", provider, response.status, detail.slice(0, 500));
+    throw new Error(providerFailureMessage(provider, response.status));
   }
 
   const reader = response.body.getReader();
