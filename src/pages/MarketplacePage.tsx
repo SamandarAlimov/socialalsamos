@@ -70,6 +70,16 @@ function isMarketplaceTab(value: string | null): value is MarketplaceTab {
   return value === 'browse' || value === 'orders' || value === 'selling' || value === 'saved';
 }
 
+function isMarketplaceSort(value: string | null): value is MarketplaceSortMode {
+  return (
+    value === 'recommended' ||
+    value === 'newest' ||
+    value === 'popular' ||
+    value === 'price_low' ||
+    value === 'price_high'
+  );
+}
+
 function discountRate(product: Product) {
   const price = Number(product.price || 0);
   const compare = Number(product.compare_at_price || 0);
@@ -101,7 +111,10 @@ export default function MarketplacePage() {
   const [showDashboard, setShowDashboard] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [gridLayout, setGridLayout] = useState<'grid' | 'list'>('grid');
-  const [sortBy, setSortBy] = useState<MarketplaceSortMode>('recommended');
+  const initialSort = searchParams.get('sort');
+  const [sortBy, setSortBy] = useState<MarketplaceSortMode>(
+    isMarketplaceSort(initialSort) ? initialSort : 'recommended',
+  );
   const [priceRange, setPriceRange] = useState<[number, number] | null>(null);
   const [conditionFilter, setConditionFilter] = useState('all');
   const [inStockOnly, setInStockOnly] = useState(false);
