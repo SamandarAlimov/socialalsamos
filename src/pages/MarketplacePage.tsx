@@ -560,23 +560,17 @@ export default function MarketplacePage() {
           />
           <div className="marketplace-x-rail -mx-4 flex gap-3 overflow-x-auto px-4 pb-2 sm:mx-0 sm:px-0">
             {trendingProducts.map(product => (
-              <button
-                type="button"
+              <div
                 key={product.id}
-                className="w-[46vw] min-w-[154px] max-w-[200px] shrink-0 snap-start text-left sm:w-44 lg:w-48"
-                onClick={() => handleProductSelect(product)}
+                className="w-[46vw] min-w-[158px] max-w-[210px] shrink-0 snap-start sm:w-48 lg:w-52"
               >
-                <div className="aspect-square overflow-hidden rounded-2xl border border-border/40 bg-muted">
-                  <MarketplaceProductImage
-                    product={product}
-                    className="h-full w-full object-cover transition duration-500 hover:scale-105"
-                  />
-                </div>
-                <p className="mt-2 line-clamp-1 text-xs font-semibold">{product.title}</p>
-                <p className="mt-0.5 text-sm font-extrabold tabular-nums">
-                  {formatPrice(product.price, product.currency)}
-                </p>
-              </button>
+                <ProductCard
+                  product={product}
+                  onSelect={handleProductSelect}
+                  onLikeChange={refreshProducts}
+                  onAddToCart={addToCart}
+                />
+              </div>
             ))}
           </div>
         </section>
