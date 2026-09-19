@@ -126,6 +126,7 @@ async function requestAgent(
   payload: Record<string, unknown>,
   signal: AbortSignal | undefined,
   onEvent: (event: AgentEvent) => void,
+  options: { deferErrors?: boolean } = {},
 ): Promise<{ runId: string | null; eventId: number; status: string | null; sawText: boolean; sawMedia: boolean; sawClarification: boolean; failure: string | null }> {
   let response: Response;
   try {
@@ -178,6 +179,10 @@ async function requestAgent(
             ? null
             : { runId: event.runId, eventId, status: event.status, conversationId: payload.conversationId as string | null | undefined },
         );
+      }
+      if (event.type === 'error') {
+        failure = event.message;
+        if (options.deferErrors) return;
       }
       if (event.type === 'tool_result') {
         if (!event.ok) {
@@ -280,11 +285,20 @@ async function streamDirectChat(options: StreamAgentOptions): Promise<void> {
     },
     prepared.signal,
     prepared.onEvent,
+    { deferErrors: true },
   );
-  if (!state.sawText && !state.sawMedia && !state.sawClarification) {
+
+  if (state.sawText || state.sawMedia || state.sawClarification) return;
+
+  try {
+    await streamFromAssistant(prepared);
+  } catch (fallbackError) {
     prepared.onEvent({
       type: 'error',
-      message: state.failure || 'AI stream tugadi, lekin server matn yoki media qaytarmadi. Qayta urinib ko‘ring.',
+      message:
+        state.failure ||
+        (fallbackError instanceof Error ? fallbackError.message : '') ||
+        'AI javobi olinmadi. Qayta urinib ko‘ring.',
     });
   }
 }
