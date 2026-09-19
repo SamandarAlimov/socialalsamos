@@ -71,6 +71,18 @@ export function geminiKeys(): string[] {
 
   const keys: string[] = [];
 
+  // Legacy dashboard compatibility. Some production projects stored the four
+  // Gemini credentials inside one multi-line secret named "Alsamos", mixed
+  // with human-readable metadata. Only standalone high-entropy token lines are
+  // accepted; short metadata lines are ignored.
+  const legacyBundle = Deno.env.get('Alsamos')?.trim();
+  if (legacyBundle) {
+    for (const rawLine of legacyBundle.split(/\r?\n/)) {
+      const token = rawLine.trim().replace(/^["'`]+|["'`]+$/g, '');
+      if (/^[A-Za-z0-9._-]{40,80}$/.test(token)) keys.push(token);
+    }
+  }
+
   const bundle = Deno.env.get('GEMINI_API_KEYS');
   if (bundle) {
     for (const part of bundle.split(',')) {
