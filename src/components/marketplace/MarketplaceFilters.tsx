@@ -19,7 +19,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Slider } from '@/components/ui/slider';
 import { cn } from '@/lib/utils';
-import { conditionLabel, formatPrice, formatPriceCompact } from '@/lib/marketplace';
+import { conditionLabel, formatPriceCompact } from '@/lib/marketplace';
 
 export type MarketplaceSortMode = 'newest' | 'popular' | 'price_low' | 'price_high';
 export type MarketplaceDeliveryMode = 'all' | 'shipping' | 'free_shipping' | 'pickup';
@@ -694,7 +694,7 @@ export function MarketplaceQuickFilters({
 
         <button
           type="button"
-          onClick={() => onConditionChange(conditionFilter === 'new' ? 'all' : 'new')}
+          onClick={() => onConditionChange(conditionFilter === 'all' ? 'new' : 'all')}
           className={cn(
             'inline-flex h-10 shrink-0 items-center gap-1.5 rounded-full border px-3.5 text-xs font-extrabold transition',
             conditionFilter === 'new'
@@ -708,7 +708,7 @@ export function MarketplaceQuickFilters({
 
         <button
           type="button"
-          onClick={() => onDeliveryModeChange(deliveryMode === 'shipping' ? 'all' : 'shipping')}
+          onClick={() => onDeliveryModeChange(deliveryMode === 'all' ? 'shipping' : 'all')}
           className={cn(
             'inline-flex h-10 shrink-0 items-center gap-1.5 rounded-full border px-3.5 text-xs font-extrabold transition',
             deliveryMode !== 'all'
