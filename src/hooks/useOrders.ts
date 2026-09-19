@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { useCart, Product } from '@/hooks/useMarketplace';
+import { checkoutErrorCode, checkoutErrorMessage } from '@/lib/marketplace';
 import db from '@/lib/supabaseAny';
 import { flushQueuedAdConversions, trackMarketplaceCheckout } from '@/lib/adConversion';
 
@@ -338,17 +339,6 @@ export interface CheckoutResult {
   error?: string;
 }
 
-const FAILURE_MESSAGES: Record<string, string> = {
-  not_authenticated: 'Iltimos, tizimga kiring',
-  invalid_payment_method: "To'lov usuli noto'g'ri",
-  invalid_shipping_address: "Yetkazib berish manzili to'liq emas",
-  empty_cart: "Savat bo'sh",
-  invalid_quantity: "Mahsulot soni noto'g'ri",
-  product_unavailable: "Mahsulot sotuvda yo'q",
-  insufficient_stock: 'Omborda yetarli mahsulot qolmagan',
-  insufficient_balance: "Hamyonda mablag' yetarli emas. To'ldiring yoki boshqa usul tanlang.",
-};
-
 export function useCheckout() {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -382,10 +372,11 @@ export function useCheckout() {
       });
 
       if (error) {
-        const code = extractCode(error.message);
-        const friendly = FAILURE_MESSAGES[code] || error.message || 'Buyurtma amalga oshmadi';
-        toast({ title: "To'lov amalga oshmadi", description: friendly, variant: 'destructive' });
-        return { success: false, order_ids: [], payment_status: 'failed', total: 0, error: code || friendly };
+        console.error('Marketplace checkout RPC failed:', error);
+        const code = checkoutErrorCode(error.message);
+        const friendly = checkoutErrorMessage(code);
+        toast({ title: "Buyurtma amalga oshmadi", description: friendly, variant: 'destructive' });
+        return { success: false, order_ids: [], payment_status: 'failed', total: 0, error: code };
       }
 
       const payload = (data ?? {}) as {
