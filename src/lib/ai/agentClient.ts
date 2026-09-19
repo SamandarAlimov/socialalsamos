@@ -19,6 +19,7 @@ export type StreamAgentOptions = {
 
 const FUNCTIONS_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
 const PENDING_KEY = 'alsamos.ai.pending-run';
+const CLIENT_CAPABILITIES = ['clarification_v1'];
 
 class AgentUnavailableError extends Error {}
 
@@ -217,6 +218,7 @@ async function streamDurableAgent(options: StreamAgentOptions): Promise<void> {
         toolGroups: prepared.toolGroups,
         conversationId: effectiveConversationId,
         context: prepared.context,
+        clientCapabilities: CLIENT_CAPABILITIES,
       },
       prepared.signal,
       prepared.onEvent,
@@ -274,6 +276,7 @@ async function streamDirectChat(options: StreamAgentOptions): Promise<void> {
       toolGroups: prepared.toolGroups,
       conversationId: prepared.conversationId,
       context: prepared.context,
+      clientCapabilities: CLIENT_CAPABILITIES,
     },
     prepared.signal,
     prepared.onEvent,
