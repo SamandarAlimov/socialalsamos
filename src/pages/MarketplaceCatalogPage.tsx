@@ -115,7 +115,15 @@ export default function MarketplaceCatalogPage() {
   const openCatalogSearch = (term: string, category?: Category | null) => {
     const params = new URLSearchParams();
     if (category) params.set('category', category.slug);
-    params.set('q', term);
+
+    const needle = term.trim().toLocaleLowerCase();
+    const hasMatchingProduct = products.some(product => {
+      if (category && product.category_id !== category.id) return false;
+      const haystack = `${product.title} ${product.description || ''}`.toLocaleLowerCase();
+      return haystack.includes(needle);
+    });
+
+    if (hasMatchingProduct) params.set('q', term);
     navigate(`/marketplace?${params.toString()}`);
   };
 
