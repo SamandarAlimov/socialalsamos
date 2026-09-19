@@ -101,7 +101,7 @@ export default function MarketplacePage() {
   const [showDashboard, setShowDashboard] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [gridLayout, setGridLayout] = useState<'grid' | 'list'>('grid');
-  const [sortBy, setSortBy] = useState<MarketplaceSortMode>('newest');
+  const [sortBy, setSortBy] = useState<MarketplaceSortMode>('recommended');
   const [priceRange, setPriceRange] = useState<[number, number] | null>(null);
   const [conditionFilter, setConditionFilter] = useState('all');
   const [inStockOnly, setInStockOnly] = useState(false);
@@ -244,6 +244,16 @@ export default function MarketplacePage() {
     [products],
   );
 
+  useEffect(() => {
+    setPriceRange(current => {
+      if (!current) return current;
+      const nextMin = Math.min(current[0], sliderMax);
+      const nextMax = Math.min(Math.max(current[1], nextMin), sliderMax);
+      if (nextMin === current[0] && nextMax === current[1]) return current;
+      return [nextMin, nextMax];
+    });
+  }, [sliderMax]);
+
   const sortedProducts = useMemo(() => {
     const filtered = products.filter(product =>
       marketplaceProductMatchesFilters(product, {
@@ -267,8 +277,17 @@ export default function MarketplacePage() {
             (b.likes_count ?? 0) * 4 -
             ((a.views_count ?? 0) + (a.likes_count ?? 0) * 4)
           );
-        default:
+        case 'newest':
           return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+        default: {
+          const score = (product: Product) =>
+            (product.is_featured ? 1000 : 0) +
+            (product.views_count ?? 0) +
+            (product.likes_count ?? 0) * 5 +
+            Number(product.seller?.rating ?? 0) * 20 +
+            (Number(product.quantity ?? 0) > 0 ? 80 : 0);
+          return score(b) - score(a);
+        }
       }
     });
   }, [
@@ -298,7 +317,7 @@ export default function MarketplacePage() {
     setInStockOnly(false);
     setDeliveryMode('all');
     setMinDiscount(0);
-    setSortBy('newest');
+    setSortBy('recommended');
     if (selectedCategory !== 'all') handleCategorySelect('all');
   }, [handleCategorySelect, selectedCategory]);
 
