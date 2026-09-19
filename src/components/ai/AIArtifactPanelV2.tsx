@@ -9,9 +9,12 @@ import {
   FileCode2,
   FileText,
   ImageIcon,
+  LayoutTemplate,
   Loader2,
   Play,
+  Shapes,
   Video,
+  Workflow,
   X,
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
@@ -31,10 +34,22 @@ interface AIArtifactPanelProps {
   isMobile?: boolean;
 }
 
-const iconFor = (kind: AIArtifact['kind']) =>
-  kind === 'code' ? FileCode2 : kind === 'image' ? ImageIcon : kind === 'video' ? Video : FileText;
+const iconFor = (kind: AIArtifact['kind']) => {
+  if (kind === 'website') return LayoutTemplate;
+  if (kind === 'component') return Code2;
+  if (kind === 'diagram') return Workflow;
+  if (kind === 'graphic') return Shapes;
+  if (kind === 'code') return FileCode2;
+  if (kind === 'image') return ImageIcon;
+  if (kind === 'video') return Video;
+  return FileText;
+};
 
 const labelFor = (artifact: AIArtifact) => {
+  if (artifact.kind === 'website') return 'WEBSITE';
+  if (artifact.kind === 'component') return 'INTERACTIVE';
+  if (artifact.kind === 'diagram') return 'DIAGRAM';
+  if (artifact.kind === 'graphic') return 'SVG';
   if (artifact.kind === 'code') return artifact.language ? artifact.language.toUpperCase() : 'KOD';
   if (artifact.kind === 'document') return artifact.language ? artifact.language.toUpperCase() : 'HUJJAT';
   if (artifact.kind === 'image') return 'RASM';
@@ -78,12 +93,16 @@ export function AIArtifactPanel({ artifacts, activeId, onSelect, onClose, isMobi
   useEffect(() => {
     setCopied(false);
     setRun(null);
-    setPreview(false);
-  }, [active?.id]);
+    setPreview(active?.kind === 'website' || active?.kind === 'graphic');
+  }, [active?.id, active?.kind]);
 
   const language = (active?.language ?? '').toLowerCase();
-  const canRun = active?.kind === 'code' && RUNNABLE.includes(language);
-  const canPreview = active?.kind === 'code' && PREVIEWABLE.includes(language);
+  const canRun = (active?.kind === 'code' || active?.kind === 'component') && RUNNABLE.includes(language);
+  const canPreview = Boolean(active && (
+    active.kind === 'website' ||
+    active.kind === 'graphic' ||
+    PREVIEWABLE.includes(language)
+  ));
 
   const copy = async () => {
     if (!active) return;
@@ -128,7 +147,16 @@ export function AIArtifactPanel({ artifacts, activeId, onSelect, onClose, isMobi
   };
 
   const filterCounts = useMemo(() => {
-    const counts = { code: 0, document: 0, image: 0, video: 0 };
+    const counts: Record<AIArtifact['kind'], number> = {
+      website: 0,
+      component: 0,
+      diagram: 0,
+      graphic: 0,
+      code: 0,
+      document: 0,
+      image: 0,
+      video: 0,
+    };
     artifacts.forEach((artifact) => {
       counts[artifact.kind] += 1;
     });
@@ -182,10 +210,12 @@ export function AIArtifactPanel({ artifacts, activeId, onSelect, onClose, isMobi
         <div className="flex shrink-0 gap-1 overflow-x-auto border-b border-border/40 px-3 py-2">
           {([
             ['all', 'Hammasi', artifacts.length],
+            ['website', 'Website', filterCounts.website],
+            ['component', 'Interactive', filterCounts.component],
+            ['diagram', 'Diagram', filterCounts.diagram],
+            ['graphic', 'SVG', filterCounts.graphic],
             ['code', 'Kod', filterCounts.code],
             ['document', 'Hujjat', filterCounts.document],
-            ['image', 'Rasm', filterCounts.image],
-            ['video', 'Video', filterCounts.video],
           ] as const).map(([id, label, count]) => (
             <button
               key={id}
@@ -305,7 +335,7 @@ export function AIArtifactPanel({ artifacts, activeId, onSelect, onClose, isMobi
               </div>
             ) : canPreview && preview ? (
               <iframe title={active.title} sandbox="allow-scripts" srcDoc={active.content} className="h-full min-h-[520px] w-full border-0 bg-white" />
-            ) : active.kind === 'code' ? (
+            ) : active.kind === 'code' || active.kind === 'component' || active.kind === 'website' || active.kind === 'graphic' ? (
               <div className="min-h-full bg-[#0d1117] text-[#e6edf3]">
                 <div className="flex items-center justify-between border-b border-white/10 px-4 py-2 text-[10px] text-white/55">
                   <span className="font-mono">{active.language || 'text'}</span>

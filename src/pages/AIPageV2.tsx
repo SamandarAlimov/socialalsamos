@@ -1341,17 +1341,14 @@ export default function AIPageV2() {
 
   const greetingName = profile?.display_name || profile?.username || '';
   const artifacts = useMemo(() => extractArtifacts(messages), [messages]);
+  const allArtifactCount = useMemo(
+    () => conversations.reduce((total, conversation) => total + extractArtifacts(conversation.messages).length, 0),
+    [conversations],
+  );
   const showArtifacts = artifactsOpen && artifacts.length > 0;
 
   const openArtifacts = () => {
-    if (artifacts.length === 0) {
-      sonnerToast.info('Hali artefakt yo‘q', {
-        description: 'Alohida kod, hujjat, rasm yoki video yaratilganda shu yerda ko‘rinadi.',
-      });
-      return;
-    }
-    setArtifactsOpen(true);
-    if (sidebarOverlay) setSidebarOpen(false);
+    navigate('/ai/artifacts');
   };
 
   useEffect(() => {
@@ -1441,7 +1438,7 @@ export default function AIPageV2() {
                 onOpenArtifacts={openArtifacts}
                 onOpenConnectors={() => setConnectorsOpen(true)}
                 onOpenGithub={() => setGithubOpen(true)}
-                artifactCount={artifacts.length}
+                artifactCount={allArtifactCount}
                 projects={projectsAvailable ? projects : []}
                 activeProjectId={projectsAvailable ? activeProjectId : null}
                 onSelectProject={projectsAvailable ? selectProject : undefined}

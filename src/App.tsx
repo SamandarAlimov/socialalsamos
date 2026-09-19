@@ -59,6 +59,7 @@ import NotificationsPage from "./pages/NotificationsPage";
 import StoryArchivePage from "./pages/StoryArchivePage";
 import AIPage from "./pages/AIPage";
 import AIProjectsWorkspacePage from "./pages/AIProjectsWorkspacePage";
+import AIArtifactsPage from "./pages/AIArtifactsPage";
 import OAuthConsent from "./pages/OAuthConsent";
 import ActivityPage from "./pages/ActivityPage";
 import AdsPage from "./pages/AdsPage";
@@ -206,6 +207,7 @@ function AppRoutes() {
         <Route path="/admin/:section" element={<AdminConsolePage />} />
         <Route path="/story-archive" element={<StoryArchivePage />} />
         <Route path="/ai/projects" element={<AIProjectsWorkspacePage />} />
+        <Route path="/ai/artifacts" element={<AIArtifactsPage />} />
         <Route path="/ai/projects/:projectId/:chatId" element={<AIPage />} />
         <Route path="/ai/projects/:projectId" element={<AIPage />} />
         <Route path="/ai/chats/:chatId" element={<AIPage />} />
