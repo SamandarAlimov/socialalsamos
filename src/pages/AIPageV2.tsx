@@ -43,7 +43,7 @@ import { buildRepoContext, detectRepoRefs, githubReady, githubRepoUrl } from '@/
 import { buildBrainContext } from '@/lib/ai/brain';
 import { formatAIListDate } from '@/lib/ai/dateFormat';
 import { captureMemories, syncMemories } from '@/lib/ai/memory';
-import { toolLabel, type AIClarificationRequest, type AIMode, type ModelId, type ToolGroupId } from '@/lib/ai/capabilities';
+import { toolLabel, type AgentEvent, type AIClarificationRequest, type AIMode, type ModelId, type ToolGroupId } from '@/lib/ai/capabilities';
 import { buildAIWorkspaceHref, parseAIWorkspaceLocation } from '@/lib/ai/workspaceUrl';
 
 const PIN_KEY = 'alsamos.ai.pinned';
@@ -1049,7 +1049,7 @@ export default function AIPageV2() {
         };
       }
 
-      const handleEvent = (event: Parameters<typeof streamAgent>[0]['onEvent'] extends (event: infer E) => void ? E : never) => {
+      const handleEvent = (event: AgentEvent) => {
         switch (event.type) {
             case 'meta':
               usedModel = event.model;
@@ -1258,13 +1258,7 @@ export default function AIPageV2() {
       return;
     }
 
-    const continuationNote: AIMessage = {
-      ...answerMessage,
-      content: `[CLARIFICATION ANSWERS]\n${answerMessage.content}\n\nContinue the original task using these answers. Do not ask the same questions again.`,
-    };
-    const directBase = [...messages, continuationNote];
-    setMessages(directBase);
-    await runAgent(directBase);
+    await runAgent(base);
   };
 
   const regenerateFrom = async (index: number) => {
