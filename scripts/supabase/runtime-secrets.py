@@ -26,6 +26,10 @@ PLATFORM_MANAGED = {
     "DENO_DEPLOYMENT_ID",
 }
 
+DYNAMIC_SECRET_NAMES = {
+    *(f"GEMINI_API_KEY_{i}" for i in range(1, 11)),
+}
+
 PATTERNS = [
     re.compile(r"Deno\.env\.get\(\s*['\"]([A-Z][A-Z0-9_]*)['\"]\s*\)"),
     re.compile(r"process\.env\.([A-Z][A-Z0-9_]*)"),
@@ -53,6 +57,13 @@ def discover() -> dict[str, set[str]]:
                     continue
                 rel = str(path.relative_to(ROOT))
                 found.setdefault(name, set()).add(rel)
+    # geminiPool.ts reads GEMINI_API_KEY_1..10 through a template string,
+    # which the static regexes above cannot discover. Keep those slots visible
+    # in the runtime inventory so project migrations do not silently drop them.
+    source = "supabase/functions/_shared/geminiPool.ts"
+    for name in DYNAMIC_SECRET_NAMES:
+        found.setdefault(name, set()).add(source)
+
     return found
 
 
