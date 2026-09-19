@@ -95,21 +95,30 @@ async function readSse(
   const reader = body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
+
+  const consumeLine = (input: string) => {
+    let line = input;
+    if (line.endsWith('\r')) line = line.slice(0, -1);
+    if (!line.startsWith('data: ')) return;
+    const raw = line.slice(6).trim();
+    if (!raw || raw === '[DONE]') return;
+    onLine(raw);
+  };
+
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
     buffer += decoder.decode(value, { stream: true });
     let newline: number;
     while ((newline = buffer.indexOf('\n')) !== -1) {
-      let line = buffer.slice(0, newline);
+      const line = buffer.slice(0, newline);
       buffer = buffer.slice(newline + 1);
-      if (line.endsWith('\r')) line = line.slice(0, -1);
-      if (!line.startsWith('data: ')) continue;
-      const raw = line.slice(6).trim();
-      if (!raw || raw === '[DONE]') continue;
-      onLine(raw);
+      consumeLine(line);
     }
   }
+
+  buffer += decoder.decode();
+  if (buffer.trim()) consumeLine(buffer);
 }
 
 async function requestAgent(
@@ -265,8 +274,11 @@ async function streamDirectChat(options: StreamAgentOptions): Promise<void> {
     prepared.signal,
     prepared.onEvent,
   );
-  if (!state.sawText && !state.sawMedia && state.failure) {
-    prepared.onEvent({ type: 'error', message: state.failure });
+  if (!state.sawText && !state.sawMedia) {
+    prepared.onEvent({
+      type: 'error',
+      message: state.failure || 'AI stream tugadi, lekin server matn yoki media qaytarmadi. Qayta urinib ko‘ring.',
+    });
   }
 }
 
@@ -297,17 +309,24 @@ async function streamFromAssistant(options: StreamAgentOptions): Promise<void> {
     tools: [],
     mode: 'chat',
   });
+  let sawText = false;
   await readSse(response.body, (raw) => {
     try {
       const json = JSON.parse(raw) as {
         choices?: Array<{ delta?: { content?: string }; message?: { content?: string } }>;
       };
       const text = json.choices?.[0]?.delta?.content ?? json.choices?.[0]?.message?.content ?? '';
-      if (text) onEvent({ type: 'delta', text });
+      if (text) {
+        sawText = true;
+        onEvent({ type: 'delta', text });
+      }
     } catch {
       // malformed chunk; next packet may complete it
     }
   });
+  if (!sawText) {
+    onEvent({ type: 'error', message: 'AI assistant stream tugadi, lekin matn qaytmadi.' });
+  }
 }
 
 export async function streamAgent(options: StreamAgentOptions): Promise<void> {
