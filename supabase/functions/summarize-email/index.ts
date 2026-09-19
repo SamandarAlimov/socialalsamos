@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { guard, preflight, jsonResponse, guardError } from "../_shared/guard.ts";
-import { aiFetch, hasGeminiKeys, hasOpenAIKey } from "../_shared/geminiPool.ts";
+import { aiFetch, hasGeminiKeys, hasOpenAIKey, hasLovableKey } from "../_shared/geminiPool.ts";
 
 const FUNCTION_NAME = "summarize-email";
 const RATE_LIMIT = 200;
@@ -33,8 +33,8 @@ serve(async (req) => {
     const subject = String(body.subject ?? "").slice(0, 300);
     const fromName = String(body.fromName ?? "").slice(0, 200);
 
-    if (!hasGeminiKeys() && !hasOpenAIKey()) {
-      console.error("No AI credentials: set GEMINI_API_KEYS or OPENAI_API_KEY");
+    if (!hasGeminiKeys() && !hasOpenAIKey() && !hasLovableKey()) {
+      console.error("No AI credentials: set GEMINI_API_KEYS, OPENAI_API_KEY, or LOVABLE_API_KEY");
       return guardError(req, "SERVER_ERROR", "AI xizmati sozlanmagan.", 500);
     }
 
