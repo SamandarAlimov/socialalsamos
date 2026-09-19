@@ -60,7 +60,6 @@ jobs:
       GEMINI_API_KEY_8: ${{ secrets.GEMINI_API_KEY_8 }}
       GEMINI_API_KEY_9: ${{ secrets.GEMINI_API_KEY_9 }}
       GEMINI_API_KEY_10: ${{ secrets.GEMINI_API_KEY_10 }}
-      LOVABLE_API_KEY: ${{ secrets.LOVABLE_API_KEY }}
       OPENAI_FALLBACK_MODEL: ${{ secrets.OPENAI_FALLBACK_MODEL }}
       PAYME_MERCHANT_ID: ${{ secrets.PAYME_MERCHANT_ID }}
       PAYME_LOGIN: ${{ secrets.PAYME_LOGIN }}
@@ -180,7 +179,6 @@ jobs:
           sync_secret GEMINI_API_KEY_8 "${GEMINI_API_KEY_8:-}"
           sync_secret GEMINI_API_KEY_9 "${GEMINI_API_KEY_9:-}"
           sync_secret GEMINI_API_KEY_10 "${GEMINI_API_KEY_10:-}"
-          sync_secret LOVABLE_API_KEY "${LOVABLE_API_KEY:-}"
           sync_secret OPENAI_FALLBACK_MODEL "${OPENAI_FALLBACK_MODEL:-}"
           sync_secret PAYME_MERCHANT_ID "${PAYME_MERCHANT_ID:-}"
           sync_secret PAYME_LOGIN "${PAYME_LOGIN:-}"
@@ -204,23 +202,21 @@ jobs:
           remote_secrets="$(supabase secrets list --project-ref "$SUPABASE_PROJECT_REF" 2>/dev/null || true)"
           gemini_count="$(printf '%s\n' "$remote_secrets" | grep -E -c '(^|[[:space:]])GEMINI_API_KEYS([[:space:]]|$)|(^|[[:space:]])GEMINI_API_KEY(_[0-9]+)?([[:space:]]|$)' || true)"
           openai_count="$(printf '%s\n' "$remote_secrets" | grep -E -c '(^|[[:space:]])OPENAI_API_KEY([[:space:]]|$)' || true)"
-          lovable_count="$(printf '%s\n' "$remote_secrets" | grep -E -c '(^|[[:space:]])LOVABLE_API_KEY([[:space:]]|$)' || true)"
 
-          echo "Remote AI secret names: Gemini=$gemini_count OpenAI=$openai_count Lovable=$lovable_count"
+          echo "Remote AI secret names: Gemini=$gemini_count OpenAI=$openai_count"
           {
             echo '### AI provider secret check'
             echo
             echo "- Gemini secret names: $gemini_count"
             echo "- OpenAI secret names: $openai_count"
-            echo "- Lovable secret names: $lovable_count"
             echo
             echo 'Secret values are never printed.'
           } >> "$GITHUB_STEP_SUMMARY"
 
           if [ "$gemini_count" -eq 0 ]; then
-            echo "::warning::No Gemini secret name exists in the target Supabase project. Gemini routing will fall back to another provider."
+            echo "::warning::No Gemini secret name exists in the target Supabase project. Gemini routing cannot use the configured key pool."
           fi
-          if [ "$gemini_count" -eq 0 ] && [ "$openai_count" -eq 0 ] && [ "$lovable_count" -eq 0 ]; then
+          if [ "$gemini_count" -eq 0 ] && [ "$openai_count" -eq 0 ]; then
             echo "::error::No AI provider secret is configured in the target Supabase project."
             exit 1
           fi
