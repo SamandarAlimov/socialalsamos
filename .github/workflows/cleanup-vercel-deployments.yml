@@ -7,6 +7,13 @@ on:
     paths:
       - ".github/workflows/cleanup-vercel-deployments.yml"
 
+# A newly triggered cleanup cancels any older long-running cleanup. This is
+# critical because an old deletion loop must never keep deleting deployments
+# created by newer commits.
+concurrency:
+  group: cleanup-vercel-deployments
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -36,7 +43,9 @@ jobs:
           set -euo pipefail
 
           api() {
-            curl --fail-with-body --silent --show-error               -H "Authorization: Bearer ${VERCEL_TOKEN}"               "$@"
+            curl --fail-with-body --silent --show-error \
+              -H "Authorization: Bearer ${VERCEL_TOKEN}" \
+              "$@"
           }
 
           echo "Waiting for Vercel deployment for commit ${GITHUB_SHA}..."
@@ -89,20 +98,38 @@ jobs:
           echo "keep_id=$KEEP_ID" >> "$GITHUB_OUTPUT"
           echo "keep_url=$KEEP_URL" >> "$GITHUB_OUTPUT"
 
-      - name: Delete every old deployment
+      - name: Snapshot old deployments
+        id: snapshot
         shell: bash
         run: |
           set -euo pipefail
 
           keep="${{ steps.keep.outputs.keep_id }}"
+          json="$(curl --fail-with-body --silent --show-error \
+            -H "Authorization: Bearer ${VERCEL_TOKEN}" \
+            "https://api.vercel.com/v6/deployments?projectId=${VERCEL_PROJECT_ID}&teamId=${VERCEL_TEAM_ID}&limit=100")"
+
+          # Snapshot only terminal deployments that already exist now.
+          # Never delete BUILDING/QUEUED/INITIALIZING deployments, and never
+          # refresh the deletion set later. A future deployment is therefore safe.
+          printf '%s' "$json" | jq -r --arg keep "$keep" '
+            .deployments[]
+            | select(.uid != $keep)
+            | select(.state == "READY" or .state == "ERROR" or .state == "CANCELED")
+            | .uid
+          ' > /tmp/vercel-cleanup-snapshot.txt
+
+          count="$(grep -cve '^$' /tmp/vercel-cleanup-snapshot.txt || true)"
+          echo "Snapshotted old terminal deployments: $count"
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+
+      - name: Delete snapshotted old deployments
+        shell: bash
+        run: |
+          set -euo pipefail
+
           deleted=0
           rate_waits=0
-
-          api_list() {
-            curl --fail-with-body --silent --show-error \
-              -H "Authorization: Bearer ${VERCEL_TOKEN}" \
-              "https://api.vercel.com/v6/deployments?projectId=${VERCEL_PROJECT_ID}&teamId=${VERCEL_TEAM_ID}&limit=100"
-          }
 
           delete_one() {
             local id="$1"
@@ -142,37 +169,16 @@ jobs:
             done
           }
 
-          # Keep refreshing page 1. As old deployments disappear, older ones move
-          # into page 1. This avoids stale pagination and continues until only the
-          # current production deployment remains.
-          while true; do
-            json="$(api_list)"
-            mapfile -t ids < <(printf '%s' "$json" | jq -r --arg keep "$keep" '.deployments[].uid | select(. != $keep)')
+          while IFS= read -r id; do
+            [ -z "$id" ] && continue
+            delete_one "$id"
+          done < /tmp/vercel-cleanup-snapshot.txt
 
-            if [ "${#ids[@]}" -eq 0 ]; then
-              total="$(printf '%s' "$json" | jq '.deployments | length')"
-              if [ "$total" -le 1 ]; then
-                break
-              fi
-              echo "No deletable deployment found on the first page; refreshing..."
-              sleep 2
-              continue
-            fi
-
-            echo "Deleting ${#ids[@]} old deployment(s) from the current page..."
-            for id in "${ids[@]}"; do
-              delete_one "$id"
-            done
-
-            echo "Deleted so far: $deleted; rate-limit waits: $rate_waits"
-            sleep 1
-          done
-
-          echo "Cleanup deletion loop finished."
+          echo "Snapshot cleanup finished."
           echo "Deleted deployments: $deleted"
           echo "Rate-limit waits: $rate_waits"
 
-      - name: Verify cleanup
+      - name: Verify protected production still exists
         shell: bash
         run: |
           set -euo pipefail
@@ -181,19 +187,16 @@ jobs:
             -H "Authorization: Bearer ${VERCEL_TOKEN}" \
             "https://api.vercel.com/v6/deployments?projectId=${VERCEL_PROJECT_ID}&teamId=${VERCEL_TEAM_ID}&limit=100")"
 
-          count="$(printf '%s' "$json" | jq '.deployments | length')"
           keep_present="$(printf '%s' "$json" | jq -r --arg keep "${{ steps.keep.outputs.keep_id }}" 'any(.deployments[]; .uid == $keep)')"
+          count="$(printf '%s' "$json" | jq '.deployments | length')"
 
-          echo "Remaining deployments: $count"
-          echo "Current production preserved: $keep_present"
+          echo "Current visible deployments: $count"
+          echo "Protected production preserved: $keep_present"
 
           if [ "$keep_present" != "true" ]; then
             echo "::error::Expected production deployment is not present after cleanup."
             exit 1
           fi
 
-          if [ "$count" -ne 1 ]; then
-            echo "::error::Cleanup incomplete: expected exactly 1 deployment, found $count."
-            exit 1
-          fi
-
+          # Do not require count == 1. Deployments created after the snapshot are
+          # intentionally preserved and may legitimately exist now.
