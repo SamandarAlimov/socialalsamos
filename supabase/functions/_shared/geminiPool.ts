@@ -7,14 +7,14 @@
  * Yechim: 5–10 ta kalit hovuzga qo'yiladi. Har so'rov navbatdagi kalitga
  * yuboriladi (round-robin). Kalit limitga urilsa (429) yoki bloklansa (401/403),
  * u vaqtincha "sovutishga" qo'yiladi va so'rov keyingi kalit bilan qayta
- * uriniladi. Hamma kalit band bo'lsa — eski Lovable gateway'iga qaytiladi.
+ * uriniladi. Hamma kalit band bo'lsa — faqat sozlangan secondary provider ishlatiladi.
  *
  * MUHIM: kalitlar KODDA saqlanmaydi. Faqat Supabase secrets orqali o'qiladi:
  *   supabase secrets set GEMINI_API_KEYS="kalit1,kalit2,kalit3"
  * yoki alohida-alohida: GEMINI_API_KEY_1 ... GEMINI_API_KEY_10
  *
- * Google'ning OpenAI-mos endpointi ishlatiladi, shuning uchun so'rov tanasi
- * Lovable gateway'inikiga aynan bir xil — chaqiruv joyini almashtirish kifoya.
+ * Google'ning OpenAI-mos endpointi ishlatiladi, shuning uchun chat-completions
+ * formati saqlanadi va Gemini kalitlari to'g'ridan-to'g'ri Google'ga yuboriladi.
  *
  * Chat bo'lmagan endpointlar (rasm, video, operation polling) uchun
  * `googleFetch` ishlatiladi — u ham xuddi shu kalitlar navbatidan foydalanadi.
@@ -22,7 +22,6 @@
 
 const GOOGLE_HOST = 'https://' + 'generativelanguage.googleapis.com';
 const GOOGLE_OPENAI_PATH = '/v1beta/openai/chat/completions';
-const LOVABLE_GATEWAY = 'https://' + 'ai.gateway.lovable.dev' + '/v1/chat/completions';
 const OPENAI_CHAT_COMPLETIONS = 'https://api.openai.com/v1/chat/completions';
 const DEFAULT_OPENAI_FALLBACK_MODEL = 'gpt-4o-mini';
 
@@ -32,7 +31,7 @@ const COOLDOWN_MS = 60_000;
 const DEAD_COOLDOWN_MS = 15 * 60_000;
 
 /**
- * Lovable model nomlarini Google'ning haqiqiy model IDlariga moslash.
+ * Ilovadagi model nomlarini Google'ning haqiqiy model IDlariga moslash.
  * Nomlar mos kelmasa, Google 404 qaytaradi — shuning uchun aniq xarita kerak.
  */
 const MODEL_MAP: Record<string, string> = {
@@ -127,36 +126,16 @@ function markCooldown(key: string, status: number): void {
 export type AiFetchOptions = {
   /** Chat completions tanasi (OpenAI formati): model, messages, stream, tools… */
   body: Record<string, unknown>;
-  /** Zaxira yo'l uchun Lovable kaliti. Bo'lmasa fallback ishlatilmaydi. */
-  lovableKey?: string;
   signal?: AbortSignal;
 };
 
 export type AiFetchResult = {
   response: Response;
   /** Qaysi manba javob berdi — loglar va X-AI-Provider sarlavhasi uchun. */
-  provider: 'gemini' | 'openai' | 'lovable';
-  /** Nechanchi kalit ishlatildi (1 dan boshlab). Lovable uchun 0. */
+  provider: 'gemini' | 'openai';
+  /** Nechanchi Gemini kalit ishlatildi (1 dan boshlab). Secondary provider uchun 0. */
   keyIndex: number;
 };
-
-/** Zaxira yo'l: so'rovni o'zgartirmasdan Lovable gateway'ga yuborish. */
-async function lovableFetch(
-  body: Record<string, unknown>,
-  lovableKey: string,
-  signal?: AbortSignal,
-): Promise<AiFetchResult> {
-  const response = await fetch(LOVABLE_GATEWAY, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${lovableKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(body),
-    signal,
-  });
-  return { response, provider: 'lovable', keyIndex: 0 };
-}
 
 /**
  * Secondary provider fallback. The request already uses OpenAI chat-completions
@@ -184,35 +163,19 @@ async function openAIFetch(
 
 async function fallbackFetch(
   body: Record<string, unknown>,
-  lovableKey: string | undefined,
   signal?: AbortSignal,
 ): Promise<AiFetchResult | null> {
   const openai = openAIKey();
-  if (openai) {
-    try {
-      const result = await openAIFetch(body, openai, signal);
-      if (result.response.ok || !lovableKey) return result;
-      console.warn(
-        `OpenAI fallback failed with HTTP ${result.response.status}; trying Lovable gateway.`,
-      );
-    } catch (error) {
-      if (!lovableKey) throw error;
-      console.warn(
-        `OpenAI fallback network error; trying Lovable gateway: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
-  }
-
-  if (lovableKey) return lovableFetch(body, lovableKey, signal);
-  return null;
+  if (!openai) return null;
+  return openAIFetch(body, openai, signal);
 }
 
 /**
- * AI so'rovini yuboradi: avval Gemini kalitlari navbati bilan, keyin Lovable.
+ * AI so'rovini yuboradi: avval Gemini kalitlari navbati bilan, keyin sozlangan secondary provider.
  * Muvaffaqiyatli javob (yoki tuzatib bo'lmaydigan xato) qaytguncha uriniladi.
  */
 export async function aiFetch(options: AiFetchOptions): Promise<AiFetchResult> {
-  const { body, lovableKey, signal } = options;
+  const { body, signal } = options;
   const keys = available();
   const model = String(body.model ?? '');
 
@@ -267,7 +230,7 @@ export async function aiFetch(options: AiFetchOptions): Promise<AiFetchResult> {
     // (tools, tool_choice, response_format) qo'llab-quvvatlamasligi bo'ladi.
     // Shunday holatda zaxira gateway'ga o'tamiz, aks holda agentik so'rovlar
     // butunlay ishlamay qoladi.
-    const fallback = await fallbackFetch(body, lovableKey, signal);
+    const fallback = await fallbackFetch(body, signal);
     if (fallback) {
       console.warn(
         `gemini rejected the request (HTTP ${response.status}) — using secondary AI provider: ${lastDetail.slice(0, 200)}`,
@@ -279,7 +242,7 @@ export async function aiFetch(options: AiFetchOptions): Promise<AiFetchResult> {
   }
 
   // Gemini yo'q yoki barcha kalitlar ishlamadi — secondary providerlarga o'tamiz.
-  const fallback = await fallbackFetch(body, lovableKey, signal);
+  const fallback = await fallbackFetch(body, signal);
   if (fallback) {
     console.warn(
       `Gemini unavailable/exhausted (last HTTP ${lastStatus || '?'}) — using ${fallback.provider} fallback`,
@@ -289,7 +252,7 @@ export async function aiFetch(options: AiFetchOptions): Promise<AiFetchResult> {
 
   throw new Error(
     `AI provider credentials unavailable (Gemini last HTTP ${lastStatus || '?'}). ` +
-      'GEMINI_API_KEYS, OPENAI_API_KEY yoki LOVABLE_API_KEY ni sozlang.',
+      'GEMINI_API_KEYS yoki OPENAI_API_KEY ni sozlang.',
   );
 }
 
