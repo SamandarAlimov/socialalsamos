@@ -72,16 +72,15 @@ serve(async (req) => {
     }
     const editImage = imageCheck.value;
 
-    // Asosiy yo'l — Gemini kalitlari hovuzi. Lovable faqat zaxira, majburiy emas.
-    const lovableKey = Deno.env.get("LOVABLE_API_KEY") ?? undefined;
-    if (!hasGeminiKeys() && !lovableKey) {
-      console.error("No AI credentials: set GEMINI_API_KEYS or LOVABLE_API_KEY");
+    // Barcha rasm generatsiyasi Gemini kalitlari hovuzi orqali ketadi.
+    if (!hasGeminiKeys()) {
+      console.error("No AI credentials: set GEMINI_API_KEYS");
       return guardError(req, "SERVER_ERROR", "AI xizmati sozlanmagan.", 500);
     }
 
     let image;
     try {
-      image = await generateImageBytes({ prompt, imageUrl: editImage, lovableKey });
+      image = await generateImageBytes({ prompt, imageUrl: editImage });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       console.error("Image generation failed:", message);
