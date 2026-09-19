@@ -23,6 +23,7 @@ interface MarketplaceSectionHeaderProps {
   onSearchValueChange: (value: string) => void;
   onSearchSubmit?: (event: FormEvent<HTMLFormElement>) => void;
   onFilterClick?: () => void;
+  hideFilter?: boolean;
   filterCount?: number;
   itemCount?: number;
   catalogLabel?: string;
@@ -44,6 +45,7 @@ export function MarketplaceSectionHeader({
   onSearchValueChange,
   onSearchSubmit,
   onFilterClick,
+  hideFilter = false,
   filterCount = 0,
   itemCount = 0,
   catalogLabel = 'Katalog',
@@ -116,24 +118,26 @@ export function MarketplaceSectionHeader({
             <span className="hidden max-w-28 truncate text-xs font-semibold xl:inline">{catalogLabel}</span>
           </Button>
 
-          <Button
-            variant="outline"
-            size="icon"
-            className={cn(
-              'relative h-11 w-11 shrink-0 rounded-2xl',
-              !onFilterClick && 'hidden md:inline-flex',
-              filterCount > 0 && 'border-foreground/30 bg-foreground text-background',
-            )}
-            onClick={handleFilterClick}
-            aria-label="Filtrlar"
-          >
-            <SlidersHorizontal className="h-4 w-4" />
-            {filterCount > 0 && (
-              <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-[9px] font-bold text-destructive-foreground">
-                {filterCount > 99 ? '99+' : filterCount}
-              </span>
-            )}
-          </Button>
+          {!hideFilter && (
+            <Button
+              variant="outline"
+              size="icon"
+              className={cn(
+                'relative h-11 w-11 shrink-0 rounded-2xl',
+                !onFilterClick && 'hidden md:inline-flex',
+                filterCount > 0 && 'border-foreground/30 bg-foreground text-background',
+              )}
+              onClick={handleFilterClick}
+              aria-label="Filtrlar"
+            >
+              <SlidersHorizontal className="h-4 w-4" />
+              {filterCount > 0 && (
+                <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-[9px] font-bold text-destructive-foreground">
+                  {filterCount > 99 ? '99+' : filterCount}
+                </span>
+              )}
+            </Button>
+          )}
 
           <Button
             variant="outline"
