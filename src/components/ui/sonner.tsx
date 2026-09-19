@@ -1,5 +1,7 @@
 import { useTheme } from "next-themes";
 import { Toaster as Sonner, toast } from "sonner";
+import { UI_LAYER } from "@/lib/uiLayers";
+import { cn } from "@/lib/utils";
 
 type ToasterProps = React.ComponentProps<typeof Sonner>;
 
@@ -9,7 +11,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
   return (
     <Sonner
       theme={theme as ToasterProps["theme"]}
-      className="toaster group"
+      className={cn("toaster group", UI_LAYER.toast)}
       toastOptions={{
         classNames: {
           toast:
