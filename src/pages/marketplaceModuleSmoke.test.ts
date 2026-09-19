@@ -8,6 +8,11 @@ describe('Marketplace route modules', () => {
     expect(module.default).toBeTypeOf('function');
   });
 
+  it('loads the Marketplace deals module without a module-initialization crash', async () => {
+    const module = await import('./MarketplaceDealsPage');
+    expect(module.default).toBeTypeOf('function');
+  });
+
   it('loads the product detail module without a module-initialization crash', async () => {
     const module = await import('./MarketplaceProductPage');
     expect(module.default).toBeTypeOf('function');
