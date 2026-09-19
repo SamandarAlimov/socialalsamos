@@ -185,7 +185,8 @@ export function categoryMatchesCatalogQuery(category: Category, query: string): 
 
   if (
     category.name.toLocaleLowerCase().includes(needle) ||
-    category.slug.toLocaleLowerCase().includes(needle)
+    category.slug.toLocaleLowerCase().includes(needle) ||
+    catalogCategoryLabel(category).toLocaleLowerCase().includes(needle)
   ) {
     return true;
   }
