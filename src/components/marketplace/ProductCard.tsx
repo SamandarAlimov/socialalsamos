@@ -38,7 +38,7 @@ interface ProductCardProps {
   product: Product;
   onSelect?: (product: Product) => void;
   onLikeChange?: () => void;
-  onAddToCart?: (product: Product) => boolean | Promise<boolean>;
+  onAddToCart?: (productId: string) => boolean | Promise<boolean>;
   layout?: 'grid' | 'list';
 }
 
@@ -195,7 +195,7 @@ export function ProductCard({
     triggerHaptic('medium');
     setIsAddingToCart(true);
     try {
-      const success = await onAddToCart(product);
+      const success = await onAddToCart(product.id);
       if (!success) return;
 
       setJustAdded(true);
