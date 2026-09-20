@@ -62,6 +62,7 @@ import { Drawer, DrawerContent, DrawerTitle } from '@/components/ui/drawer';
 import { cn } from '@/lib/utils';
 import { conditionLabel, formatPrice } from '@/lib/marketplace';
 import { marketplaceUz } from '@/i18n/marketplace';
+import { useMarketplaceActivity } from '@/hooks/useMarketplaceActivity';
 import '@/styles/marketplace-premium.css';
 
 const SEARCH_DEBOUNCE_MS = 300;
@@ -214,6 +215,24 @@ export default function MarketplacePage() {
     refresh: refreshSaved,
   } = useSavedProducts();
   const { itemCount, addToCart } = useCart();
+  const {
+    buyerUnreadCount,
+    sellerUnreadCount,
+    markBuyerRead,
+    markSellerRead,
+  } = useMarketplaceActivity();
+
+  useEffect(() => {
+    if (activeTab === 'orders' && buyerUnreadCount > 0) {
+      void markBuyerRead();
+    }
+  }, [activeTab, buyerUnreadCount, markBuyerRead]);
+
+  useEffect(() => {
+    if (activeTab === 'selling' && sellingView === 'orders' && sellerUnreadCount > 0) {
+      void markSellerRead();
+    }
+  }, [activeTab, markSellerRead, sellerUnreadCount, sellingView]);
 
   const handleRefresh = useCallback(async () => {
     if (activeTab === 'browse') await refreshProducts();
@@ -383,16 +402,16 @@ export default function MarketplacePage() {
     return categories.find(category => category.slug === selectedCategory)?.name || 'Katalog';
   }, [categories, selectedCategory]);
 
-  const desktopTabs: Array<{ id: MarketplaceTab; label: string; icon: typeof Store }> = [
+  const desktopTabs: Array<{ id: MarketplaceTab; label: string; icon: typeof Store; badge?: number; badgeTone?: 'buyer' | 'seller' }> = [
     { id: 'browse', label: 'Bozor', icon: Store },
-    { id: 'orders', label: 'Buyurtmalar', icon: ClipboardList },
+    { id: 'orders', label: 'Buyurtmalar', icon: ClipboardList, badge: buyerUnreadCount, badgeTone: 'buyer' },
     { id: 'saved', label: 'Saqlangan', icon: Heart },
-    { id: 'selling', label: 'Sotuvchi markazi', icon: Package },
+    { id: 'selling', label: 'Sotuvchi markazi', icon: Package, badge: sellerUnreadCount, badgeTone: 'seller' },
   ];
 
   const sellerViews = [
-    { id: 'products' as const, label: seller?.business_type === 'restaurant' ? 'Menyu' : 'Mahsulotlar', icon: Package },
-    { id: 'orders' as const, label: 'Buyurtmalar', icon: ClipboardList },
+    { id: 'products' as const, label: seller?.business_type === 'restaurant' ? 'Menyu' : 'Mahsulotlar', icon: Package, badge: 0 },
+    { id: 'orders' as const, label: 'Buyurtmalar', icon: ClipboardList, badge: sellerUnreadCount },
   ];
 
   const exitMarketplace = useCallback(() => {
@@ -916,6 +935,16 @@ export default function MarketplacePage() {
                   >
                     <Icon className="h-3.5 w-3.5 shrink-0" />
                     <span className="truncate">{tab.label}</span>
+                    {(tab.badge ?? 0) > 0 && (
+                      <span
+                        className={cn(
+                          'ml-0.5 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[9px] font-black text-white',
+                          tab.badgeTone === 'seller' ? 'bg-orange-500' : 'bg-sky-500',
+                        )}
+                      >
+                        {(tab.badge ?? 0) > 99 ? '99+' : tab.badge}
+                      </span>
+                    )}
                   </button>
                 );
               })}
@@ -1031,6 +1060,11 @@ export default function MarketplacePage() {
                         >
                           <Icon className="h-4 w-4" />
                           {view.label}
+                          {view.badge > 0 && (
+                            <span className="ml-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-orange-500 px-1.5 text-[9px] font-black text-white">
+                              {view.badge > 99 ? '99+' : view.badge}
+                            </span>
+                          )}
                         </button>
                       );
                     })}
