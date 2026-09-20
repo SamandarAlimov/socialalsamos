@@ -974,71 +974,313 @@ export default function AdminTrustSafetyPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={Boolean(caseTarget)} onOpenChange={(open) => !open && setCaseTarget(null)}>
-        <DialogContent className="max-w-2xl">
+      <Dialog
+        open={Boolean(enforcementTarget)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setEnforcementTarget(null);
+            setEnforcementNote('');
+          }
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>
+              {enforcementMode === 'execute'
+                ? 'Enforcementni ijro etish'
+                : enforcementMode === 'approve'
+                  ? 'Independent approval'
+                  : 'Enforcementni rad etish'}
+            </DialogTitle>
+            <DialogDescription>
+              {enforcementTarget
+                ? actionLabel(enforcementTarget.action_type) + ' · ' + enforcementTarget.target_type
+                : 'Enforcement action'}
+            </DialogDescription>
+          </DialogHeader>
+
+          {enforcementTarget && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="rounded-xl border p-3">
+                  <p className="text-muted-foreground">Status</p>
+                  <div className="mt-2">{enforcementStatusBadge(enforcementTarget.status)}</div>
+                </div>
+                <div className="rounded-xl border p-3">
+                  <p className="text-muted-foreground">Approval</p>
+                  <p className="mt-2 font-semibold">
+                    {Number(enforcementTarget.approved_count || 0)} / {enforcementTarget.required_approvals}
+                  </p>
+                </div>
+              </div>
+
+              {enforcementMode === 'approve' && (
+                <div className="flex gap-3 rounded-xl border border-blue-500/30 bg-blue-500/5 p-3 text-sm">
+                  <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-blue-600" />
+                  <p>
+                    Siz action yaratuvchisidan mustaqil reviewer sifatida policy, evidence va targetni tekshirganingizni tasdiqlaysiz.
+                  </p>
+                </div>
+              )}
+
+              {enforcementMode === 'execute' && (
+                <div className="flex gap-3 rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
+                  <PlayCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                  <p>
+                    Bu bosqich real canonical state’ni o‘zgartiradi. Remove content soft-hide/delete qiladi; suspend va disable account control gate orqali darhol bloklaydi.
+                  </p>
+                </div>
+              )}
+
+              <div>
+                <Label>
+                  {enforcementMode === 'execute' ? 'Execution reason' : 'Reviewer note'}
+                </Label>
+                <Textarea
+                  className="mt-2"
+                  rows={4}
+                  value={enforcementNote}
+                  onChange={(event) => setEnforcementNote(event.target.value)}
+                  placeholder={
+                    enforcementMode === 'execute'
+                      ? 'Nega aynan hozir bu action ijro qilinmoqda?'
+                      : 'Evidence va policy asosidagi qisqa izoh.'
+                  }
+                />
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEnforcementTarget(null)}>
+              Bekor qilish
+            </Button>
+            <Button
+              variant={enforcementMode === 'reject' ? 'destructive' : 'default'}
+              disabled={busy || enforcementNote.trim().length < 3}
+              onClick={() => void submitEnforcementAction()}
+            >
+              {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {enforcementMode === 'execute'
+                ? 'Execute'
+                : enforcementMode === 'approve'
+                  ? 'Approve'
+                  : 'Reject'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(caseTarget)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setCaseTarget(null);
+            setCaseDetail(null);
+          }
+        }}
+      >
+        <DialogContent className="max-h-[92vh] max-w-5xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Case #{caseTarget?.case_number}</DialogTitle>
             <DialogDescription>
-              Assignment, severity, SLA holati va policy metadata audit bilan saqlanadi.
+              Investigation metadata, evidence, decisions va enforcement timeline bitta audited workspace’da.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
-            <div className="grid gap-3 sm:grid-cols-3">
+
+          <div className="grid gap-5 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+            <div className="space-y-4">
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div>
+                  <Label>Status</Label>
+                  <Select value={caseForm.status} onValueChange={(value) => setCaseForm((current) => ({ ...current, status: value }))}>
+                    <SelectTrigger className="mt-2"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="open">Open</SelectItem>
+                      <SelectItem value="investigating">Investigating</SelectItem>
+                      <SelectItem value="pending_action">Pending action</SelectItem>
+                      <SelectItem value="resolved">Resolved</SelectItem>
+                      <SelectItem value="dismissed">Dismissed</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Priority</Label>
+                  <Select value={caseForm.priority} onValueChange={(value) => setCaseForm((current) => ({ ...current, priority: value as TrustSafetyPriority }))}>
+                    <SelectTrigger className="mt-2"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="low">Low</SelectItem>
+                      <SelectItem value="normal">Normal</SelectItem>
+                      <SelectItem value="high">High</SelectItem>
+                      <SelectItem value="critical">Critical</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Severity</Label>
+                  <Select value={caseForm.severity} onValueChange={(value) => setCaseForm((current) => ({ ...current, severity: value as TrustSafetySeverity }))}>
+                    <SelectTrigger className="mt-2"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="low">Low</SelectItem>
+                      <SelectItem value="medium">Medium</SelectItem>
+                      <SelectItem value="high">High</SelectItem>
+                      <SelectItem value="critical">Critical</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
               <div>
-                <Label>Status</Label>
-                <Select value={caseForm.status} onValueChange={(value) => setCaseForm((current) => ({ ...current, status: value }))}>
-                  <SelectTrigger className="mt-2"><SelectValue /></SelectTrigger>
+                <Label>Policy</Label>
+                <Select
+                  value={caseForm.policyCode || 'none'}
+                  onValueChange={(value) =>
+                    setCaseForm((current) => ({ ...current, policyCode: value === 'none' ? '' : value }))
+                  }
+                >
+                  <SelectTrigger className="mt-2"><SelectValue placeholder="Policy tanlang" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="open">Open</SelectItem>
-                    <SelectItem value="investigating">Investigating</SelectItem>
-                    <SelectItem value="pending_action">Pending action</SelectItem>
-                    <SelectItem value="resolved">Resolved</SelectItem>
-                    <SelectItem value="dismissed">Dismissed</SelectItem>
+                    <SelectItem value="none">Policy biriktirilmagan</SelectItem>
+                    {enforcementSnapshot.policies
+                      .filter((policy) => !caseTarget || policy.allowed_target_types.includes(caseTarget.subject_type))
+                      .map((policy) => (
+                        <SelectItem key={policy.code} value={policy.code}>
+                          {policy.code} · {policy.title}
+                        </SelectItem>
+                      ))}
                   </SelectContent>
                 </Select>
               </div>
+
               <div>
-                <Label>Priority</Label>
-                <Select value={caseForm.priority} onValueChange={(value) => setCaseForm((current) => ({ ...current, priority: value as TrustSafetyPriority }))}>
-                  <SelectTrigger className="mt-2"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="low">Low</SelectItem>
-                    <SelectItem value="normal">Normal</SelectItem>
-                    <SelectItem value="high">High</SelectItem>
-                    <SelectItem value="critical">Critical</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Label>Case summary</Label>
+                <Textarea
+                  className="mt-2"
+                  rows={5}
+                  value={caseForm.summary}
+                  onChange={(event) => setCaseForm((current) => ({ ...current, summary: event.target.value }))}
+                />
               </div>
-              <div>
-                <Label>Severity</Label>
-                <Select value={caseForm.severity} onValueChange={(value) => setCaseForm((current) => ({ ...current, severity: value as TrustSafetySeverity }))}>
-                  <SelectTrigger className="mt-2"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="low">Low</SelectItem>
-                    <SelectItem value="medium">Medium</SelectItem>
-                    <SelectItem value="high">High</SelectItem>
-                    <SelectItem value="critical">Critical</SelectItem>
-                  </SelectContent>
-                </Select>
+
+              <div className="flex flex-wrap gap-2">
+                <Button disabled={busy} onClick={() => void saveCase()}>
+                  {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Saqlash
+                </Button>
+                <Button variant="outline" onClick={() => setDecisionOpen(true)}>
+                  <Gavel className="mr-2 h-4 w-4" />
+                  Qaror chiqarish
+                </Button>
               </div>
             </div>
-            <div>
-              <Label>Policy code</Label>
-              <Input className="mt-2 font-mono" value={caseForm.policyCode} onChange={(event) => setCaseForm((current) => ({ ...current, policyCode: event.target.value }))} placeholder="ABUSE.HARASSMENT.01" />
-            </div>
-            <div>
-              <Label>Case summary</Label>
-              <Textarea className="mt-2" rows={4} value={caseForm.summary} onChange={(event) => setCaseForm((current) => ({ ...current, summary: event.target.value }))} />
+
+            <div className="space-y-4 rounded-2xl border bg-muted/[0.12] p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="font-semibold">Evidence & action timeline</p>
+                  <p className="text-xs text-muted-foreground">
+                    Snapshotlar operatorlar uchun read-only ko‘rinishda.
+                  </p>
+                </div>
+                <History className="h-4 w-4 text-muted-foreground" />
+              </div>
+
+              {caseDetailLoading ? (
+                <div className="flex min-h-56 items-center justify-center">
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                </div>
+              ) : caseDetail ? (
+                <div className="space-y-4">
+                  <div>
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      Evidence · {caseDetail.evidence.length}
+                    </p>
+                    <div className="space-y-2">
+                      {caseDetail.evidence.map((evidence) => (
+                        <details key={evidence.id} className="group rounded-xl border bg-background">
+                          <summary className="cursor-pointer list-none p-3">
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="min-w-0">
+                                <p className="text-sm font-semibold">{actionLabel(evidence.evidence_type)}</p>
+                                <p className="mt-1 truncate text-[11px] text-muted-foreground">
+                                  {evidence.object_type}:{evidence.object_id} · {dt(evidence.captured_at)}
+                                </p>
+                              </div>
+                              <Eye className="h-4 w-4 shrink-0 text-muted-foreground" />
+                            </div>
+                          </summary>
+                          <pre className="max-h-72 overflow-auto border-t p-3 text-[10px] leading-5 text-muted-foreground">
+                            {JSON.stringify(evidence.snapshot_json || {}, null, 2)}
+                          </pre>
+                        </details>
+                      ))}
+                      {caseDetail.evidence.length === 0 && (
+                        <p className="rounded-xl border bg-background p-3 text-xs text-muted-foreground">
+                          Evidence snapshot hali yo‘q.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      Decisions · {caseDetail.decisions.length}
+                    </p>
+                    <div className="space-y-2">
+                      {caseDetail.decisions.map((decision) => (
+                        <div key={decision.id} className="rounded-xl border bg-background p-3">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Badge variant="outline">{actionLabel(decision.decision)}</Badge>
+                            {decision.policy_code && <code className="text-[10px]">{decision.policy_code}</code>}
+                          </div>
+                          <p className="mt-2 text-sm">{decision.rationale}</p>
+                          <p className="mt-2 text-[11px] text-muted-foreground">
+                            @{decision.decided_username || 'admin'} · {dt(decision.created_at)}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      Enforcement · {caseDetail.enforcement.length}
+                    </p>
+                    <div className="space-y-2">
+                      {caseDetail.enforcement.map((action) => (
+                        <div key={action.id} className="rounded-xl border bg-background p-3">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="text-sm font-semibold">{actionLabel(action.action_type)}</p>
+                            {enforcementStatusBadge(action.status)}
+                          </div>
+                          <p className="mt-2 text-[11px] text-muted-foreground">
+                            approval {action.approvals?.filter((item) => item.decision === 'approved').length || 0}
+                            {' / '}{action.required_approvals} · created @{action.created_username || 'admin'}
+                          </p>
+                          {Boolean(action.approvals?.length) && (
+                            <div className="mt-2 space-y-1 border-l pl-3">
+                              {action.approvals?.map((approval) => (
+                                <p key={approval.id} className="text-[11px] text-muted-foreground">
+                                  {approval.decision} · @{approval.approver_username || 'admin'} · {approval.note}
+                                </p>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <p className="rounded-xl border bg-background p-4 text-sm text-muted-foreground">
+                  Timeline yuklanmagan.
+                </p>
+              )}
             </div>
           </div>
-          <DialogFooter className="flex-col gap-2 sm:flex-row">
-            <Button variant="outline" onClick={() => setCaseTarget(null)}>Bekor qilish</Button>
-            <Button variant="outline" onClick={() => setDecisionOpen(true)}>
-              <Gavel className="mr-2 h-4 w-4" />Qaror chiqarish
-            </Button>
-            <Button disabled={busy} onClick={() => void saveCase()}>
-              {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Saqlash
-            </Button>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCaseTarget(null)}>Yopish</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1048,7 +1290,7 @@ export default function AdminTrustSafetyPage() {
           <DialogHeader>
             <DialogTitle>Moderation qarori</DialogTitle>
             <DialogDescription>
-              Enforcement action hozir pending_execution sifatida ledgerga yoziladi; execution alohida boshqariladi.
+              Destructive action avval independent approval queue’ga tushadi. Threshold bajarilgachgina real executor ochiladi.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
@@ -1065,8 +1307,28 @@ export default function AdminTrustSafetyPage() {
               </Select>
             </div>
             <div>
-              <Label>Policy code</Label>
-              <Input className="mt-2 font-mono" value={decisionForm.policyCode} onChange={(event) => setDecisionForm((current) => ({ ...current, policyCode: event.target.value }))} />
+              <Label>Policy</Label>
+              <Select
+                value={decisionForm.policyCode || 'none'}
+                onValueChange={(value) =>
+                  setDecisionForm((current) => ({
+                    ...current,
+                    policyCode: value === 'none' ? '' : value,
+                  }))
+                }
+              >
+                <SelectTrigger className="mt-2"><SelectValue placeholder="Policy tanlang" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Policy tanlanmagan</SelectItem>
+                  {enforcementSnapshot.policies
+                    .filter((policy) => !caseTarget || policy.allowed_target_types.includes(caseTarget.subject_type))
+                    .map((policy) => (
+                      <SelectItem key={policy.code} value={policy.code}>
+                        {policy.code} · {policy.title}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
             </div>
             <div>
               <Label>Rationale</Label>
@@ -1082,11 +1344,8 @@ export default function AdminTrustSafetyPage() {
                       <SelectItem value="none">No action</SelectItem>
                       <SelectItem value="warning">Warning</SelectItem>
                       <SelectItem value="remove_content">Remove content</SelectItem>
-                      <SelectItem value="feature_limit">Feature limit</SelectItem>
                       <SelectItem value="temporary_suspend">Temporary suspend</SelectItem>
                       <SelectItem value="permanent_disable">Permanent disable</SelectItem>
-                      <SelectItem value="demonetize">Demonetize</SelectItem>
-                      <SelectItem value="age_restrict">Age restrict</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -1098,7 +1357,7 @@ export default function AdminTrustSafetyPage() {
             )}
             <div className="flex gap-3 rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
               <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-              <p>Permanent disable va boshqa yuqori risk actionlar execution bosqichida qo‘shimcha approval talab qilishi kerak.</p>
+              <p>Remove content, temporary suspend va permanent disable kamida bitta mustaqil approval talab qiladi. Permanent disable approvali super admin bilan cheklangan.</p>
             </div>
           </div>
           <DialogFooter>
