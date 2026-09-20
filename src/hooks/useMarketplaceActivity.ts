@@ -173,6 +173,15 @@ export function useMarketplaceActivity(options: MarketplaceActivityOptions = {})
     [notifications, refresh, user],
   );
 
+  const markBuyerRead = useCallback(
+    () => markRoleRead('buyer'),
+    [markRoleRead],
+  );
+  const markSellerRead = useCallback(
+    () => markRoleRead('seller'),
+    [markRoleRead],
+  );
+
   return {
     buyerUnreadCount: buyerNotifications.length,
     sellerUnreadCount: sellerNotifications.length,
@@ -181,7 +190,7 @@ export function useMarketplaceActivity(options: MarketplaceActivityOptions = {})
     sellerNotifications,
     loading,
     refresh,
-    markBuyerRead: () => markRoleRead('buyer'),
-    markSellerRead: () => markRoleRead('seller'),
+    markBuyerRead,
+    markSellerRead,
   };
 }
