@@ -139,6 +139,11 @@ export function OrdersView({ onProductSelect }: OrdersViewProps) {
                   {order.payment_status === 'pending' && <Badge variant="outline" className="border-amber-500/20 bg-amber-500/10 text-[10px] text-amber-600">Yetkazganda</Badge>}
                   {order.payment_status === 'failed' && <Badge variant="outline" className="border-destructive/20 bg-destructive/10 text-[10px] text-destructive">Muvaffaqiyatsiz</Badge>}
                   {order.payment_status === 'refunded' && <Badge variant="outline" className="border-sky-500/20 bg-sky-500/10 text-[10px] text-sky-600">Qaytarildi</Badge>}
+                  {(order.discount_amount ?? 0) > 0 && (
+                    <Badge variant="outline" className="border-emerald-500/20 bg-emerald-500/10 text-[10px] text-emerald-600">
+                      Promo {order.promo_code ? `· ${order.promo_code}` : ''}
+                    </Badge>
+                  )}
                 </div>
                 <span className="shrink-0 text-xs text-muted-foreground">{formatDistanceToNow(new Date(order.created_at))} oldin</span>
               </div>
@@ -318,6 +323,12 @@ function OrderDetailSheet({
             <div className="space-y-2 rounded-xl border border-border/20 bg-muted/20 p-3">
               <div className="flex justify-between text-sm"><span className="text-muted-foreground">{marketplaceUz.orders.products}</span><span className="tabular-nums">{formatPrice(order.subtotal, order.currency)}</span></div>
               <div className="flex justify-between text-sm"><span className="text-muted-foreground">{marketplaceUz.orders.delivery}</span><span className="tabular-nums">{order.shipping_cost > 0 ? formatPrice(order.shipping_cost, order.currency) : 'Bepul'}</span></div>
+              {(order.discount_amount ?? 0) > 0 && (
+                <div className="flex justify-between text-sm font-semibold text-emerald-600">
+                  <span>Promokod{order.promo_code ? ` · ${order.promo_code}` : ''}</span>
+                  <span className="tabular-nums">− {formatPrice(order.discount_amount ?? 0, order.currency)}</span>
+                </div>
+              )}
               <div className="h-px bg-border/30" />
               <div className="flex justify-between font-bold"><span>{marketplaceUz.orders.total}</span><span className="tabular-nums text-foreground">{formatPrice(order.total, order.currency)}</span></div>
             </div>
