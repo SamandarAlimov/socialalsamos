@@ -175,25 +175,81 @@ function MetricCard({
   value,
   detail,
   icon: Icon,
+  onOpen,
+  onRefresh,
 }: {
   label: string;
   value: number | string;
   detail?: string;
   icon: typeof Users;
+  onOpen: () => void;
+  onRefresh?: () => void | Promise<void>;
 }) {
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      onOpen();
+    }
+  };
+
   return (
-    <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onOpen}
+      onKeyDown={handleKeyDown}
+      className="group relative cursor-pointer rounded-2xl border border-border bg-card p-4 text-left shadow-sm outline-none transition-all hover:-translate-y-0.5 hover:border-foreground/15 hover:shadow-md focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+      aria-label={label + ' bo‘limini ochish'}
+    >
       <div className="mb-4 flex items-start justify-between gap-3">
-        <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-border bg-muted/40">
+        <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-border bg-muted/40 transition-colors group-hover:bg-muted/70">
           <Icon className="h-4 w-4 text-foreground" />
         </div>
-        <MoreHorizontal className="h-4 w-4 text-muted-foreground/70" />
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 rounded-lg text-muted-foreground"
+              onClick={(event) => event.stopPropagation()}
+              aria-label={label + ' — qo‘shimcha amallar'}
+            >
+              <MoreHorizontal className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align="end"
+            className="w-48"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <DropdownMenuLabel>{label}</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onSelect={onOpen}>
+              <ArrowUpRight className="mr-2 h-4 w-4" />
+              Batafsil ochish
+            </DropdownMenuItem>
+            {onRefresh && (
+              <DropdownMenuItem
+                onSelect={() => {
+                  void onRefresh();
+                }}
+              >
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Ma’lumotni yangilash
+              </DropdownMenuItem>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
       <p className="text-2xl font-semibold tracking-tight tabular-nums">
         {typeof value === 'number' ? value.toLocaleString() : value}
       </p>
       <p className="mt-1 text-sm font-medium text-foreground">{label}</p>
       {detail && <p className="mt-1 text-xs text-muted-foreground">{detail}</p>}
+      <div className="pointer-events-none absolute bottom-3 right-3 opacity-0 transition-opacity group-hover:opacity-100">
+        <ChevronRight className="h-4 w-4 text-muted-foreground" />
+      </div>
     </div>
   );
 }
@@ -508,12 +564,54 @@ export default function AdminConsolePage() {
   const renderOverview = () => (
     <div className="space-y-6">
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-3 2xl:grid-cols-6">
-        <MetricCard label="Jami foydalanuvchi" value={stats.total_users} detail={`+${stats.new_users_24h} oxirgi 24 soatda`} icon={Users} />
-        <MetricCard label="Hozir onlayn" value={stats.online_users} detail="Real-time presence" icon={Activity} />
-        <MetricCard label="Verifikatsiya navbati" value={pendingRequests.length} detail="Ko‘rib chiqilishi kerak" icon={BadgeCheck} />
-        <MetricCard label="24 soatdagi postlar" value={stats.posts_24h} detail={`${stats.total_posts.toLocaleString()} jami`} icon={FileText} />
-        <MetricCard label="24 soatdagi xabarlar" value={stats.messages_24h} detail={`${stats.total_messages.toLocaleString()} jami`} icon={MessageSquare} />
-        <MetricCard label="Adminlar" value={admins.length} detail="Faol rollar" icon={ShieldCheck} />
+        <MetricCard
+          label="Jami foydalanuvchi"
+          value={stats.total_users}
+          detail={`+${stats.new_users_24h} oxirgi 24 soatda`}
+          icon={Users}
+          onOpen={() => navigate('/admin/users')}
+          onRefresh={refreshCurrent}
+        />
+        <MetricCard
+          label="Hozir onlayn"
+          value={stats.online_users}
+          detail="Real-time presence"
+          icon={Activity}
+          onOpen={() => navigate('/admin/analytics')}
+          onRefresh={refreshCurrent}
+        />
+        <MetricCard
+          label="Verifikatsiya navbati"
+          value={pendingRequests.length}
+          detail="Ko‘rib chiqilishi kerak"
+          icon={BadgeCheck}
+          onOpen={() => navigate('/admin/verification')}
+          onRefresh={refreshCurrent}
+        />
+        <MetricCard
+          label="24 soatdagi postlar"
+          value={stats.posts_24h}
+          detail={`${stats.total_posts.toLocaleString()} jami`}
+          icon={FileText}
+          onOpen={() => navigate('/admin/content')}
+          onRefresh={refreshCurrent}
+        />
+        <MetricCard
+          label="24 soatdagi xabarlar"
+          value={stats.messages_24h}
+          detail={`${stats.total_messages.toLocaleString()} jami`}
+          icon={MessageSquare}
+          onOpen={() => navigate('/admin/analytics')}
+          onRefresh={refreshCurrent}
+        />
+        <MetricCard
+          label="Adminlar"
+          value={admins.length}
+          detail="Faol rollar"
+          icon={ShieldCheck}
+          onOpen={() => navigate('/admin/access')}
+          onRefresh={refreshCurrent}
+        />
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[1.25fr_0.75fr]">
