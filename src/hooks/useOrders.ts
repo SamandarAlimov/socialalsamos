@@ -386,6 +386,10 @@ export interface CheckoutResult {
   order_ids: string[];
   payment_status: 'paid' | 'pending' | 'failed';
   total: number;
+  subtotal?: number;
+  shipping_total?: number;
+  discount_amount?: number;
+  promo_code?: string | null;
   error?: string;
 }
 
@@ -408,6 +412,7 @@ export function useCheckout() {
     shippingAddress: any,
     paymentMethod: CheckoutPaymentMethod,
     notes?: string,
+    promoCode?: string,
   ): Promise<CheckoutResult> => {
     if (!user || cartItems.length === 0) {
       return { success: false, order_ids: [], payment_status: 'failed', total: 0, error: 'empty_cart' };
@@ -415,10 +420,11 @@ export function useCheckout() {
 
     setIsProcessing(true);
     try {
-      const { data, error } = await supabase.rpc('process_marketplace_order', {
+      const { data, error } = await db.rpc('process_marketplace_order_v2', {
         _shipping_address: shippingAddress,
         _payment_method: paymentMethod,
         _notes: notes ?? null,
+        _promo_code: promoCode?.trim() || null,
       });
 
       if (error) {
@@ -434,6 +440,10 @@ export function useCheckout() {
         order_ids?: string[];
         payment_status?: 'paid' | 'pending';
         total?: number;
+        subtotal?: number;
+        shipping_total?: number;
+        discount_amount?: number;
+        promo_code?: string | null;
       };
 
       await refreshCart();
@@ -453,6 +463,8 @@ export function useCheckout() {
             payment_method: paymentMethod,
             payment_status: payload.payment_status ?? 'pending',
             item_count: cartItems.reduce((sum, item) => sum + item.quantity, 0),
+            promo_code: payload.promo_code ?? null,
+            discount_amount: Number(payload.discount_amount ?? 0),
           },
         );
       }
@@ -470,6 +482,10 @@ export function useCheckout() {
         order_ids: orderIds,
         payment_status: payload.payment_status ?? 'pending',
         total,
+        subtotal: Number(payload.subtotal ?? cartTotal),
+        shipping_total: Number(payload.shipping_total ?? 0),
+        discount_amount: Number(payload.discount_amount ?? 0),
+        promo_code: payload.promo_code ?? null,
       };
     } catch (err: any) {
       console.error('Marketplace checkout unexpected failure:', err);
