@@ -388,8 +388,16 @@ export default function AdminTrustSafetyPage() {
           toast.error('Execution preflight bloklandi. Failed checklarni tuzating.');
           return;
         }
-        await executeEnforcement(enforcementTarget.id, enforcementNote.trim());
-        toast.success('Enforcement canonical platform state’ga qo‘llandi');
+        const execution = await executeEnforcement(enforcementTarget.id, enforcementNote.trim());
+        if (execution.status === 'failed') {
+          toast.error(
+            execution.error_message
+              ? `Execution failed · ${execution.error_message}`
+              : 'Execution failed. Action retry ledgerga yozildi.',
+          );
+        } else {
+          toast.success('Enforcement canonical platform state’ga qo‘llandi');
+        }
       } else {
         await reviewEnforcement({
           actionId: enforcementTarget.id,
@@ -882,6 +890,12 @@ export default function AdminTrustSafetyPage() {
                           {action.failure_reason && (
                             <p className="mt-1 line-clamp-2 text-[11px] text-destructive">
                               {action.failure_reason}
+                            </p>
+                          )}
+                          {Number(action.retry_count || 0) > 0 && (
+                            <p className="mt-1 text-[11px] text-muted-foreground">
+                              retry {action.retry_count}/5
+                              {action.last_retry_at ? ` · ${dt(action.last_retry_at)}` : ''}
                             </p>
                           )}
                         </div>

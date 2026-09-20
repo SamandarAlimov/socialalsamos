@@ -423,11 +423,20 @@ export interface SecurityPosture {
     valid: boolean;
     rows_checked: number;
     head_hash?: string;
+    head_seq?: number;
     first_invalid_id?: string;
+    first_invalid_seq?: number;
     checked_at?: string;
   };
   rls_exposed_without_policy: number;
   security_definer_public_execute: number;
+  advisor: {
+    rls_enabled_no_policy: number;
+    mutable_search_path: number;
+    anon_security_definer_rpc: number;
+    anon_security_definer_trigger: number;
+    extensions_in_public: number;
+  };
   country_resolution: {
     resolved: number;
     unknown: number;
@@ -440,13 +449,42 @@ export interface SecurityPosture {
   enforcement: {
     failed: number;
     retry_requests: number;
+    retry_failed: number;
+  };
+  audit_exports: {
+    total: number;
+    latest_at: string | null;
   };
 }
 
 export interface AdminAuditExport {
   exported_at: string;
   chain: SecurityPosture['audit_chain'];
-  events: Array<AdminAuditEvent & { prev_hash?: string | null; event_hash?: string | null }>;
+  events: Array<AdminAuditEvent & {
+    chain_seq?: number;
+    prev_hash?: string | null;
+    event_hash?: string | null;
+  }>;
+  manifest?: {
+    id: string;
+    requested_by: string;
+    row_count: number;
+    chain_head_seq: number;
+    chain_head_hash: string;
+    payload_hash: string;
+    manifest_hash: string;
+    created_at: string;
+  };
+}
+
+export interface EnforcementExecutionResult {
+  status: 'applied' | 'failed';
+  action_id: string;
+  action_type: string;
+  target_type: string;
+  retry_count: number;
+  error_code?: string;
+  error_message?: string;
 }
 
 const EMPTY_TRUST_SAFETY: TrustSafetySnapshot = {
@@ -889,7 +927,7 @@ export async function fetchSecurityPosture() {
 }
 
 export async function exportAdminAudit(limit = 1000) {
-  const { data, error } = await rpc<AdminAuditExport>('admin_audit_export_v1', {
+  const { data, error } = await rpc<AdminAuditExport>('admin_create_audit_export_v2', {
     p_from: null,
     p_to: null,
     p_limit: limit,
@@ -916,7 +954,7 @@ export async function reviewEnforcement(input: {
 }
 
 export async function executeEnforcement(actionId: string, reason: string) {
-  const { data, error } = await rpc<Record<string, unknown>>(
+  const { data, error } = await rpc<EnforcementExecutionResult>(
     'admin_execute_enforcement_v1',
     {
       p_action_id: actionId,

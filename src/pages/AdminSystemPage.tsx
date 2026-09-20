@@ -170,7 +170,12 @@ export default function AdminSystemPage() {
       anchor.click();
       anchor.remove();
       URL.revokeObjectURL(url);
-      toast.success('Audit export tayyorlandi');
+      toast.success(
+        payload.manifest
+          ? `Audit export manifest bilan tayyorlandi · ${payload.manifest.manifest_hash.slice(0, 12)}…`
+          : 'Audit export tayyorlandi',
+      );
+      await Promise.all([refresh(), loadPosture()]);
     } catch (caught: any) {
       toast.error(caught?.message || 'Audit export yaratilmadi');
     } finally {
@@ -330,13 +335,42 @@ export default function AdminSystemPage() {
                 </Button>
               </div>
             </CardHeader>
-            <CardContent className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
-              <div className="rounded-xl border bg-background p-3"><p className="text-xs text-muted-foreground">Audit chain</p><p className={cn('mt-1 font-semibold', posture && !posture.audit_chain.valid && 'text-destructive')}>{posture ? (posture.audit_chain.valid ? 'Verified' : 'Invalid') : '—'}</p><p className="mt-1 text-[11px] text-muted-foreground">{posture?.audit_chain.rows_checked ?? 0} event</p></div>
-              <div className="rounded-xl border bg-background p-3"><p className="text-xs text-muted-foreground">Country coverage</p><p className="mt-1 font-semibold tabular-nums">{posture ? `${posture.country_resolution.coverage_pct}%` : '—'}</p><p className="mt-1 text-[11px] text-muted-foreground">{posture?.country_resolution.unknown ?? 0} unresolved</p></div>
-              <div className="rounded-xl border bg-background p-3"><p className="text-xs text-muted-foreground">RLS exposure</p><p className={cn('mt-1 font-semibold tabular-nums', Number(posture?.rls_exposed_without_policy || 0) > 0 && 'text-amber-600')}>{posture?.rls_exposed_without_policy ?? '—'}</p><p className="mt-1 text-[11px] text-muted-foreground">exposed/no policy</p></div>
-              <div className="rounded-xl border bg-background p-3"><p className="text-xs text-muted-foreground">Definer surface</p><p className={cn('mt-1 font-semibold tabular-nums', Number(posture?.security_definer_public_execute || 0) > 0 && 'text-amber-600')}>{posture?.security_definer_public_execute ?? '—'}</p><p className="mt-1 text-[11px] text-muted-foreground">PUBLIC execute</p></div>
-              <div className="rounded-xl border bg-background p-3"><p className="text-xs text-muted-foreground">SLA breached</p><p className={cn('mt-1 font-semibold tabular-nums', Number(posture?.sla.breached || 0) > 0 && 'text-destructive')}>{posture?.sla.breached ?? '—'}</p><p className="mt-1 text-[11px] text-muted-foreground">{posture?.sla.at_risk ?? 0} at risk</p></div>
-              <div className="rounded-xl border bg-background p-3"><p className="text-xs text-muted-foreground">Enforcement failed</p><p className={cn('mt-1 font-semibold tabular-nums', Number(posture?.enforcement.failed || 0) > 0 && 'text-destructive')}>{posture?.enforcement.failed ?? '—'}</p><p className="mt-1 text-[11px] text-muted-foreground">{posture?.enforcement.retry_requests ?? 0} retry</p></div>
+            <CardContent className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-7">
+              <div className="rounded-xl border bg-background p-3">
+                <p className="text-xs text-muted-foreground">Audit chain</p>
+                <p className={cn('mt-1 font-semibold', posture && !posture.audit_chain.valid && 'text-destructive')}>{posture ? (posture.audit_chain.valid ? 'Verified' : 'Invalid') : '—'}</p>
+                <p className="mt-1 text-[11px] text-muted-foreground">{posture?.audit_chain.rows_checked ?? 0} event · head #{posture?.audit_chain.head_seq ?? 0}</p>
+              </div>
+              <div className="rounded-xl border bg-background p-3">
+                <p className="text-xs text-muted-foreground">Country coverage</p>
+                <p className="mt-1 font-semibold tabular-nums">{posture ? `${posture.country_resolution.coverage_pct}%` : '—'}</p>
+                <p className="mt-1 text-[11px] text-muted-foreground">{posture?.country_resolution.unknown ?? 0} unresolved</p>
+              </div>
+              <div className="rounded-xl border bg-background p-3">
+                <p className="text-xs text-muted-foreground">RLS policy gaps</p>
+                <p className={cn('mt-1 font-semibold tabular-nums', Number(posture?.advisor.rls_enabled_no_policy || 0) > 0 && 'text-amber-600')}>{posture?.advisor.rls_enabled_no_policy ?? '—'}</p>
+                <p className="mt-1 text-[11px] text-muted-foreground">RLS enabled / no policy</p>
+              </div>
+              <div className="rounded-xl border bg-background p-3">
+                <p className="text-xs text-muted-foreground">Mutable search_path</p>
+                <p className={cn('mt-1 font-semibold tabular-nums', Number(posture?.advisor.mutable_search_path || 0) > 0 && 'text-amber-600')}>{posture?.advisor.mutable_search_path ?? '—'}</p>
+                <p className="mt-1 text-[11px] text-muted-foreground">application functions</p>
+              </div>
+              <div className="rounded-xl border bg-background p-3">
+                <p className="text-xs text-muted-foreground">Anon definer surface</p>
+                <p className={cn('mt-1 font-semibold tabular-nums', Number(posture?.advisor.anon_security_definer_rpc || 0) > 0 && 'text-amber-600')}>{posture?.advisor.anon_security_definer_rpc ?? '—'}</p>
+                <p className="mt-1 text-[11px] text-muted-foreground">{posture?.advisor.anon_security_definer_trigger ?? 0} trigger RPC · {posture?.advisor.extensions_in_public ?? 0} public extension</p>
+              </div>
+              <div className="rounded-xl border bg-background p-3">
+                <p className="text-xs text-muted-foreground">SLA breached</p>
+                <p className={cn('mt-1 font-semibold tabular-nums', Number(posture?.sla.breached || 0) > 0 && 'text-destructive')}>{posture?.sla.breached ?? '—'}</p>
+                <p className="mt-1 text-[11px] text-muted-foreground">{posture?.sla.at_risk ?? 0} at risk</p>
+              </div>
+              <div className="rounded-xl border bg-background p-3">
+                <p className="text-xs text-muted-foreground">Enforcement failed</p>
+                <p className={cn('mt-1 font-semibold tabular-nums', Number(posture?.enforcement.failed || 0) > 0 && 'text-destructive')}>{posture?.enforcement.failed ?? '—'}</p>
+                <p className="mt-1 text-[11px] text-muted-foreground">{posture?.enforcement.retry_requests ?? 0} retry · {posture?.enforcement.retry_failed ?? 0} retry failed</p>
+              </div>
             </CardContent>
           </Card>
 
@@ -446,9 +480,13 @@ export default function AdminSystemPage() {
                   <div className="flex flex-wrap items-center gap-2">
                     <CardTitle className="text-base">Immutable admin audit</CardTitle>
                     {posture && (
-                      <Badge variant={posture.audit_chain.valid ? 'secondary' : 'destructive'}>
-                        {posture.audit_chain.valid ? 'Hash chain verified' : 'Hash chain invalid'}
-                      </Badge>
+                      <>
+                        <Badge variant={posture.audit_chain.valid ? 'secondary' : 'destructive'}>
+                          {posture.audit_chain.valid ? 'Hash chain verified' : 'Hash chain invalid'}
+                        </Badge>
+                        <Badge variant="outline">head #{posture.audit_chain.head_seq ?? 0}</Badge>
+                        <Badge variant="outline">{posture.audit_exports.total} export</Badge>
+                      </>
                     )}
                   </div>
                   <p className="mt-1 text-sm text-muted-foreground">
