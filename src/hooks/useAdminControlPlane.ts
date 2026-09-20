@@ -218,6 +218,127 @@ export interface AdminNotification {
   is_read: boolean;
 }
 
+export interface ModerationPolicy {
+  code: string;
+  title: string;
+  category: string;
+  description: string;
+  severity_default: TrustSafetySeverity;
+  default_action: string | null;
+  execution_mode: 'automatic' | 'manual';
+  requires_independent_approval: boolean;
+  required_approvals: number;
+  default_duration_hours: number | null;
+  allowed_target_types: string[];
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export type EnforcementStatus =
+  | 'awaiting_approval'
+  | 'pending_execution'
+  | 'executing'
+  | 'applied'
+  | 'failed'
+  | 'reverted'
+  | 'rejected';
+
+export interface EnforcementApproval {
+  id: string;
+  enforcement_action_id: string;
+  approver_id: string;
+  decision: 'approved' | 'rejected';
+  note: string;
+  created_at: string;
+  approver_username?: string | null;
+  approver_name?: string | null;
+}
+
+export interface EnforcementExecutionEvent {
+  id: string;
+  enforcement_action_id: string;
+  actor_id: string | null;
+  event_type: string;
+  detail: Record<string, unknown>;
+  created_at: string;
+  actor_username?: string | null;
+  actor_name?: string | null;
+}
+
+export interface EnforcementAction {
+  id: string;
+  case_id: string | null;
+  case_number?: number | null;
+  case_title?: string | null;
+  target_type: string;
+  target_id: string;
+  action_type: string;
+  status: EnforcementStatus;
+  starts_at: string;
+  ends_at: string | null;
+  created_by: string | null;
+  created_at: string;
+  approved_at: string | null;
+  executed_at: string | null;
+  executed_by: string | null;
+  failure_reason: string | null;
+  required_approvals: number;
+  approved_count?: number;
+  policy_code: string | null;
+  execution_result?: Record<string, unknown>;
+  created_username?: string | null;
+  created_name?: string | null;
+  creator_username?: string | null;
+  creator_name?: string | null;
+  executed_username?: string | null;
+  executed_name?: string | null;
+  approvals?: EnforcementApproval[];
+  events?: EnforcementExecutionEvent[];
+}
+
+export interface ModerationEvidence {
+  id: string;
+  case_id: string;
+  evidence_type: string;
+  object_type: string;
+  object_id: string;
+  snapshot_json: Record<string, unknown>;
+  media_reference: string | null;
+  captured_by: string | null;
+  captured_at: string;
+  metadata: Record<string, unknown>;
+  captured_username?: string | null;
+  captured_name?: string | null;
+}
+
+export interface ModerationDecision {
+  id: string;
+  case_id: string;
+  decision: string;
+  policy_code: string | null;
+  rationale: string;
+  decided_by: string | null;
+  created_at: string;
+  metadata: Record<string, unknown>;
+  decided_username?: string | null;
+  decided_name?: string | null;
+}
+
+export interface AdminCaseDetail {
+  case: (ModerationCase & Record<string, unknown>) | null;
+  reports: TrustSafetyReport[];
+  evidence: ModerationEvidence[];
+  decisions: ModerationDecision[];
+  enforcement: EnforcementAction[];
+}
+
+export interface EnforcementQueueSnapshot {
+  generated_at?: string;
+  actions: EnforcementAction[];
+  policies: ModerationPolicy[];
+}
+
 const EMPTY_TRUST_SAFETY: TrustSafetySnapshot = {
   counts: {
     reports_open: 0,
@@ -334,6 +455,44 @@ export function useRbacMatrix(enabled = true) {
   );
 
   return { matrix, categories, loading, error, refresh };
+}
+
+export function useEnforcementQueue(enabled = true) {
+  const [snapshot, setSnapshot] = useState<EnforcementQueueSnapshot>({
+    actions: [],
+    policies: [],
+  });
+  const [loading, setLoading] = useState(enabled);
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = useCallback(async () => {
+    if (!enabled) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    const { data, error: rpcError } = await rpc<EnforcementQueueSnapshot>(
+      'admin_enforcement_queue_v1',
+      { p_limit: 180 },
+    );
+    if (rpcError) {
+      setError(rpcError.message || 'Enforcement queue yuklanmadi');
+    } else {
+      setError(null);
+      setSnapshot({
+        generated_at: data?.generated_at,
+        actions: Array.isArray(data?.actions) ? data.actions : [],
+        policies: Array.isArray(data?.policies) ? data.policies : [],
+      });
+    }
+    setLoading(false);
+  }, [enabled]);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  return { snapshot, loading, error, refresh };
 }
 
 export function useSystemControl(enabled = true) {
@@ -522,4 +681,85 @@ export async function markAllAdminNotificationsRead() {
   const { data, error } = await rpc<number>('admin_mark_all_notifications_read_v1');
   if (error) throw error;
   return Number(data || 0);
+}
+
+
+export async function fetchAdminCaseDetail(caseId: string) {
+  const { data, error } = await rpc<AdminCaseDetail>('admin_case_detail_v1', {
+    p_case_id: caseId,
+  });
+  if (error) throw error;
+  return {
+    case: data?.case || null,
+    reports: Array.isArray(data?.reports) ? data.reports : [],
+    evidence: Array.isArray(data?.evidence) ? data.evidence : [],
+    decisions: Array.isArray(data?.decisions) ? data.decisions : [],
+    enforcement: Array.isArray(data?.enforcement) ? data.enforcement : [],
+  } satisfies AdminCaseDetail;
+}
+
+export async function reviewEnforcement(input: {
+  actionId: string;
+  decision: 'approved' | 'rejected';
+  note: string;
+}) {
+  const { data, error } = await rpc<Record<string, unknown>>(
+    'admin_review_enforcement_v1',
+    {
+      p_action_id: input.actionId,
+      p_decision: input.decision,
+      p_note: input.note,
+    },
+  );
+  if (error) throw error;
+  return data;
+}
+
+export async function executeEnforcement(actionId: string, reason: string) {
+  const { data, error } = await rpc<Record<string, unknown>>(
+    'admin_execute_enforcement_v1',
+    {
+      p_action_id: actionId,
+      p_reason: reason,
+    },
+  );
+  if (error) throw error;
+  return data;
+}
+
+export async function revertEnforcement(actionId: string, reason: string) {
+  const { data, error } = await rpc<Record<string, unknown>>(
+    'admin_revert_enforcement_v1',
+    {
+      p_action_id: actionId,
+      p_reason: reason,
+    },
+  );
+  if (error) throw error;
+  return data;
+}
+
+export async function updateModerationPolicy(input: {
+  code: string;
+  description: string;
+  defaultAction: string | null;
+  requiredApprovals: number;
+  defaultDurationHours: number | null;
+  active: boolean;
+  reason: string;
+}) {
+  const { data, error } = await rpc<ModerationPolicy>(
+    'admin_update_moderation_policy_v1',
+    {
+      p_code: input.code,
+      p_description: input.description,
+      p_default_action: input.defaultAction,
+      p_required_approvals: input.requiredApprovals,
+      p_default_duration_hours: input.defaultDurationHours,
+      p_active: input.active,
+      p_reason: input.reason,
+    },
+  );
+  if (error) throw error;
+  return data;
 }
