@@ -1,5 +1,5 @@
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { Home, Search, Video, MessageCircle, ShoppingBag, Map, PlusSquare, User, Settings, LogOut, Compass, Wallet, Sparkles, LayoutGrid, MoreHorizontal, Moon, Sun, UsersRound } from 'lucide-react';
+import { Home, Search, Video, MessageCircle, ShoppingBag, Store, Map, PlusSquare, User, Settings, LogOut, Compass, Wallet, Sparkles, LayoutGrid, MoreHorizontal, Moon, Sun, UsersRound } from 'lucide-react';
 import { AlsamosLogo } from '@/components/AlsamosLogo';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
@@ -14,6 +14,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { useTheme } from 'next-themes';
 import { SwitchAccountDialog } from '@/components/account/SwitchAccountDialog';
 import { useTranslation } from 'react-i18next';
+import { useMarketplaceActivity } from '@/hooks/useMarketplaceActivity';
 
 interface NavItem {
   icon: React.ElementType;
@@ -65,6 +66,10 @@ export function AppSidebar({ collapsed, onCollapsedChange }: AppSidebarProps) {
   const { playMessageSound } = useNotificationSound();
   const handleNewMessage = useCallback(() => playMessageSound(), [playMessageSound]);
   const { unreadCount: messagesUnreadCount } = useUnreadMessages(handleNewMessage);
+  const {
+    buyerUnreadCount,
+    sellerUnreadCount,
+  } = useMarketplaceActivity({ announce: true });
   const getBadgeCount = (badgeKey?: 'messages') => badgeKey === 'messages' ? messagesUnreadCount : 0;
 
   const isNavItemActive = (path?: string) => {
@@ -112,11 +117,62 @@ export function AppSidebar({ collapsed, onCollapsedChange }: AppSidebarProps) {
                       {badgeCount > 9 ? '9+' : badgeCount}
                     </motion.span>
                   )}
+                  {collapsed && item.path === '/marketplace' && buyerUnreadCount > 0 && (
+                    <motion.span
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      exit={{ scale: 0 }}
+                      title="Xaridlar"
+                      className="absolute -right-3 -top-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-sky-500 px-1 text-[9px] font-black text-white shadow-md ring-2 ring-sidebar"
+                    >
+                      {buyerUnreadCount > 9 ? '9+' : buyerUnreadCount}
+                    </motion.span>
+                  )}
+                  {collapsed && item.path === '/marketplace' && sellerUnreadCount > 0 && (
+                    <motion.span
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      exit={{ scale: 0 }}
+                      title="Sotuvlar"
+                      className="absolute -bottom-2 -right-3 flex h-4 min-w-4 items-center justify-center rounded-full bg-orange-500 px-1 text-[9px] font-black text-white shadow-md ring-2 ring-sidebar"
+                    >
+                      {sellerUnreadCount > 9 ? '9+' : sellerUnreadCount}
+                    </motion.span>
+                  )}
                 </AnimatePresence>
               </div>
               {!collapsed && <span className="text-sm">{t(item.labelKey)}</span>}
               <AnimatePresence>
-                {!collapsed && badgeCount > 0 && (
+                {!collapsed && item.path === '/marketplace' && (buyerUnreadCount > 0 || sellerUnreadCount > 0) && (
+                  <motion.span
+                    initial={{ opacity: 0, scale: 0.96 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.96 }}
+                    className="ml-auto flex items-center gap-1"
+                  >
+                    {buyerUnreadCount > 0 && (
+                      <span
+                        title="Xaridlar"
+                        aria-label={`Xaridlar: ${buyerUnreadCount}`}
+                        className="inline-flex h-5 min-w-5 items-center justify-center gap-1 rounded-full bg-sky-500 px-1.5 text-[10px] font-black text-white shadow-sm"
+                      >
+                        <ShoppingBag className="h-3 w-3" />
+                        {buyerUnreadCount > 99 ? '99+' : buyerUnreadCount}
+                      </span>
+                    )}
+                    {sellerUnreadCount > 0 && (
+                      <span
+                        title="Sotuvlar"
+                        aria-label={`Sotuvlar: ${sellerUnreadCount}`}
+                        className="inline-flex h-5 min-w-5 items-center justify-center gap-1 rounded-full bg-orange-500 px-1.5 text-[10px] font-black text-white shadow-sm"
+                      >
+                        <Store className="h-3 w-3" />
+                        {sellerUnreadCount > 99 ? '99+' : sellerUnreadCount}
+                      </span>
+                    )}
+                  </motion.span>
+                )}
+                {!collapsed && item.path !== '/marketplace' && badgeCount > 0 && (
                   <motion.span
                     initial={{ scale: 0 }}
                     animate={{ scale: 1 }}
