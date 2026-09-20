@@ -49,6 +49,7 @@ interface FilterStateProps {
 
 interface MarketplaceFiltersProps extends FilterStateProps {
   onApply: () => void;
+  onClose?: () => void;
 }
 
 interface MarketplaceQuickFiltersProps extends FilterStateProps {
@@ -117,14 +118,21 @@ function SectionCard({
   title,
   description,
   children,
+  className,
 }: {
   icon: React.ReactNode;
   title: string;
   description?: string;
   children: React.ReactNode;
+  className?: string;
 }) {
   return (
-    <section className="overflow-hidden rounded-[22px] border border-border/55 bg-card shadow-[0_8px_30px_rgba(15,23,42,0.035)]">
+    <section
+      className={cn(
+        'overflow-hidden rounded-[22px] border border-border/55 bg-card shadow-[0_8px_30px_rgba(15,23,42,0.035)]',
+        className,
+      )}
+    >
       <div className="flex items-start gap-3 border-b border-border/45 px-4 py-3.5">
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-muted/65 text-foreground">
           {icon}
@@ -286,6 +294,7 @@ export function MarketplaceFilters({
   resultCount,
   onReset,
   onApply,
+  onClose,
 }: MarketplaceFiltersProps) {
   const activeRange = priceRange ?? [0, sliderMax];
   const presets = pricePresets(sliderMax);
@@ -303,21 +312,32 @@ export function MarketplaceFilters({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="border-b border-border/45 bg-background/95 px-5 pb-4 pt-5 backdrop-blur-xl">
-        <div className="pr-9">
-          <div className="flex items-center gap-2">
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-zinc-950 text-white dark:bg-white dark:text-zinc-950">
+      <div className="border-b border-border/45 bg-background/95 px-4 pb-4 pt-4 backdrop-blur-xl sm:px-5 sm:pt-5">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-zinc-950 text-white dark:bg-white dark:text-zinc-950">
               <SlidersHorizontal className="h-4 w-4" />
             </span>
-            <div>
-              <h2 className="text-lg font-black tracking-tight">Filtr va saralash</h2>
-              <p className="text-xs text-muted-foreground">
+            <div className="min-w-0">
+              <h2 className="truncate text-lg font-black tracking-tight">Filtr va saralash</h2>
+              <p className="truncate text-xs text-muted-foreground">
                 {activeFilterCount > 0
                   ? activeFilterCount + ' ta filtr tanlangan'
                   : 'Kerakli mahsulotni tezroq toping'}
               </p>
             </div>
           </div>
+
+          {onClose && (
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Filtrlarni yopish"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border/60 bg-background text-muted-foreground transition hover:bg-muted hover:text-foreground"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
         </div>
 
         <div className="mt-4">
@@ -340,13 +360,14 @@ export function MarketplaceFilters({
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto bg-muted/[0.16] px-4 py-4 sm:px-5">
-        <div className="space-y-4">
+        <div className="grid gap-4 md:grid-cols-2 md:items-start">
           <SectionCard
+            className="md:col-span-2"
             icon={<ArrowDownUp className="h-4 w-4" />}
             title="Saralash"
             description="Mahsulotlar qanday tartibda ko‘rinsin"
           >
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
               {SORT_OPTIONS.map(option => {
                 const Icon = option.icon;
                 const active = sortBy === option.id;
@@ -357,7 +378,7 @@ export function MarketplaceFilters({
                     onClick={() => onSortChange(option.id)}
                     className={cn(
                       'relative min-h-[76px] rounded-2xl border p-3 text-left transition-all',
-                      option.id === 'recommended' && 'col-span-2',
+                      option.id === 'recommended' && 'col-span-2 md:col-span-1',
                       active
                         ? 'border-zinc-950 bg-zinc-950 text-white shadow-[0_10px_24px_rgba(0,0,0,0.12)] dark:border-white dark:bg-white dark:text-zinc-950'
                         : 'border-border/55 bg-background hover:border-foreground/20 hover:shadow-sm',
@@ -387,16 +408,17 @@ export function MarketplaceFilters({
           </SectionCard>
 
           <SectionCard
+            className="md:col-span-2"
             icon={<Tag className="h-4 w-4" />}
             title="Turkum"
             description="Qidiruvni mahsulot turiga toraytiring"
           >
-            <div className="marketplace-x-rail -mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+            <div className="marketplace-x-rail -mx-1 flex gap-2 overflow-x-auto px-1 pb-1 md:grid md:grid-cols-5 md:overflow-visible">
               <button
                 type="button"
                 onClick={() => onCategoryChange('all')}
                 className={cn(
-                  'flex min-w-[92px] shrink-0 flex-col items-center gap-2 rounded-2xl border px-3 py-3 text-xs font-bold transition',
+                  'flex min-w-[92px] shrink-0 flex-col items-center gap-2 rounded-2xl border px-3 py-3 text-xs font-bold transition md:min-w-0',
                   selectedCategory === 'all'
                     ? 'border-zinc-950 bg-zinc-950 text-white dark:border-white dark:bg-white dark:text-zinc-950'
                     : 'border-border/55 bg-background text-muted-foreground hover:border-foreground/20 hover:text-foreground',
@@ -411,7 +433,7 @@ export function MarketplaceFilters({
                   key={category.id}
                   onClick={() => onCategoryChange(category.slug)}
                   className={cn(
-                    'flex min-w-[92px] shrink-0 flex-col items-center gap-2 rounded-2xl border px-3 py-3 text-xs font-bold transition',
+                    'flex min-w-[92px] shrink-0 flex-col items-center gap-2 rounded-2xl border px-3 py-3 text-xs font-bold transition md:min-w-0',
                     selectedCategory === category.slug
                       ? 'border-zinc-950 bg-zinc-950 text-white dark:border-white dark:bg-white dark:text-zinc-950'
                       : 'border-border/55 bg-background text-muted-foreground hover:border-foreground/20 hover:text-foreground',
