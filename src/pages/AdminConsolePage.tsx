@@ -327,34 +327,15 @@ export default function AdminConsolePage() {
   const approveVerification = async (request: VerificationRequest) => {
     setProcessingId(request.id);
     try {
-      const { error: requestError } = await supabase
-        .from('verification_requests')
-        .update({
-          status: 'approved',
-          reviewed_at: new Date().toISOString(),
-          reviewed_by: user?.id,
-          rejection_reason: null,
-        })
-        .eq('id', request.id);
-      if (requestError) throw requestError;
-
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .update({ is_verified: true })
-        .eq('id', request.user_id);
-      if (profileError) throw profileError;
-
-      const { error: notificationError } = await supabase.from('notifications').insert({
-        user_id: request.user_id,
-        type: 'verification',
-        title: 'Verifikatsiya tasdiqlandi',
-        body: 'Hisobingiz Alsamos tomonidan tasdiqlandi.',
-        data: { request_id: request.id },
+      const { error } = await (supabase as any).rpc('admin_review_verification_request_v1', {
+        p_request_id: request.id,
+        p_decision: 'approved',
+        p_reason: 'Admin verification queue: approved',
       });
-      if (notificationError) console.warn('Verification notification failed:', notificationError);
+      if (error) throw error;
 
       toast.success('Verifikatsiya tasdiqlandi');
-      await fetchRequests();
+      await Promise.all([fetchRequests(), analytics.refetch()]);
     } catch (error) {
       console.error('Verification approve failed:', error);
       toast.error('Verifikatsiyani tasdiqlab bo‘lmadi');
@@ -373,25 +354,12 @@ export default function AdminConsolePage() {
 
     setProcessingId(selectedRequest.id);
     try {
-      const { error } = await supabase
-        .from('verification_requests')
-        .update({
-          status: 'rejected',
-          rejection_reason: reason,
-          reviewed_at: new Date().toISOString(),
-          reviewed_by: user?.id,
-        })
-        .eq('id', selectedRequest.id);
-      if (error) throw error;
-
-      const { error: notificationError } = await supabase.from('notifications').insert({
-        user_id: selectedRequest.user_id,
-        type: 'verification',
-        title: 'Verifikatsiya rad etildi',
-        body: reason,
-        data: { request_id: selectedRequest.id },
+      const { error } = await (supabase as any).rpc('admin_review_verification_request_v1', {
+        p_request_id: selectedRequest.id,
+        p_decision: 'rejected',
+        p_reason: reason,
       });
-      if (notificationError) console.warn('Verification rejection notification failed:', notificationError);
+      if (error) throw error;
 
       toast.success('So‘rov rad etildi');
       setSelectedRequest(null);
@@ -407,13 +375,17 @@ export default function AdminConsolePage() {
 
   const toggleVerification = async (target: UserProfile) => {
     setProcessingId(target.id);
+    const nextValue = !Boolean(target.is_verified);
     try {
-      const nextValue = !target.is_verified;
-      const { error } = await supabase
-        .from('profiles')
-        .update({ is_verified: nextValue })
-        .eq('id', target.id);
+      const { error } = await (supabase as any).rpc('admin_set_user_verification_v1', {
+        p_user_id: target.id,
+        p_verified: nextValue,
+        p_reason: nextValue
+          ? 'Admin users: verification granted'
+          : 'Admin users: verification removed',
+      });
       if (error) throw error;
+
       setUsers((current) =>
         current.map((item) => (item.id === target.id ? { ...item, is_verified: nextValue } : item)),
       );
