@@ -6,6 +6,7 @@ import {
   readPreferredMapEngine,
   vectorStyleUrl,
   type MapEngineController,
+  type MapEngineId,
   type MapSceneLine,
   type MapSceneMarker,
   type MapViewport,
@@ -26,6 +27,8 @@ interface AlsamosMapSurfaceProps {
    * ammo har bir card uchun og'ir vector runtime yuklanmaydi.
    */
   renderMode?: 'default' | 'preview';
+  /** Force a specific renderer for operational surfaces that must be deterministic. */
+  engineOverride?: MapEngineId;
   referenceCenter?: { latitude: number; longitude: number };
   controllerRef?: MutableRefObject<MapEngineController | null>;
   className?: string;
@@ -56,6 +59,7 @@ export function AlsamosMapSurface({
   overlays = [],
   pickMode = false,
   renderMode = 'default',
+  engineOverride,
   referenceCenter,
   controllerRef,
   className,
@@ -67,11 +71,15 @@ export function AlsamosMapSurface({
   const localControllerRef = useRef<MapEngineController | null>(null);
   const activeControllerRef = controllerRef ?? localControllerRef;
   const [engine, setEngine] = useState(() => readPreferredMapEngine());
+  const [vectorFailed, setVectorFailed] = useState(false);
+  const preferredEngine = engineOverride ?? engine;
 
   const effectiveEngine =
     renderMode === 'preview'
       ? 'raster'
-      : engine === 'vector' && (layerId === 'map' || layerId === 'night')
+      : !vectorFailed &&
+          preferredEngine === 'vector' &&
+          (layerId === 'map' || layerId === 'night')
         ? 'vector'
         : 'raster';
 
@@ -119,7 +127,10 @@ export function AlsamosMapSurface({
           onMovedCenter={handleMovedCenter}
           onMapClick={handleMapClick}
           onMarkerClick={onMarkerClick}
-          onError={() => setEngine('raster')}
+          onError={() => {
+            setVectorFailed(true);
+            if (!engineOverride) setEngine('raster');
+          }}
         />
       );
     }
@@ -148,6 +159,7 @@ export function AlsamosMapSurface({
     handleMapClick,
     handleMovedCenter,
     handleViewport,
+    engineOverride,
     layerId,
     lines,
     markers,
