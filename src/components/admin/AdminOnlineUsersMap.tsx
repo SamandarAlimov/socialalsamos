@@ -1,18 +1,20 @@
 import { useMemo, useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { useAdminOnlineUsers } from '@/hooks/useAdminOnlineUsers';
-import { Globe, Users, RefreshCw, MapPin } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Globe2, MapPin, RefreshCw } from 'lucide-react';
+
 import { AlsamosMapSurface } from '@/components/map/AlsamosMapSurface';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Skeleton } from '@/components/ui/skeleton';
+import { useAdminOnlineUsers } from '@/hooks/useAdminOnlineUsers';
 import type { MapSceneMarker } from '@/lib/mapEngine';
 
 export function AdminOnlineUsersMap() {
   const { countryStats, totalOnline, isLoading, refetch } = useAdminOnlineUsers();
   const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
+
   const mapMarkers = useMemo<MapSceneMarker[]>(
     () =>
       countryStats.map((stat) => ({
@@ -22,136 +24,172 @@ export function AdminOnlineUsersMap() {
         longitude: stat.lng,
         count: Math.max(1, stat.count),
         label: stat.country,
+        active: selectedCountry === stat.country,
       })),
-    [countryStats],
+    [countryStats, selectedCountry],
   );
 
   if (isLoading) {
     return (
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base font-medium flex items-center gap-2">
-            <Globe className="h-4 w-4" />
+      <Card className="overflow-hidden border-border/80 shadow-sm">
+        <CardHeader className="border-b pb-4">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Globe2 className="h-4 w-4" />
             Real-time foydalanuvchilar xaritasi
           </CardTitle>
         </CardHeader>
-        <CardContent>
-          <Skeleton className="h-[400px] w-full rounded-lg" />
+        <CardContent className="p-4">
+          <Skeleton className="h-[460px] w-full rounded-2xl" />
         </CardContent>
       </Card>
     );
   }
 
-  const selectedStats = countryStats.find(s => s.country === selectedCountry);
-
   return (
-    <Card>
-      <CardHeader className="pb-2">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-base font-medium flex items-center gap-2">
-            <Globe className="h-4 w-4" />
-            Real-time foydalanuvchilar xaritasi
-          </CardTitle>
+    <Card className="overflow-hidden border-border/80 shadow-sm">
+      <CardHeader className="border-b bg-muted/10 p-4 md:p-5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div className="flex items-center gap-2">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Globe2 className="h-4 w-4" />
+                Real-time foydalanuvchilar xaritasi
+              </CardTitle>
+              <Badge variant="outline" className="rounded-full text-[11px] font-normal">
+                Alsamos Map
+              </Badge>
+            </div>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Faol sessiyalar davlatlar kesimida platformaning yagona vector map engine’ida.
+            </p>
+          </div>
+
           <div className="flex items-center gap-2">
-            <Badge variant="secondary" className="flex items-center gap-1">
-              <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+            <Badge variant="secondary" className="rounded-full px-3 py-1 font-normal">
+              <span className="mr-2 h-2 w-2 animate-pulse rounded-full bg-emerald-500" />
               {totalOnline} onlayn
             </Badge>
-            <Button variant="ghost" size="icon" onClick={refetch} className="h-8 w-8">
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => void refetch()}
+              className="h-9 w-9 rounded-xl"
+              aria-label="Xaritani yangilash"
+            >
               <RefreshCw className="h-4 w-4" />
             </Button>
           </div>
         </div>
       </CardHeader>
+
       <CardContent className="p-0">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-0">
-          {/* Map */}
-          <div className="lg:col-span-2 h-[400px] relative rounded-bl-lg overflow-hidden">
+        <div className="grid min-h-[460px] grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="relative min-h-[420px] overflow-hidden bg-muted lg:min-h-[460px]">
             <AlsamosMapSurface
               center={{ latitude: 41.3775, longitude: 64.5853 }}
               referenceCenter={{ latitude: 41.3775, longitude: 64.5853 }}
               zoom={2}
               layerId="night"
+              engineOverride="vector"
               markers={mapMarkers}
               onMarkerClick={(id) => {
                 if (!id.startsWith('country|')) return;
-                setSelectedCountry(id.slice('country|'.length));
+                const country = id.slice('country|'.length);
+                setSelectedCountry((current) => (current === country ? null : country));
               }}
             />
 
-            <div className="absolute bottom-4 left-4 z-[500] rounded-xl border border-border/60 bg-background/90 px-3 py-2 text-xs text-muted-foreground shadow-lg backdrop-blur-xl">
-              Marker ichidagi son — shu davlatdagi onlayn foydalanuvchilar
+            <div className="pointer-events-none absolute bottom-4 left-4 z-[500] max-w-[calc(100%-2rem)] rounded-xl border border-border/60 bg-background/90 px-3 py-2 text-xs text-muted-foreground shadow-lg backdrop-blur-xl">
+              Marker soni — shu davlatdagi oxirgi faol sessiyalar.
             </div>
           </div>
 
-          {/* Country List */}
-          <div className="border-l">
-            <div className="p-3 border-b bg-muted/30">
-              <h3 className="font-medium text-sm flex items-center gap-2">
+          <div className="border-t bg-card lg:border-l lg:border-t-0">
+            <div className="flex items-center justify-between border-b px-4 py-3">
+              <h3 className="flex items-center gap-2 text-sm font-semibold">
                 <MapPin className="h-4 w-4" />
-                Davlatlar bo'yicha
+                Davlatlar bo‘yicha
               </h3>
+              <span className="text-xs text-muted-foreground">{countryStats.length} hudud</span>
             </div>
-            <ScrollArea className="h-[352px]">
-              <div className="p-2 space-y-1">
+
+            <ScrollArea className="h-[360px] lg:h-[415px]">
+              <div className="space-y-1 p-2">
                 {countryStats.length === 0 ? (
-                  <div className="text-center py-8 text-muted-foreground text-sm">
-                    Hozircha onlayn foydalanuvchilar yo'q
+                  <div className="flex min-h-44 items-center justify-center px-6 text-center text-sm text-muted-foreground">
+                    Hozircha xaritada ko‘rsatish uchun faol hudud yo‘q.
                   </div>
                 ) : (
-                  countryStats.map((stat, index) => (
-                    <button
-                      key={stat.country}
-                      onClick={() => setSelectedCountry(selectedCountry === stat.country ? null : stat.country)}
-                      className={`w-full p-2 rounded-lg text-left transition-colors ${
-                        selectedCountry === stat.country 
-                          ? 'bg-primary/10 border border-primary/20' 
-                          : 'hover:bg-muted'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-muted-foreground w-5">#{index + 1}</span>
-                          <span className="font-medium text-sm truncate">{stat.country}</span>
-                        </div>
-                        <Badge variant="secondary" className="text-xs">
-                          {stat.count}
-                        </Badge>
-                      </div>
-
-                      {/* Expanded user list */}
-                      {selectedCountry === stat.country && (
-                        <div className="mt-2 pt-2 border-t space-y-2">
-                          {stat.users.slice(0, 5).map(user => (
-                            <div key={user.id} className="flex items-center gap-2">
-                              <Avatar className="h-6 w-6">
-                                <AvatarImage src={user.avatar_url || ''} />
-                                <AvatarFallback className="text-xs">
-                                  {user.display_name?.[0] || user.username?.[0] || '?'}
-                                </AvatarFallback>
-                              </Avatar>
-                              <div className="flex-1 min-w-0">
-                                <p className="text-xs font-medium truncate">
-                                  {user.display_name || user.username || 'Unknown'}
-                                </p>
-                                {user.username && (
-                                  <p className="text-xs text-muted-foreground truncate">
-                                    @{user.username}
-                                  </p>
-                                )}
-                              </div>
-                              <div className="h-2 w-2 rounded-full bg-green-500" />
+                  countryStats.map((stat, index) => {
+                    const active = selectedCountry === stat.country;
+                    return (
+                      <button
+                        key={stat.country}
+                        type="button"
+                        onClick={() =>
+                          setSelectedCountry((current) =>
+                            current === stat.country ? null : stat.country,
+                          )
+                        }
+                        className={
+                          'w-full rounded-xl border px-3 py-3 text-left transition-colors ' +
+                          (active
+                            ? 'border-foreground/15 bg-muted/70'
+                            : 'border-transparent hover:border-border hover:bg-muted/35')
+                        }
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="w-5 text-[11px] tabular-nums text-muted-foreground">
+                                {String(index + 1).padStart(2, '0')}
+                              </span>
+                              <span className="truncate text-sm font-semibold">{stat.country}</span>
                             </div>
-                          ))}
-                          {stat.users.length > 5 && (
-                            <p className="text-xs text-muted-foreground text-center">
-                              +{stat.users.length - 5} boshqa
-                            </p>
-                          )}
+                          </div>
+                          <Badge
+                            variant={active ? 'default' : 'secondary'}
+                            className="rounded-full tabular-nums"
+                          >
+                            {stat.count}
+                          </Badge>
                         </div>
-                      )}
-                    </button>
-                  ))
+
+                        {active && (
+                          <div className="mt-3 space-y-2 border-t pt-3">
+                            {stat.users.slice(0, 6).map((user) => (
+                              <div key={user.id} className="flex items-center gap-2.5">
+                                <Avatar className="h-7 w-7 ring-1 ring-border">
+                                  <AvatarImage src={user.avatar_url || ''} />
+                                  <AvatarFallback className="text-[10px]">
+                                    {(user.display_name || user.username || '?')
+                                      .slice(0, 1)
+                                      .toUpperCase()}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <div className="min-w-0 flex-1">
+                                  <p className="truncate text-xs font-medium">
+                                    {user.display_name || user.username || 'Nomsiz profil'}
+                                  </p>
+                                  {user.username && (
+                                    <p className="truncate text-[11px] text-muted-foreground">
+                                      @{user.username}
+                                    </p>
+                                  )}
+                                </div>
+                                <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                              </div>
+                            ))}
+                            {stat.users.length > 6 && (
+                              <p className="pl-9 text-[11px] text-muted-foreground">
+                                +{stat.users.length - 6} boshqa faol foydalanuvchi
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })
                 )}
               </div>
             </ScrollArea>
