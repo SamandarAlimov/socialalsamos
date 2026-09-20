@@ -26,6 +26,7 @@ import {
   UserMinus,
   UserPlus,
   Users,
+  TicketPercent,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
@@ -67,6 +68,7 @@ import {
 } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Textarea } from '@/components/ui/textarea';
+import { MarketplacePromotionManager } from '@/components/marketplace/MarketplacePromotionManager';
 
 interface VerificationRequest {
   id: string;
@@ -124,6 +126,7 @@ type AdminSection =
   | 'users'
   | 'verification'
   | 'team'
+  | 'promotions'
   | 'moderation';
 
 const ADMIN_SECTIONS: Array<{
@@ -138,6 +141,7 @@ const ADMIN_SECTIONS: Array<{
   { id: 'users', label: 'Foydalanuvchilar', description: 'Profil va hisob nazorati', icon: Users },
   { id: 'verification', label: 'Verifikatsiya', description: 'Tasdiqlash so‘rovlari', icon: BadgeCheck },
   { id: 'team', label: 'Adminlar va rollar', description: 'Kirish huquqlarini boshqarish', icon: ShieldCheck },
+  { id: 'promotions', label: 'Marketplace promo', description: 'Platforma promokod va kampaniyalari', icon: TicketPercent },
   { id: 'moderation', label: 'Moderatsiya markazi', description: 'Maxsus nazorat vositalari', icon: CircleGauge },
 ];
 
@@ -270,7 +274,7 @@ export default function AdminConsolePage() {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, profile } = useAuth();
-  const { isAdmin, isLoading: adminLoading, grantRole, revokeRole } = useAdminAccess();
+  const { isAdmin, isLoading: adminLoading, hasPermission, grantRole, revokeRole } = useAdminAccess();
   const analytics = useAdminAnalytics();
   const section = sectionFromPath(location.pathname);
   const sectionMeta = SECTION_BY_ID[section];
@@ -1001,6 +1005,11 @@ export default function AdminConsolePage() {
             {section === 'users' && renderUsers()}
             {section === 'verification' && renderVerification()}
             {section === 'team' && renderTeam()}
+            {section === 'promotions' && (
+              hasPermission('marketplace.promotions.manage')
+                ? <MarketplacePromotionManager mode="admin" />
+                : <EmptyState title="Ruxsat yetarli emas" description="Platforma promokodlarini boshqarish uchun marketplace.promotions.manage huquqi kerak." />
+            )}
             {section === 'moderation' && renderModeration()}
           </div>
         </main>
