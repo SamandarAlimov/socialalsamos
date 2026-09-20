@@ -51,6 +51,7 @@ import AdminConsolePage from "./pages/AdminConsolePage";
 import AdminUsersPage from "./pages/AdminUsersPage";
 import AdminRegionsPage from "./pages/AdminRegionsPage";
 import AdminSystemPage from "./pages/AdminSystemPage";
+import AdminOperationsPage from "./pages/AdminOperationsPage";
 import AdminModerationHubPage from "./pages/AdminModerationHubPage";
 import AdminAdsReviewPage from "./pages/AdminAdsReviewPage";
 import AdminAdsIntegrityPage from "./pages/AdminAdsIntegrityPage";
@@ -202,6 +203,7 @@ function AppRoutes() {
         <Route path="/admin/users" element={<AdminUsersPage />} />
         <Route path="/admin/regions" element={<AdminRegionsPage />} />
         <Route path="/admin/system" element={<AdminSystemPage />} />
+        <Route path="/admin/operations" element={<AdminOperationsPage />} />
         <Route path="/admin/moderation" element={<AdminModerationHubPage />} />
         <Route path="/admin/feedback" element={<AdminFeedbackPage />} />
         <Route path="/admin/ads-review" element={<AdminAdsReviewPage />} />
