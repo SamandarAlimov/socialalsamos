@@ -36,13 +36,13 @@ const UZ_REGIONS: Record<string, Record<LocaleCode, string>> = {
 
 /** Uzbek country names (Intl has no complete uz region catalogue in browsers). */
 const UZ_COUNTRY_NAMES: Record<string, string> = {
-  UZ: "O'zbekiston",
+  UZ: 'O‘zbekiston',
   RU: 'Rossiya',
-  KZ: "Qozog'iston",
-  KG: "Qirg'iziston",
+  KZ: 'Qozog‘iston',
+  KG: 'Qirg‘iziston',
   TJ: 'Tojikiston',
   TM: 'Turkmaniston',
-  AF: "Afg'oniston",
+  AF: 'Afg‘oniston',
   AZ: 'Ozarbayjon',
   TR: 'Turkiya',
   US: 'AQSH',

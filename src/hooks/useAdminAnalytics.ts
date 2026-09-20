@@ -29,9 +29,11 @@ interface PageStats {
   avg_duration: number;
 }
 
-interface CountryStats {
-  country: string;
+export interface CountryStats {
+  country_code: string | null;
   user_count: number;
+  avg_confidence: number;
+  sources: Record<string, number>;
 }
 
 interface AgeStats {
@@ -54,7 +56,7 @@ interface AdminAnalyticsSnapshot {
   platform_stats: PlatformStats;
   hourly_activity: HourlyActivity[];
   page_stats: PageStats[];
-  country_stats: CountryStats[];
+  country_stats: unknown[];
   age_stats: AgeStats[];
   dau_trend: DAUTrend[];
   weekly_pattern: WeeklyPattern[];
@@ -78,20 +80,31 @@ export function useAdminAnalytics() {
     setError(null);
 
     try {
-      const { data, error: rpcError } = await (supabase as any).rpc(
-        'admin_analytics_snapshot_v1',
-      );
+      const [snapshotResult, countryResult] = await Promise.all([
+        (supabase as any).rpc('admin_analytics_snapshot_v1'),
+        (supabase as any).rpc('admin_country_stats_v2'),
+      ]);
 
-      if (rpcError) throw rpcError;
-      if (!data || typeof data !== 'object') {
+      if (snapshotResult.error) throw snapshotResult.error;
+      if (countryResult.error) throw countryResult.error;
+      if (!snapshotResult.data || typeof snapshotResult.data !== 'object') {
         throw new Error('Analytics snapshot bo‘sh qaytdi');
       }
 
-      const snapshot = data as AdminAnalyticsSnapshot;
+      const snapshot = snapshotResult.data as AdminAnalyticsSnapshot;
       setPlatformStats(snapshot.platform_stats || null);
       setHourlyActivity(snapshot.hourly_activity || []);
       setPageStats(snapshot.page_stats || []);
-      setCountryStats(snapshot.country_stats || []);
+      setCountryStats(
+        Array.isArray(countryResult.data)
+          ? countryResult.data.map((item: any) => ({
+              country_code: item?.country_code ? String(item.country_code).toUpperCase() : null,
+              user_count: Number(item?.user_count || 0),
+              avg_confidence: Number(item?.avg_confidence || 0),
+              sources: item?.sources && typeof item.sources === 'object' ? item.sources : {},
+            }))
+          : [],
+      );
       setAgeStats(snapshot.age_stats || []);
       setDauTrend(snapshot.dau_trend || []);
       setWeeklyPattern(snapshot.weekly_pattern || []);

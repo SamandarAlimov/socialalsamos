@@ -40,6 +40,34 @@ export interface UserSession {
   last_active_at: string | null;
   created_at: string;
   is_current: boolean;
+  location_city?: string | null;
+  location_country?: string | null;
+  location_country_code?: string | null;
+  location_source?: string | null;
+  location_confidence?: number | null;
+}
+
+async function captureSessionContext(sessionId: string) {
+  try {
+    const { data } = await supabase.auth.getSession();
+    const accessToken = data.session?.access_token;
+    if (!accessToken) return;
+
+    const response = await fetch('/api/session-context', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ session_id: sessionId }),
+    });
+
+    if (!response.ok) {
+      console.warn('Session geo context capture failed:', response.status);
+    }
+  } catch (error) {
+    console.warn('Session geo context capture failed:', error);
+  }
 }
 
 export function useUserSettings() {
@@ -181,9 +209,11 @@ export function useUserSettings() {
           .eq('user_id', user.id)
           .eq('is_current', true)
           .neq('id', currentId);
+
+        await captureSessionContext(currentId);
       }
 
-      fetchSessions();
+      await fetchSessions();
     } catch (error) {
       console.error('Error registering session:', error);
     } finally {

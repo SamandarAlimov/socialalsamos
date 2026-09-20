@@ -12,7 +12,7 @@ import { useAdminOnlineUsers } from '@/hooks/useAdminOnlineUsers';
 import type { MapEngineController, MapSceneMarker } from '@/lib/mapEngine';
 
 export function AdminOnlineUsersMap() {
-  const { countryStats, totalOnline, isLoading, refetch } = useAdminOnlineUsers();
+  const { countryStats, totalOnline, unresolvedOnline, isLoading, refetch } = useAdminOnlineUsers();
   const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
   const controllerRef = useRef<MapEngineController | null>(null);
   const home = { latitude: 41.3775, longitude: 64.5853 };
@@ -75,11 +75,16 @@ export function AdminOnlineUsersMap() {
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Badge variant="secondary" className="rounded-full px-3 py-1 font-normal">
               <span className="mr-2 h-2 w-2 animate-pulse rounded-full bg-emerald-500" />
               {totalOnline} onlayn
             </Badge>
+            {unresolvedOnline > 0 && (
+              <Badge variant="outline" className="rounded-full px-3 py-1 font-normal">
+                {unresolvedOnline} aniqlanmagan
+              </Badge>
+            )}
             <Button
               variant="outline"
               size="icon"

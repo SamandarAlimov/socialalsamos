@@ -34,6 +34,7 @@ import { useAdminAccess } from '@/hooks/useAdminAccess';
 import { useAdminAnalytics } from '@/hooks/useAdminAnalytics';
 import { supabase } from '@/integrations/supabase/client';
 import { PROFILE_PUBLIC_COLUMNS } from '@/lib/profileFields';
+import { getCountryName } from '@/lib/locations';
 import { cn } from '@/lib/utils';
 import { AdminContentManagement } from '@/components/admin/AdminContentManagement';
 import { AdminOnlineUsersMap } from '@/components/admin/AdminOnlineUsersMap';
@@ -786,15 +787,22 @@ export default function AdminConsolePage() {
           <section className="rounded-2xl border border-border bg-card p-5 shadow-sm">
             <div className="mb-5"><h2 className="font-semibold">Davlatlar bo‘yicha</h2><p className="text-sm text-muted-foreground">Foydalanuvchi taqsimoti</p></div>
             <div className="space-y-4">
-              {topCountries.map((item, index) => (
-                <div key={item.country}>
-                  <div className="mb-1.5 flex items-center justify-between gap-3 text-sm">
-                    <span className="truncate"><span className="mr-2 text-muted-foreground">{String(index + 1).padStart(2, '0')}</span>{item.country}</span>
-                    <span className="font-medium tabular-nums">{item.user_count.toLocaleString()}</span>
+              {topCountries.map((item, index) => {
+                const label = item.country_code ? getCountryName(item.country_code, 'uz') : 'Aniqlanmagan';
+                return (
+                  <div key={item.country_code || 'unknown'}>
+                    <div className="mb-1.5 flex items-center justify-between gap-3 text-sm">
+                      <span className="min-w-0 truncate">
+                        <span className="mr-2 text-muted-foreground">{String(index + 1).padStart(2, '0')}</span>
+                        {label}
+                        <span className="ml-2 text-[10px] text-muted-foreground">{item.country_code || '—'} · {Math.round(item.avg_confidence)}%</span>
+                      </span>
+                      <span className="font-medium tabular-nums">{item.user_count.toLocaleString()}</span>
+                    </div>
+                    <div className="h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-foreground/65" style={{ width: `${Math.max(3, (item.user_count / maxCountryUsers) * 100)}%` }} /></div>
                   </div>
-                  <div className="h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-foreground/65" style={{ width: `${Math.max(3, (item.user_count / maxCountryUsers) * 100)}%` }} /></div>
-                </div>
-              ))}
+                );
+              })}
               {topCountries.length === 0 && <p className="py-12 text-center text-sm text-muted-foreground">Ma’lumot yo‘q</p>}
             </div>
           </section>
@@ -841,7 +849,7 @@ export default function AdminConsolePage() {
                   </div>
                 </div>
                 <div><Badge variant="secondary" className="rounded-full font-normal">{item.is_online ? 'Online' : 'Offline'}</Badge></div>
-                <p className="text-sm text-muted-foreground">{item.country || '—'}</p>
+                <p className="text-sm text-muted-foreground">{item.country ? getCountryName(item.country, 'uz') : '—'}</p>
                 <div className="text-sm"><p>{item.posts_count || 0} post</p><p className="text-xs text-muted-foreground">{item.followers_count || 0} kuzatuvchi</p></div>
                 <div className="flex justify-end">
                   <DropdownMenu>

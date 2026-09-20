@@ -1,6 +1,21 @@
-import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { useCallback, useEffect, useState } from 'react';
 import { RealtimeChannel } from '@supabase/supabase-js';
+
+import { supabase } from '@/integrations/supabase/client';
+import { getCountryName } from '@/lib/locations';
+
+interface OnlineGeoRow {
+  id: string;
+  username: string | null;
+  display_name: string | null;
+  avatar_url: string | null;
+  last_seen: string;
+  country_code: string | null;
+  country_source: string | null;
+  country_confidence: number | null;
+  latitude: number | string | null;
+  longitude: number | string | null;
+}
 
 interface OnlineUser {
   id: string;
@@ -8,99 +23,85 @@ interface OnlineUser {
   display_name: string | null;
   avatar_url: string | null;
   country: string | null;
+  country_code: string | null;
+  country_source: string | null;
+  country_confidence: number;
   last_seen: string;
 }
 
 interface CountryStats {
   country: string;
+  country_code: string;
   count: number;
   users: OnlineUser[];
-  // Approximate center coordinates for major countries
   lat: number;
   lng: number;
+  avgConfidence: number;
 }
-
-// Country coordinates mapping
-const COUNTRY_COORDS: Record<string, { lat: number; lng: number }> = {
-  'Uzbekistan': { lat: 41.3775, lng: 64.5853 },
-  'Russia': { lat: 55.7558, lng: 37.6173 },
-  'Kazakhstan': { lat: 51.1694, lng: 71.4491 },
-  'USA': { lat: 37.0902, lng: -95.7129 },
-  'United States': { lat: 37.0902, lng: -95.7129 },
-  'Germany': { lat: 51.1657, lng: 10.4515 },
-  'Turkey': { lat: 38.9637, lng: 35.2433 },
-  'United Kingdom': { lat: 55.3781, lng: -3.4360 },
-  'UK': { lat: 55.3781, lng: -3.4360 },
-  'France': { lat: 46.2276, lng: 2.2137 },
-  'Italy': { lat: 41.8719, lng: 12.5674 },
-  'Spain': { lat: 40.4637, lng: -3.7492 },
-  'China': { lat: 35.8617, lng: 104.1954 },
-  'Japan': { lat: 36.2048, lng: 138.2529 },
-  'South Korea': { lat: 35.9078, lng: 127.7669 },
-  'India': { lat: 20.5937, lng: 78.9629 },
-  'Brazil': { lat: -14.2350, lng: -51.9253 },
-  'Canada': { lat: 56.1304, lng: -106.3468 },
-  'Australia': { lat: -25.2744, lng: 133.7751 },
-  'UAE': { lat: 23.4241, lng: 53.8478 },
-  'Saudi Arabia': { lat: 23.8859, lng: 45.0792 },
-  'Egypt': { lat: 26.8206, lng: 30.8025 },
-  'Poland': { lat: 51.9194, lng: 19.1451 },
-  'Ukraine': { lat: 48.3794, lng: 31.1656 },
-  'Tajikistan': { lat: 38.8610, lng: 71.2761 },
-  'Kyrgyzstan': { lat: 41.2044, lng: 74.7661 },
-  'Turkmenistan': { lat: 38.9697, lng: 59.5563 },
-  'Azerbaijan': { lat: 40.1431, lng: 47.5769 },
-  'Unknown': { lat: 0, lng: 0 },
-};
 
 export function useAdminOnlineUsers() {
   const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
   const [countryStats, setCountryStats] = useState<CountryStats[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [totalOnline, setTotalOnline] = useState(0);
+  const [unresolvedOnline, setUnresolvedOnline] = useState(0);
 
   const fetchOnlineUsers = useCallback(async () => {
     try {
-      const thirtySecondsAgo = new Date(Date.now() - 30000).toISOString();
-      
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('id, username, display_name, avatar_url, country, last_seen')
-        .eq('is_online', true)
-        .gte('last_seen', thirtySecondsAgo)
-        .limit(500);
+      const { data, error } = await (supabase as any).rpc('admin_online_geo_v1', {
+        p_limit: 500,
+      });
 
       if (error) {
-        console.error('Error fetching online users:', error);
+        console.error('Error fetching resolved online users:', error);
         return;
       }
 
-      const users = (data || []) as OnlineUser[];
+      const rows = (Array.isArray(data) ? data : []) as OnlineGeoRow[];
+      const users: OnlineUser[] = rows.map((row) => ({
+        id: row.id,
+        username: row.username,
+        display_name: row.display_name,
+        avatar_url: row.avatar_url,
+        last_seen: row.last_seen,
+        country_code: row.country_code,
+        country: row.country_code ? getCountryName(row.country_code, 'uz') : null,
+        country_source: row.country_source,
+        country_confidence: Number(row.country_confidence || 0),
+      }));
+
       setOnlineUsers(users);
       setTotalOnline(users.length);
+      setUnresolvedOnline(users.filter((user) => !user.country_code).length);
 
-      // Group by country
-      const countryMap = new Map<string, OnlineUser[]>();
-      users.forEach(user => {
-        const country = user.country || 'Unknown';
-        if (!countryMap.has(country)) {
-          countryMap.set(country, []);
-        }
-        countryMap.get(country)!.push(user);
+      const grouped = new Map<string, { users: OnlineUser[]; lat: number; lng: number }>();
+      rows.forEach((row, index) => {
+        const code = row.country_code?.toUpperCase();
+        const lat = Number(row.latitude);
+        const lng = Number(row.longitude);
+        if (!code || !Number.isFinite(lat) || !Number.isFinite(lng)) return;
+
+        const user = users[index];
+        const current = grouped.get(code);
+        if (current) current.users.push(user);
+        else grouped.set(code, { users: [user], lat, lng });
       });
 
-      // Convert to array with coordinates
-      const stats: CountryStats[] = Array.from(countryMap.entries())
-        .map(([country, users]) => ({
-          country,
-          count: users.length,
-          users,
-          ...(COUNTRY_COORDS[country] || COUNTRY_COORDS['Unknown'])
-        }))
-        .filter(s => s.lat !== 0 || s.lng !== 0) // Filter out unknown locations
-        .sort((a, b) => b.count - a.count);
-
-      setCountryStats(stats);
+      setCountryStats(
+        Array.from(grouped.entries())
+          .map(([country_code, item]) => ({
+            country_code,
+            country: getCountryName(country_code, 'uz'),
+            count: item.users.length,
+            users: item.users,
+            lat: item.lat,
+            lng: item.lng,
+            avgConfidence:
+              item.users.reduce((sum, user) => sum + user.country_confidence, 0) /
+              Math.max(1, item.users.length),
+          }))
+          .sort((a, b) => b.count - a.count),
+      );
     } catch (err) {
       console.error('Error in fetchOnlineUsers:', err);
     } finally {
@@ -109,31 +110,22 @@ export function useAdminOnlineUsers() {
   }, []);
 
   useEffect(() => {
-    fetchOnlineUsers();
+    void fetchOnlineUsers();
 
-    // Set up realtime subscription for presence changes
     const channel: RealtimeChannel = supabase
       .channel('admin-online-users')
       .on(
         'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'profiles',
-          filter: 'is_online=eq.true'
-        },
-        () => {
-          fetchOnlineUsers();
-        }
+        { event: 'UPDATE', schema: 'public', table: 'profiles' },
+        () => void fetchOnlineUsers(),
       )
       .subscribe();
 
-    // Refresh every 10 seconds
-    const interval = setInterval(fetchOnlineUsers, 10000);
+    const interval = window.setInterval(() => void fetchOnlineUsers(), 10_000);
 
     return () => {
-      channel.unsubscribe();
-      clearInterval(interval);
+      void channel.unsubscribe();
+      window.clearInterval(interval);
     };
   }, [fetchOnlineUsers]);
 
@@ -141,7 +133,8 @@ export function useAdminOnlineUsers() {
     onlineUsers,
     countryStats,
     totalOnline,
+    unresolvedOnline,
     isLoading,
-    refetch: fetchOnlineUsers
+    refetch: fetchOnlineUsers,
   };
 }
