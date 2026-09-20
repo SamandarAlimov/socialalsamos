@@ -502,3 +502,24 @@ export async function markAdminNotificationRead(notificationId: string, read = t
   if (error) throw error;
   return Boolean(data);
 }
+
+
+export async function reviewModerationAppeal(input: {
+  appealId: string;
+  decision: 'upheld' | 'overturned' | 'modified';
+  note: string;
+}) {
+  const { data, error } = await rpc<Record<string, unknown>>('admin_review_appeal_v1', {
+    p_appeal_id: input.appealId,
+    p_decision: input.decision,
+    p_note: input.note,
+  });
+  if (error) throw error;
+  return data;
+}
+
+export async function markAllAdminNotificationsRead() {
+  const { data, error } = await rpc<number>('admin_mark_all_notifications_read_v1');
+  if (error) throw error;
+  return Number(data || 0);
+}
