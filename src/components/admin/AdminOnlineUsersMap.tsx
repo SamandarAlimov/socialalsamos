@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { Globe2, MapPin, RefreshCw } from 'lucide-react';
+import { useMemo, useRef, useState } from 'react';
+import { Globe2, LocateFixed, MapPin, RefreshCw, ZoomIn, ZoomOut } from 'lucide-react';
 
 import { AlsamosMapSurface } from '@/components/map/AlsamosMapSurface';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -9,11 +9,22 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAdminOnlineUsers } from '@/hooks/useAdminOnlineUsers';
-import type { MapSceneMarker } from '@/lib/mapEngine';
+import type { MapEngineController, MapSceneMarker } from '@/lib/mapEngine';
 
 export function AdminOnlineUsersMap() {
   const { countryStats, totalOnline, isLoading, refetch } = useAdminOnlineUsers();
   const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
+  const controllerRef = useRef<MapEngineController | null>(null);
+  const home = { latitude: 41.3775, longitude: 64.5853 };
+
+  const focusCountry = (country: string, lat: number, lng: number) => {
+    setSelectedCountry((current) => {
+      const next = current === country ? null : country;
+      if (next) controllerRef.current?.flyTo([lat, lng], 4, { animate: true, duration: 480 });
+      else controllerRef.current?.flyTo([home.latitude, home.longitude], 3, { animate: true, duration: 420 });
+      return next;
+    });
+  };
 
   const mapMarkers = useMemo<MapSceneMarker[]>(
     () =>
@@ -86,21 +97,63 @@ export function AdminOnlineUsersMap() {
         <div className="grid min-h-[460px] grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px]">
           <div className="relative min-h-[420px] overflow-hidden bg-muted lg:min-h-[460px]">
             <AlsamosMapSurface
-              center={{ latitude: 41.3775, longitude: 64.5853 }}
-              referenceCenter={{ latitude: 41.3775, longitude: 64.5853 }}
-              zoom={2}
-              layerId="night"
+              controllerRef={controllerRef}
+              center={home}
+              referenceCenter={home}
+              zoom={3}
+              layerId="map"
               engineOverride="vector"
+              vectorStyleOverride="https://tiles.openfreemap.org/styles/liberty"
               markers={mapMarkers}
               onMarkerClick={(id) => {
                 if (!id.startsWith('country|')) return;
                 const country = id.slice('country|'.length);
-                setSelectedCountry((current) => (current === country ? null : country));
+                const stat = countryStats.find((item) => item.country === country);
+                if (stat) focusCountry(stat.country, stat.lat, stat.lng);
               }}
             />
 
+            <div className="absolute right-4 top-4 z-[500] flex flex-col gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                size="icon"
+                className="h-9 w-9 rounded-xl border bg-background/95 shadow-lg backdrop-blur-xl"
+                onClick={() => controllerRef.current?.zoomIn()}
+                aria-label="Xaritani yaqinlashtirish"
+              >
+                <ZoomIn className="h-4 w-4" />
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                size="icon"
+                className="h-9 w-9 rounded-xl border bg-background/95 shadow-lg backdrop-blur-xl"
+                onClick={() => controllerRef.current?.zoomOut()}
+                aria-label="Xaritani uzoqlashtirish"
+              >
+                <ZoomOut className="h-4 w-4" />
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                size="icon"
+                className="h-9 w-9 rounded-xl border bg-background/95 shadow-lg backdrop-blur-xl"
+                onClick={() => {
+                  setSelectedCountry(null);
+                  controllerRef.current?.flyTo([home.latitude, home.longitude], 3, {
+                    animate: true,
+                    duration: 420,
+                  });
+                }}
+                aria-label="Xaritani markazga qaytarish"
+              >
+                <LocateFixed className="h-4 w-4" />
+              </Button>
+            </div>
+
             <div className="pointer-events-none absolute bottom-4 left-4 z-[500] max-w-[calc(100%-2rem)] rounded-xl border border-border/60 bg-background/90 px-3 py-2 text-xs text-muted-foreground shadow-lg backdrop-blur-xl">
-              Marker soni — shu davlatdagi oxirgi faol sessiyalar.
+              Alsamos live presence · marker soni shu davlatdagi oxirgi faol sessiyalar.
             </div>
           </div>
 
@@ -126,11 +179,7 @@ export function AdminOnlineUsersMap() {
                       <button
                         key={stat.country}
                         type="button"
-                        onClick={() =>
-                          setSelectedCountry((current) =>
-                            current === stat.country ? null : stat.country,
-                          )
-                        }
+                        onClick={() => focusCountry(stat.country, stat.lat, stat.lng)}
                         className={
                           'w-full rounded-xl border px-3 py-3 text-left transition-colors ' +
                           (active
