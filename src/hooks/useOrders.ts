@@ -155,6 +155,31 @@ export function useOrders() {
     fetchOrders();
   }, [fetchOrders]);
 
+  useEffect(() => {
+    if (!user) return;
+
+    const channel = supabase
+      .channel(`buyer-orders-activity-${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'marketplace_notifications',
+          filter: `user_id=eq.${user.id}`,
+        },
+        payload => {
+          const role = (payload.new as any)?.data?.role;
+          if (role === 'buyer') void fetchOrders();
+        },
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [fetchOrders, user]);
+
   return { orders, isLoading, error, refresh: fetchOrders };
 }
 
@@ -225,6 +250,31 @@ export function useSellerOrders() {
   useEffect(() => {
     fetchOrders();
   }, [fetchOrders]);
+
+  useEffect(() => {
+    if (!user) return;
+
+    const channel = supabase
+      .channel(`seller-orders-activity-${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'marketplace_notifications',
+          filter: `user_id=eq.${user.id}`,
+        },
+        payload => {
+          const role = (payload.new as any)?.data?.role;
+          if (role === 'seller') void fetchOrders();
+        },
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [fetchOrders, user]);
 
   return { orders, sellerId, isLoading, error, refresh: fetchOrders };
 }
