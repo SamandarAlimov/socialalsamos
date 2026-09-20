@@ -848,7 +848,7 @@ export function ProductDetail({
               </div>
             </div>
 
-            <div className="pb-36 md:sticky md:top-20 md:self-start md:pb-0">
+            <div className="md:sticky md:top-20 md:self-start">
               <div className="space-y-5 p-4 md:p-0">
                 {product.category && (
                   <div className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
@@ -1192,7 +1192,10 @@ export function ProductDetail({
             </div>
           </div>
 
-      <div className="mx-auto w-full max-w-7xl px-4 pb-12 lg:px-6">
+      {/* Mobile CTA uchun bo‘shliq sahifaning ENG OXIRIDA saqlanadi.
+          Uni yuqoridagi mahsulot ma'lumotlari ustuniga berish seller kartasi bilan
+          Xususiyatlar orasida 9rem lik sun'iy bo‘sh joy hosil qilardi. */}
+      <div className="mx-auto w-full max-w-7xl px-4 pb-40 md:pb-12 lg:px-6">
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.42fr)] lg:items-start">
           <div className="space-y-6">
                 {/* Mobil oqim: desktopda bular galereya tagida turadi. */}
