@@ -1,5 +1,6 @@
-import { Database, LayoutDashboard, MapPinned, Users } from 'lucide-react';
+import { Gauge, LayoutDashboard, MapPinned, ShieldCheck, Users } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
+
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
@@ -7,7 +8,8 @@ const items = [
   { href: '/admin', label: 'Boshqaruv', icon: LayoutDashboard },
   { href: '/admin/users', label: 'Users & Auth', icon: Users },
   { href: '/admin/regions', label: 'Hududlar', icon: MapPinned },
-  { href: '/admin/system', label: 'System & Audit', icon: Database },
+  { href: '/admin/operations', label: 'Operations', icon: Gauge },
+  { href: '/admin/moderation', label: 'Moderatsiya', icon: ShieldCheck },
 ] as const;
 
 export function AdminControlNav() {
@@ -15,8 +17,8 @@ export function AdminControlNav() {
   const location = useLocation();
 
   return (
-    <div className="overflow-x-auto pb-1">
-      <div className="flex min-w-max gap-2 rounded-2xl border border-border/70 bg-card/80 p-2 shadow-sm backdrop-blur-xl">
+    <div className="max-w-full overflow-x-auto pb-1">
+      <div className="flex min-w-max gap-1 rounded-2xl border border-border/70 bg-card/90 p-1.5 shadow-sm backdrop-blur-xl">
         {items.map(({ href, label, icon: Icon }) => {
           const active = href === '/admin'
             ? location.pathname === '/admin'
@@ -25,9 +27,12 @@ export function AdminControlNav() {
             <Button
               key={href}
               type="button"
-              variant={active ? 'secondary' : 'ghost'}
+              variant="ghost"
               onClick={() => navigate(href)}
-              className={cn('h-9 rounded-xl gap-2', active && 'font-semibold')}
+              className={cn(
+                'h-9 gap-2 rounded-xl px-3 text-muted-foreground',
+                active && 'bg-foreground text-background shadow-sm hover:bg-foreground hover:text-background',
+              )}
             >
               <Icon className="h-4 w-4" />
               {label}
