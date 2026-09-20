@@ -90,6 +90,25 @@ function severityBadge(severity: TrustSafetySeverity) {
   return <Badge variant="secondary">{severity === 'medium' ? 'Medium' : 'Low'}</Badge>;
 }
 
+function enforcementStatusBadge(status: EnforcementAction['status']) {
+  if (status === 'awaiting_approval') {
+    return <Badge variant="outline" className="border-amber-500/40 text-amber-700 dark:text-amber-400">Approval kerak</Badge>;
+  }
+  if (status === 'pending_execution') {
+    return <Badge variant="outline" className="border-blue-500/40 text-blue-700 dark:text-blue-400">Ready to execute</Badge>;
+  }
+  if (status === 'failed' || status === 'rejected') {
+    return <Badge variant="destructive">{status === 'failed' ? 'Failed' : 'Rejected'}</Badge>;
+  }
+  if (status === 'applied') return <Badge className="bg-emerald-600 hover:bg-emerald-600">Applied</Badge>;
+  if (status === 'reverted') return <Badge variant="secondary">Reverted</Badge>;
+  return <Badge variant="outline">{status.replace('_', ' ')}</Badge>;
+}
+
+function actionLabel(action: string) {
+  return action.replaceAll('_', ' ').replace(/\b\w/g, (value) => value.toUpperCase());
+}
+
 function Metric({
   title,
   value,
@@ -630,6 +649,220 @@ export default function AdminTrustSafetyPage() {
                       </button>
                     );
                   })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="enforcement" className="m-0 space-y-4">
+          <Card className="border-primary/20 bg-primary/[0.02] shadow-sm">
+            <CardContent className="grid gap-3 p-4 md:grid-cols-3">
+              <div className="rounded-xl border bg-background p-3">
+                <p className="text-xs font-medium text-muted-foreground">Four-eyes guard</p>
+                <p className="mt-1 text-sm font-semibold">Creator o‘z actionini approve qila olmaydi</p>
+              </div>
+              <div className="rounded-xl border bg-background p-3">
+                <p className="text-xs font-medium text-muted-foreground">Permanent disable</p>
+                <p className="mt-1 text-sm font-semibold">Independent super admin approval</p>
+              </div>
+              <div className="rounded-xl border bg-background p-3">
+                <p className="text-xs font-medium text-muted-foreground">Automatic executor</p>
+                <p className="mt-1 text-sm font-semibold">Warning · remove · suspend · disable</p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="overflow-hidden shadow-sm">
+            <CardHeader className="border-b bg-muted/10">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <CardTitle className="text-base">Enforcement approval & execution queue</CardTitle>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Decision va real platform mutation alohida bosqichlarda, immutable audit bilan ishlaydi.
+                  </p>
+                </div>
+                <Badge variant="outline">{enforcementSnapshot.actions.length} action</Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              {enforcementLoading ? (
+                <div className="flex min-h-64 items-center justify-center">
+                  <Loader2 className="h-6 w-6 animate-spin" />
+                </div>
+              ) : enforcementSnapshot.actions.length === 0 ? (
+                <div className="flex min-h-64 flex-col items-center justify-center p-8 text-center">
+                  <CheckCircle2 className="mb-3 h-8 w-8 text-emerald-600" />
+                  <p className="font-semibold">Enforcement queue toza</p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Approval yoki execution kutayotgan action yo‘q.
+                  </p>
+                </div>
+              ) : (
+                <div className="divide-y">
+                  {enforcementSnapshot.actions.map((action) => {
+                    const ownAction = Boolean(user?.id && action.created_by === user.id);
+                    return (
+                      <div
+                        key={action.id}
+                        className="grid gap-4 p-4 xl:grid-cols-[minmax(0,1fr)_180px_160px_auto] xl:items-center"
+                      >
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="font-semibold">
+                              {action.case_number ? '#' + action.case_number + ' · ' : ''}
+                              {actionLabel(action.action_type)}
+                            </p>
+                            {enforcementStatusBadge(action.status)}
+                            {action.action_type === 'permanent_disable' && (
+                              <Badge variant="destructive">Critical</Badge>
+                            )}
+                          </div>
+                          <p className="mt-1 truncate text-sm text-muted-foreground">
+                            {action.case_title || action.target_type + ' enforcement'} · {action.target_type}
+                          </p>
+                          <p className="mt-2 font-mono text-[11px] text-muted-foreground">
+                            {action.target_id}
+                          </p>
+                        </div>
+
+                        <div>
+                          <p className="text-xs text-muted-foreground">Approval</p>
+                          <p className="mt-1 text-sm font-medium">
+                            {Number(action.approved_count || 0)} / {action.required_approvals}
+                          </p>
+                          <p className="mt-1 text-[11px] text-muted-foreground">
+                            creator: @{action.creator_username || 'admin'}
+                          </p>
+                        </div>
+
+                        <div>
+                          <p className="text-xs text-muted-foreground">Created</p>
+                          <p className="mt-1 text-sm">{dt(action.created_at)}</p>
+                          {action.failure_reason && (
+                            <p className="mt-1 line-clamp-2 text-[11px] text-destructive">
+                              {action.failure_reason}
+                            </p>
+                          )}
+                        </div>
+
+                        <div className="flex flex-wrap items-center justify-end gap-2">
+                          {action.status === 'awaiting_approval' && canApprove && (
+                            <>
+                              {ownAction ? (
+                                <Badge variant="secondary">Independent reviewer kerak</Badge>
+                              ) : (
+                                <>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => openEnforcementAction(action, 'reject')}
+                                  >
+                                    <XCircle className="mr-2 h-4 w-4" />
+                                    Reject
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    onClick={() => openEnforcementAction(action, 'approve')}
+                                  >
+                                    <CheckCheck className="mr-2 h-4 w-4" />
+                                    Approve
+                                  </Button>
+                                </>
+                              )}
+                            </>
+                          )}
+
+                          {action.status === 'pending_execution' && canExecute && (
+                            <Button
+                              size="sm"
+                              onClick={() => openEnforcementAction(action, 'execute')}
+                            >
+                              <PlayCircle className="mr-2 h-4 w-4" />
+                              Execute
+                            </Button>
+                          )}
+
+                          {action.case_id && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => {
+                                const item = snapshot.cases.find((entry) => entry.id === action.case_id);
+                                if (item) {
+                                  openCase(item);
+                                } else {
+                                  toast.info('Case snapshotni yangilang va qayta oching.');
+                                }
+                              }}
+                            >
+                              <Eye className="mr-2 h-4 w-4" />
+                              Case
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="policies" className="m-0">
+          <Card className="overflow-hidden shadow-sm">
+            <CardHeader className="border-b bg-muted/10">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <CardTitle className="text-base">Moderation policy catalog</CardTitle>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Enforcement defaults, target scope va independent approval thresholdlari.
+                  </p>
+                </div>
+                <BookOpen className="h-5 w-5 text-muted-foreground" />
+              </div>
+            </CardHeader>
+            <CardContent className="grid gap-3 p-4 lg:grid-cols-2 2xl:grid-cols-3">
+              {enforcementSnapshot.policies.map((policy) => (
+                <div key={policy.code} className="rounded-2xl border bg-card p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <code className="text-[11px] font-semibold text-muted-foreground">{policy.code}</code>
+                      <p className="mt-1 font-semibold">{policy.title}</p>
+                    </div>
+                    {severityBadge(policy.severity_default)}
+                  </div>
+                  <p className="mt-3 min-h-10 text-sm leading-5 text-muted-foreground">
+                    {policy.description}
+                  </p>
+                  <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
+                    <div className="rounded-xl border p-2.5">
+                      <p className="text-muted-foreground">Default action</p>
+                      <p className="mt-1 font-medium">
+                        {policy.default_action ? actionLabel(policy.default_action) : 'None'}
+                      </p>
+                    </div>
+                    <div className="rounded-xl border p-2.5">
+                      <p className="text-muted-foreground">Approvals</p>
+                      <p className="mt-1 font-medium">{policy.required_approvals}</p>
+                    </div>
+                    <div className="col-span-2 rounded-xl border p-2.5">
+                      <p className="text-muted-foreground">Targets</p>
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {policy.allowed_target_types.map((target) => (
+                          <Badge key={target} variant="outline" className="text-[10px]">
+                            {target}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {!enforcementLoading && enforcementSnapshot.policies.length === 0 && (
+                <div className="col-span-full p-12 text-center text-sm text-muted-foreground">
+                  Active policy topilmadi.
                 </div>
               )}
             </CardContent>
