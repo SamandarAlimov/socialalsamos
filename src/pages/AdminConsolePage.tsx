@@ -837,7 +837,7 @@ export default function AdminConsolePage() {
         { title: 'Verifikatsiya', description: 'Tasdiqlash arizalarini hujjatlar bilan birga ko‘rib chiqish.', icon: BadgeCheck, path: '/admin/verification' },
         { title: 'Mini ilovalar', description: 'Publisherlar yuborgan mini ilovalarni moderatsiya qilish.', icon: Sparkles, path: '/mini-apps/moderation' },
         { title: 'Stiker paketlari', description: 'Stiker paketlari va ularning kontentini tekshirish.', icon: Sticker, path: '/stickers/moderation' },
-        { title: 'Admin huquqlari', description: 'Operatorlar va kirish rollarini boshqarish.', icon: ShieldCheck, path: '/admin/team' },
+        { title: 'Admin huquqlari', description: 'Operatorlar va kirish rollarini boshqarish.', icon: ShieldCheck, path: '/admin/access' },
       ].map((tool) => (
         <button key={tool.title} type="button" onClick={() => navigate(tool.path)} className="group rounded-2xl border border-border bg-card p-5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md">
           <div className="mb-8 flex items-start justify-between"><div className="flex h-10 w-10 items-center justify-center rounded-xl border border-border bg-muted/35"><tool.icon className="h-4 w-4" /></div><ArrowUpRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" /></div>
