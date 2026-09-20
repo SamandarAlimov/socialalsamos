@@ -14,6 +14,7 @@ import {
   Loader2,
   PlayCircle,
   RefreshCw,
+  Settings2,
   Scale,
   ShieldAlert,
   ShieldCheck,
@@ -56,11 +57,13 @@ import {
   reviewEnforcement,
   reviewModerationAppeal,
   updateModerationCase,
+  updateModerationPolicy,
   useEnforcementQueue,
   useTrustSafetyControl,
   type AdminCaseDetail,
   type EnforcementAction,
   type ModerationAppeal,
+  type ModerationPolicy,
   type ModerationCase,
   type TrustSafetyPriority,
   type TrustSafetyReport,
@@ -156,6 +159,7 @@ export default function AdminTrustSafetyPage() {
   const canExecute =
     hasPermission('admin.enforcement.execute') ||
     hasPermission('admin.trust_safety.manage');
+  const canManagePolicies = hasPermission('admin.policy.manage');
   const { snapshot, loading, error, refresh } = useTrustSafetyControl(isAdmin && canView);
   const {
     snapshot: enforcementSnapshot,
@@ -195,6 +199,15 @@ export default function AdminTrustSafetyPage() {
   const [enforcementTarget, setEnforcementTarget] = useState<EnforcementAction | null>(null);
   const [enforcementMode, setEnforcementMode] = useState<'approve' | 'reject' | 'execute'>('approve');
   const [enforcementNote, setEnforcementNote] = useState('');
+  const [policyTarget, setPolicyTarget] = useState<ModerationPolicy | null>(null);
+  const [policyForm, setPolicyForm] = useState({
+    description: '',
+    defaultAction: 'none',
+    requiredApprovals: '1',
+    defaultDurationHours: '',
+    active: true,
+    reason: '',
+  });
 
   const selectedSet = useMemo(() => new Set(selectedReportIds), [selectedReportIds]);
   const allVisibleSelected =
@@ -370,6 +383,43 @@ export default function AdminTrustSafetyPage() {
 
   const refreshAll = async () => {
     await Promise.all([refresh(), refreshEnforcement()]);
+  };
+
+  const openPolicy = (policy: ModerationPolicy) => {
+    setPolicyTarget(policy);
+    setPolicyForm({
+      description: policy.description,
+      defaultAction: policy.default_action || 'none',
+      requiredApprovals: String(policy.required_approvals),
+      defaultDurationHours: policy.default_duration_hours ? String(policy.default_duration_hours) : '',
+      active: policy.active,
+      reason: '',
+    });
+  };
+
+  const savePolicy = async () => {
+    if (!policyTarget || policyForm.reason.trim().length < 3) return;
+    setBusy(true);
+    try {
+      await updateModerationPolicy({
+        code: policyTarget.code,
+        description: policyForm.description,
+        defaultAction: policyForm.defaultAction === 'none' ? null : policyForm.defaultAction,
+        requiredApprovals: Math.max(0, Math.min(3, Number(policyForm.requiredApprovals || 0))),
+        defaultDurationHours: policyForm.defaultDurationHours
+          ? Number(policyForm.defaultDurationHours)
+          : null,
+        active: policyForm.active,
+        reason: policyForm.reason.trim(),
+      });
+      toast.success('Policy catalog yangilandi va auditga yozildi');
+      setPolicyTarget(null);
+      await refreshEnforcement();
+    } catch (caught: any) {
+      toast.error(caught?.message || 'Policy yangilanmadi');
+    } finally {
+      setBusy(false);
+    }
   };
 
   const runBulk = async (action: 'dismiss' | 'mark_in_review' | 'set_priority') => {
@@ -831,7 +881,21 @@ export default function AdminTrustSafetyPage() {
                       <code className="text-[11px] font-semibold text-muted-foreground">{policy.code}</code>
                       <p className="mt-1 font-semibold">{policy.title}</p>
                     </div>
-                    {severityBadge(policy.severity_default)}
+                    <div className="flex items-center gap-1">
+                      {severityBadge(policy.severity_default)}
+                      {canManagePolicies && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 rounded-lg"
+                          onClick={() => openPolicy(policy)}
+                          aria-label={policy.title + ' policy sozlamalari'}
+                        >
+                          <Settings2 className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
                   </div>
                   <p className="mt-3 min-h-10 text-sm leading-5 text-muted-foreground">
                     {policy.description}
@@ -975,6 +1039,105 @@ export default function AdminTrustSafetyPage() {
       </Dialog>
 
       <Dialog
+        open={Boolean(policyTarget)}
+        onOpenChange={(open) => {
+          if (!open) setPolicyTarget(null);
+        }}
+      >
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Policy governance</DialogTitle>
+            <DialogDescription>
+              {policyTarget?.code} · super admin o‘zgarishlari immutable auditga yoziladi.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Description</Label>
+              <Textarea
+                className="mt-2"
+                rows={4}
+                value={policyForm.description}
+                onChange={(event) => setPolicyForm((current) => ({ ...current, description: event.target.value }))}
+              />
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <Label>Default action</Label>
+                <Select
+                  value={policyForm.defaultAction}
+                  onValueChange={(value) => setPolicyForm((current) => ({ ...current, defaultAction: value }))}
+                >
+                  <SelectTrigger className="mt-2"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">None</SelectItem>
+                    <SelectItem value="warning">Warning</SelectItem>
+                    <SelectItem value="remove_content">Remove content</SelectItem>
+                    <SelectItem value="temporary_suspend">Temporary suspend</SelectItem>
+                    <SelectItem value="permanent_disable">Permanent disable</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Independent approvals</Label>
+                <Input
+                  className="mt-2"
+                  type="number"
+                  min={0}
+                  max={3}
+                  value={policyForm.requiredApprovals}
+                  onChange={(event) => setPolicyForm((current) => ({ ...current, requiredApprovals: event.target.value }))}
+                />
+              </div>
+              <div>
+                <Label>Default duration hours</Label>
+                <Input
+                  className="mt-2"
+                  type="number"
+                  min={1}
+                  value={policyForm.defaultDurationHours}
+                  onChange={(event) => setPolicyForm((current) => ({ ...current, defaultDurationHours: event.target.value }))}
+                  placeholder="Optional"
+                />
+              </div>
+              <div>
+                <Label>Catalog state</Label>
+                <Select
+                  value={policyForm.active ? 'active' : 'inactive'}
+                  onValueChange={(value) => setPolicyForm((current) => ({ ...current, active: value === 'active' }))}
+                >
+                  <SelectTrigger className="mt-2"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="inactive">Inactive</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-muted-foreground">
+              Destructive actionlar policy approval qiymati 0 bo‘lsa ham platform guard tomonidan kamida 1 independent approval bilan cheklanadi.
+            </div>
+            <div>
+              <Label>Change reason</Label>
+              <Textarea
+                className="mt-2"
+                rows={3}
+                value={policyForm.reason}
+                onChange={(event) => setPolicyForm((current) => ({ ...current, reason: event.target.value }))}
+                placeholder="Nega policy o‘zgartirilmoqda?"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPolicyTarget(null)}>Bekor qilish</Button>
+            <Button disabled={busy || policyForm.reason.trim().length < 3} onClick={() => void savePolicy()}>
+              {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Saqlash
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
         open={Boolean(enforcementTarget)}
         onOpenChange={(open) => {
           if (!open) {
@@ -1027,7 +1190,7 @@ export default function AdminTrustSafetyPage() {
                 <div className="flex gap-3 rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
                   <PlayCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
                   <p>
-                    Bu bosqich real canonical state’ni o‘zgartiradi. Remove content soft-hide/delete qiladi; suspend va disable account control gate orqali darhol bloklaydi.
+                    Bu bosqich real canonical state’ni o‘zgartiradi. Remove content soft-hide/delete qiladi; suspend va disable account control gate orqali bloklanadi.
                   </p>
                 </div>
               )}
