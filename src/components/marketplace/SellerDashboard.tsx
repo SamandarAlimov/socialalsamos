@@ -136,7 +136,7 @@ export function SellerDashboard({ onClose }: SellerDashboardProps) {
           <h2 className="text-2xl font-bold">Sotuvchi paneli</h2>
           <p className="text-sm text-muted-foreground">Savdo va buyurtmalarni boshqaring</p>
         </div>
-        <div className="grid w-full grid-cols-[minmax(0,1fr)_auto] gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center">
+        <div className="grid w-full grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center">
           <Button
             className="h-10 min-w-0 rounded-xl px-3 sm:h-9"
             onClick={() => setShowCreateProduct(true)}
@@ -158,7 +158,7 @@ export function SellerDashboard({ onClose }: SellerDashboardProps) {
             <RotateCcw className="h-4 w-4" />
           </Button>
           <Select value={dateRange.toString()} onValueChange={v => setDateRange(parseInt(v, 10))}>
-            <SelectTrigger className="col-span-2 h-10 w-full rounded-xl sm:col-auto sm:h-9 sm:w-[140px]">
+            <SelectTrigger className="col-span-3 h-10 w-full rounded-xl sm:col-auto sm:h-9 sm:w-[140px]">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -337,6 +337,11 @@ export function SellerDashboard({ onClose }: SellerDashboardProps) {
                                 Qaytarilgan
                               </Badge>
                             )}
+                            {(order.discount_amount ?? 0) > 0 && (
+                              <Badge variant="outline" className="border-emerald-500/20 bg-emerald-500/10 px-1.5 text-[10px] text-emerald-600">
+                                Promo {order.promo_code ? `· ${order.promo_code}` : ''}
+                              </Badge>
+                            )}
                           </div>
                           <p className="truncate text-xs text-muted-foreground">
                             {order.order_number || order.id.slice(0, 8).toUpperCase()} •{' '}
@@ -392,6 +397,22 @@ export function SellerDashboard({ onClose }: SellerDashboardProps) {
                               <p className="flex items-center gap-1.5">
                                 <Phone className="h-3.5 w-3.5 text-foreground" />
                                 {order.shipping_address.full_name} • {order.shipping_address.phone}
+                              </p>
+                            </div>
+                          )}
+
+                          {(order.discount_amount ?? 0) > 0 && (
+                            <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/[0.05] p-3">
+                              <div className="flex items-center justify-between gap-3 text-xs">
+                                <span className="font-bold text-emerald-700 dark:text-emerald-400">
+                                  Promokod{order.promo_code ? ` · ${order.promo_code}` : ''}
+                                </span>
+                                <span className="font-black tabular-nums text-emerald-700 dark:text-emerald-400">
+                                  − {formatPrice(order.discount_amount ?? 0, order.currency)}
+                                </span>
+                              </div>
+                              <p className="mt-1 text-[11px] text-muted-foreground">
+                                Buyurtma yakuniy summasi: {formatPrice(order.total, order.currency)}
                               </p>
                             </div>
                           )}
