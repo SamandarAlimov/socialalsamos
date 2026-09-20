@@ -13,7 +13,11 @@ export interface Order {
   payment_method?: string | null;
   currency?: string;
   subtotal: number;
+  original_subtotal?: number | null;
   shipping_cost: number;
+  discount_amount?: number;
+  promotion_id?: string | null;
+  promo_code?: string | null;
   total: number;
   created_at: string;
   cancel_reason?: string | null;
