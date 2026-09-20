@@ -38,7 +38,11 @@ export interface Order {
   delivered_at?: string | null;
   refunded_at?: string | null;
   subtotal: number;
+  original_subtotal?: number | null;
   shipping_cost: number;
+  discount_amount?: number;
+  promotion_id?: string | null;
+  promo_code?: string | null;
   total: number;
   currency: string;
   shipping_address: any;
