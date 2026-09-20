@@ -21,6 +21,7 @@ interface MobileMenuDrawerProps {
   onLogout: () => void;
   activePath: string;
   items: MobileMenuNavItem[];
+  marketplaceBadges?: { buyer: number; seller: number };
 }
 
 export function MobileMenuDrawer({
@@ -30,6 +31,7 @@ export function MobileMenuDrawer({
   onLogout,
   activePath,
   items,
+  marketplaceBadges,
 }: MobileMenuDrawerProps) {
   const { theme, setTheme } = useTheme();
   const [showSwitchAccount, setShowSwitchAccount] = useState(false);
@@ -183,10 +185,25 @@ export function MobileMenuDrawer({
                             <div className={cn("flex h-10 w-10 items-center justify-center rounded-lg", isActive ? "bg-background/40" : "bg-muted")}>
                               <item.icon className={cn("h-5 w-5", isActive ? "text-foreground" : "text-muted-foreground")} />
                             </div>
-                            <div className="flex-1 text-left">
-                              <span className="text-sm font-medium block">{item.label}</span>
+                            <div className="min-w-0 flex-1 text-left">
+                              <span className="block text-sm font-medium">{item.label}</span>
                             </div>
-                            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                            {item.path === '/marketplace' &&
+                              ((marketplaceBadges?.buyer ?? 0) > 0 || (marketplaceBadges?.seller ?? 0) > 0) && (
+                                <div className="flex shrink-0 items-center gap-1">
+                                  {(marketplaceBadges?.buyer ?? 0) > 0 && (
+                                    <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-sky-500 px-1.5 text-[9px] font-black text-white">
+                                      {(marketplaceBadges?.buyer ?? 0) > 99 ? '99+' : marketplaceBadges?.buyer}
+                                    </span>
+                                  )}
+                                  {(marketplaceBadges?.seller ?? 0) > 0 && (
+                                    <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-orange-500 px-1.5 text-[9px] font-black text-white">
+                                      {(marketplaceBadges?.seller ?? 0) > 99 ? '99+' : marketplaceBadges?.seller}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                            <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
                           </button>
                         </motion.div>
                       );
