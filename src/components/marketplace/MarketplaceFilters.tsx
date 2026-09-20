@@ -311,7 +311,7 @@ export function MarketplaceFilters({
   };
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex h-full min-h-0 w-full flex-1 flex-col">
       <div className="border-b border-border/45 bg-background/95 px-4 pb-4 pt-4 backdrop-blur-xl sm:px-5 sm:pt-5">
         <div className="flex items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2.5">
