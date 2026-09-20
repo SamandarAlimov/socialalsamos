@@ -53,7 +53,7 @@ async function captureSessionContext(sessionId: string) {
     const accessToken = data.session?.access_token;
     if (!accessToken) return;
 
-    const response = await fetch('/api/session-context', {
+    const response = await fetch('/api/traffic?action=session-context', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${accessToken}`,

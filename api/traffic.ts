@@ -27,7 +27,7 @@ type TrafficPoint = {
 function setCors(res: any) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 }
 
 function env(name: string): string {
@@ -601,6 +601,103 @@ async function parseBody(req: any): Promise<any> {
   return {};
 }
 
+function requestHeader(req: any, name: string): string {
+  const value = req.headers?.[name.toLowerCase()];
+  if (Array.isArray(value)) return String(value[0] || '');
+  return String(value || '');
+}
+
+function safeDecodeHeader(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+async function verifySupabaseSession(authorization: string): Promise<boolean> {
+  const supabaseUrl = (env('SUPABASE_URL') || env('VITE_SUPABASE_URL')).replace(/\/+$/, '');
+  const publicKey = env('SUPABASE_PUBLISHABLE_KEY') || env('VITE_SUPABASE_PUBLISHABLE_KEY');
+  if (!supabaseUrl || !publicKey) return false;
+
+  try {
+    const response = await fetch(supabaseUrl + '/auth/v1/user', {
+      headers: {
+        Authorization: authorization,
+        apikey: publicKey,
+      },
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+async function captureSessionContext(req: any, res: any) {
+  if (req.method !== 'POST') {
+    res.status(405).json({ error: 'POST required' });
+    return;
+  }
+
+  const supabaseUrl = (env('SUPABASE_URL') || env('VITE_SUPABASE_URL')).replace(/\/+$/, '');
+  const publicKey = env('SUPABASE_PUBLISHABLE_KEY') || env('VITE_SUPABASE_PUBLISHABLE_KEY');
+  if (!supabaseUrl || !publicKey) {
+    res.status(503).json({ error: 'Session context service is not configured' });
+    return;
+  }
+
+  const authorization = requestHeader(req, 'authorization');
+  if (!authorization.startsWith('Bearer ') || !(await verifySupabaseSession(authorization))) {
+    res.status(401).json({ error: 'Invalid or expired Alsamos session' });
+    return;
+  }
+
+  const body = await parseBody(req);
+  const sessionId = typeof body?.session_id === 'string' ? body.session_id.trim() : '';
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(sessionId)) {
+    res.status(400).json({ error: 'Valid session_id is required' });
+    return;
+  }
+
+  const rawCountry = requestHeader(req, 'x-vercel-ip-country').trim().toUpperCase();
+  const countryCode = /^[A-Z]{2}$/.test(rawCountry) ? rawCountry : null;
+  const rawCity = safeDecodeHeader(requestHeader(req, 'x-vercel-ip-city').trim()).slice(0, 120);
+  const city = rawCity || null;
+  const forwardedFor = requestHeader(req, 'x-forwarded-for');
+  const ip = forwardedFor.split(',')[0]?.trim().slice(0, 128) || null;
+
+  try {
+    const upstream = await fetch(supabaseUrl + '/rest/v1/rpc/capture_user_session_geo_v1', {
+      method: 'POST',
+      headers: {
+        Authorization: authorization,
+        apikey: publicKey,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        p_session_id: sessionId,
+        p_country_code: countryCode,
+        p_city: city,
+        p_ip: ip,
+      }),
+    });
+
+    const responseText = await upstream.text();
+    if (!upstream.ok) {
+      console.error('session context upstream failed', upstream.status, responseText.slice(0, 240));
+      res.status(upstream.status).json({ error: 'Unable to capture session context' });
+      return;
+    }
+
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('Content-Type', upstream.headers.get('content-type') || 'application/json');
+    res.status(200).send(responseText);
+  } catch (error) {
+    console.error('session context upstream unavailable', error);
+    res.status(502).json({ error: 'Session context upstream unavailable' });
+  }
+}
+
 export default async function handler(req: any, res: any) {
   setCors(res);
   if (req.method === 'OPTIONS') {
@@ -612,8 +709,14 @@ export default async function handler(req: any, res: any) {
     return;
   }
 
-  const config = providerConfig();
   const action = String(req.query?.action ?? 'status');
+
+  if (action === 'session-context') {
+    await captureSessionContext(req, res);
+    return;
+  }
+
+  const config = providerConfig();
 
   if (action === 'status') {
     res.setHeader(
