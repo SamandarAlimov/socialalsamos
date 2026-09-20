@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import type { MarketplaceNavSection } from '@/components/marketplace/MarketplaceBottomNav';
+import { useMarketplaceActivity } from '@/hooks/useMarketplaceActivity';
 
 interface MarketplaceSectionHeaderProps {
   activeSection: MarketplaceNavSection;
@@ -54,6 +55,7 @@ export function MarketplaceSectionHeader({
   onSearchEscape,
 }: MarketplaceSectionHeaderProps) {
   const navigate = useNavigate();
+  const { buyerUnreadCount, sellerUnreadCount } = useMarketplaceActivity();
   const handleFilterClick = onFilterClick ?? (() => navigate('/marketplace'));
 
   return (
@@ -193,6 +195,12 @@ export function MarketplaceSectionHeader({
             {desktopTabs.map(tab => {
               const Icon = tab.icon;
               const active = activeSection === tab.id;
+              const badge =
+                tab.id === 'orders'
+                  ? buyerUnreadCount
+                  : tab.id === 'selling'
+                    ? sellerUnreadCount
+                    : 0;
               return (
                 <button
                   key={tab.id}
@@ -207,6 +215,16 @@ export function MarketplaceSectionHeader({
                 >
                   <Icon className="h-3.5 w-3.5 shrink-0" />
                   <span className="truncate">{tab.label}</span>
+                  {badge > 0 && (
+                    <span
+                      className={cn(
+                        'flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[9px] font-black text-white',
+                        tab.id === 'selling' ? 'bg-orange-500' : 'bg-sky-500',
+                      )}
+                    >
+                      {badge > 99 ? '99+' : badge}
+                    </span>
+                  )}
                 </button>
               );
             })}
