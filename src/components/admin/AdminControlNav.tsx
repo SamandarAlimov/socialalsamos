@@ -1,4 +1,13 @@
-import { Gauge, LayoutDashboard, MapPinned, ShieldCheck, Users } from 'lucide-react';
+import {
+  Bell,
+  Gauge,
+  KeyRound,
+  LayoutDashboard,
+  MapPinned,
+  ServerCog,
+  ShieldCheck,
+  Users,
+} from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
 import { Button } from '@/components/ui/button';
@@ -7,9 +16,12 @@ import { cn } from '@/lib/utils';
 const items = [
   { href: '/admin', label: 'Boshqaruv', icon: LayoutDashboard },
   { href: '/admin/users', label: 'Users & Auth', icon: Users },
-  { href: '/admin/regions', label: 'Hududlar', icon: MapPinned },
+  { href: '/admin/trust-safety', label: 'Trust & Safety', icon: ShieldCheck },
   { href: '/admin/operations', label: 'Operations', icon: Gauge },
-  { href: '/admin/moderation', label: 'Moderatsiya', icon: ShieldCheck },
+  { href: '/admin/system', label: 'System', icon: ServerCog },
+  { href: '/admin/access', label: 'Access', icon: KeyRound },
+  { href: '/admin/notifications', label: 'Inbox', icon: Bell },
+  { href: '/admin/regions', label: 'Hududlar', icon: MapPinned },
 ] as const;
 
 export function AdminControlNav() {
