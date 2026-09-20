@@ -353,6 +353,31 @@ export function useSellerDashboard() {
     void fetchSellerData();
   }, [fetchSellerData]);
 
+  useEffect(() => {
+    if (!user) return;
+
+    const channel = supabase
+      .channel(`seller-dashboard-activity-${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'marketplace_notifications',
+          filter: `user_id=eq.${user.id}`,
+        },
+        payload => {
+          const role = (payload.new as any)?.data?.role;
+          if (role === 'seller') void fetchSellerData();
+        },
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [fetchSellerData, user]);
+
   /**
    * Order state changes are delegated to the guarded database state machine.
    */
