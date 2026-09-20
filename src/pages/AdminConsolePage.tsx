@@ -213,6 +213,7 @@ function MetricCard({
               size="icon"
               className="h-8 w-8 rounded-lg text-muted-foreground"
               onClick={(event) => event.stopPropagation()}
+              onKeyDown={(event) => event.stopPropagation()}
               aria-label={label + ' — qo‘shimcha amallar'}
             >
               <MoreHorizontal className="h-4 w-4" />
