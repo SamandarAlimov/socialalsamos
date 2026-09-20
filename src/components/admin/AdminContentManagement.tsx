@@ -330,9 +330,9 @@ export function AdminContentManagement() {
     const nextValue = !Boolean(target.is_verified);
 
     try {
-      const { error } = await (supabase as any).rpc('admin_update_user_profile_v3', {
+      const { error } = await (supabase as any).rpc('admin_set_user_verification_v1', {
         p_user_id: target.id,
-        p_patch: { is_verified: nextValue },
+        p_verified: nextValue,
         p_reason: nextValue
           ? 'Admin content management: verification granted'
           : 'Admin content management: verification removed',
