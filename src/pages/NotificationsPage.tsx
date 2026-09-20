@@ -28,6 +28,8 @@ import {
   Reply,
   Settings,
   Sparkles,
+  Store,
+  ShoppingBag,
   Trash2,
   UserPlus,
   Users,
@@ -60,6 +62,10 @@ import {
   notificationPreviewText,
   notificationTarget,
 } from '@/lib/notificationSemantics';
+import {
+  useMarketplaceActivity,
+  type MarketplaceActivityNotification,
+} from '@/hooks/useMarketplaceActivity';
 
 type NotificationFilter =
   | 'all'
@@ -699,6 +705,96 @@ function NotificationSkeleton() {
   );
 }
 
+function MarketplaceActivitySection({
+  notifications,
+  onOpen,
+}: {
+  notifications: MarketplaceActivityNotification[];
+  onOpen: (notification: MarketplaceActivityNotification) => void;
+}) {
+  if (notifications.length === 0) return null;
+
+  const sorted = [...notifications].sort(
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+  );
+
+  return (
+    <section className="mb-5" aria-label="Marketplace faolligi">
+      <div className="mb-2 flex items-center justify-between px-1">
+        <div className="flex items-center gap-2">
+          <ShoppingBag className="h-4 w-4 text-muted-foreground" />
+          <h2 className="text-[11px] font-bold uppercase tracking-[0.09em] text-muted-foreground">
+            Marketplace
+          </h2>
+        </div>
+        <span className="text-[11px] tabular-nums text-muted-foreground">{notifications.length}</span>
+      </div>
+
+      <div className="space-y-2">
+        {sorted.map((notification, index) => {
+          const role = notification.data?.role === 'seller' ? 'seller' : 'buyer';
+          const productTitle =
+            typeof notification.data?.product_title === 'string'
+              ? notification.data.product_title
+              : null;
+          const orderNumber =
+            typeof notification.data?.order_number === 'string'
+              ? notification.data.order_number
+              : null;
+          const Icon = role === 'seller' ? Store : ShoppingBag;
+
+          return (
+            <motion.button
+              key={notification.id}
+              type="button"
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.18, delay: Math.min(index, 6) * 0.025 }}
+              onClick={() => onOpen(notification)}
+              className="group flex w-full items-center gap-3 rounded-[20px] border border-border bg-card px-3.5 py-3.5 text-left shadow-sm transition hover:border-foreground/15 hover:shadow-md md:px-4"
+            >
+              <span
+                className={cn(
+                  'flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-white',
+                  role === 'seller' ? 'bg-orange-500' : 'bg-sky-500',
+                )}
+              >
+                <Icon className="h-5 w-5" />
+              </span>
+
+              <span className="min-w-0 flex-1">
+                <span className="flex flex-wrap items-center gap-2">
+                  <span className="text-sm font-bold text-foreground">{notification.title}</span>
+                  <span
+                    className={cn(
+                      'rounded-full px-2 py-0.5 text-[10px] font-bold',
+                      role === 'seller'
+                        ? 'bg-orange-500/10 text-orange-600'
+                        : 'bg-sky-500/10 text-sky-600',
+                    )}
+                  >
+                    {role === 'seller' ? 'Sotuv' : 'Xarid'}
+                  </span>
+                </span>
+                <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                  {productTitle || notification.body || (orderNumber ? `Buyurtma #${orderNumber}` : 'Marketplace yangiligi')}
+                </span>
+                {productTitle && notification.body && notification.body !== productTitle && (
+                  <span className="mt-1 block line-clamp-1 text-[11px] text-muted-foreground/80">
+                    {notification.body}
+                  </span>
+                )}
+              </span>
+
+              <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground transition group-hover:translate-x-0.5" />
+            </motion.button>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 function PushNotificationBanner() {
   const { permission, supported, requestPermission } = useNotificationPermission();
   const navigate = useNavigate();
@@ -755,6 +851,20 @@ export default function NotificationsPage() {
     respondToCollaboration,
     refetch,
   } = useNotifications();
+  const {
+    buyerNotifications,
+    sellerNotifications,
+    totalUnreadCount: marketplaceUnreadCount,
+    markBuyerRead,
+    markSellerRead,
+    markNotificationRead: markMarketplaceNotificationRead,
+  } = useMarketplaceActivity();
+
+  const marketplaceNotifications = useMemo(
+    () => [...buyerNotifications, ...sellerNotifications],
+    [buyerNotifications, sellerNotifications],
+  );
+  const totalUnreadCount = unreadCount + marketplaceUnreadCount;
 
   const requestedFilter = searchParams.get('filter') as NotificationFilter | null;
   const initialFilter = FILTERS.some((item) => item.id === requestedFilter)
@@ -907,14 +1017,24 @@ export default function NotificationsPage() {
     if (markingAll) return;
     setMarkingAll(true);
     try {
-      await markAllAsRead();
+      await Promise.all([
+        markAllAsRead(),
+        markBuyerRead(),
+        markSellerRead(),
+      ]);
       toast.success('Barcha bildirishnomalar o‘qildi');
     } catch {
       toast.error('Bildirishnomalarni belgilab bo‘lmadi');
     } finally {
       setMarkingAll(false);
     }
-  }, [markAllAsRead, markingAll]);
+  }, [markAllAsRead, markBuyerRead, markSellerRead, markingAll]);
+
+  const handleMarketplaceOpen = useCallback(async (notification: MarketplaceActivityNotification) => {
+    await markMarketplaceNotificationRead(notification.id);
+    if (notification.action_url) navigate(notification.action_url);
+    else navigate('/marketplace');
+  }, [markMarketplaceNotificationRead, navigate]);
 
   let itemIndex = 0;
   const takeIndex = (groups: GroupedNotification[]) => {
@@ -931,16 +1051,16 @@ export default function NotificationsPage() {
             <div>
               <div className="flex items-center gap-2.5">
                 <h1 className="text-xl font-bold tracking-tight md:text-2xl">Bildirishnomalar</h1>
-                {unreadCount > 0 && (
+                {totalUnreadCount > 0 && (
                   <Badge className="rounded-full px-2.5 py-0.5 text-xs">
-                    {unreadCount > 99 ? '99+' : unreadCount}
+                    {totalUnreadCount > 99 ? '99+' : totalUnreadCount}
                   </Badge>
                 )}
               </div>
             </div>
 
             <div className="flex items-center gap-1">
-              {unreadCount > 0 && (
+              {totalUnreadCount > 0 && (
                 <Button
                   variant="ghost"
                   size="sm"
@@ -995,6 +1115,13 @@ export default function NotificationsPage() {
           <main className="min-w-0">
             <PushNotificationBanner />
 
+            {filter === 'all' && (
+              <MarketplaceActivitySection
+                notifications={marketplaceNotifications}
+                onOpen={notification => void handleMarketplaceOpen(notification)}
+              />
+            )}
+
             {loading ? (
               <div className="space-y-2">
                 {Array.from({ length: 6 }).map((_, index) => <NotificationSkeleton key={index} />)}
@@ -1013,7 +1140,7 @@ export default function NotificationsPage() {
                   Qayta urinish
                 </Button>
               </div>
-            ) : filteredNotifications.length === 0 ? (
+            ) : filteredNotifications.length === 0 && !(filter === 'all' && marketplaceNotifications.length > 0) ? (
               <div className="rounded-3xl border border-border bg-card p-10 text-center shadow-sm">
                 <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-muted">
                   <Inbox className="h-7 w-7 text-muted-foreground" />
@@ -1038,11 +1165,15 @@ export default function NotificationsPage() {
                   </div>
                 )}
 
+                {filteredNotifications.length > 0 && (
+                  <>
                 <NotificationGroup title="Bugun" groups={groupedNotifications.today} onMarkAsRead={markAsRead} onDelete={deleteNotification} onRespondCollaboration={respondToCollaboration} onBeforeOpen={captureReturnState} returnTo={returnTo} startIndex={takeIndex(groupedNotifications.today)} />
                 <NotificationGroup title="Kecha" groups={groupedNotifications.yesterday} onMarkAsRead={markAsRead} onDelete={deleteNotification} onRespondCollaboration={respondToCollaboration} onBeforeOpen={captureReturnState} returnTo={returnTo} startIndex={takeIndex(groupedNotifications.yesterday)} />
                 <NotificationGroup title="Shu hafta" groups={groupedNotifications.thisWeek} onMarkAsRead={markAsRead} onDelete={deleteNotification} onRespondCollaboration={respondToCollaboration} onBeforeOpen={captureReturnState} returnTo={returnTo} startIndex={takeIndex(groupedNotifications.thisWeek)} />
                 <NotificationGroup title="Shu oy" groups={groupedNotifications.thisMonth} onMarkAsRead={markAsRead} onDelete={deleteNotification} onRespondCollaboration={respondToCollaboration} onBeforeOpen={captureReturnState} returnTo={returnTo} startIndex={takeIndex(groupedNotifications.thisMonth)} />
                 <NotificationGroup title="Avvalroq" groups={groupedNotifications.older} onMarkAsRead={markAsRead} onDelete={deleteNotification} onRespondCollaboration={respondToCollaboration} onBeforeOpen={captureReturnState} returnTo={returnTo} startIndex={takeIndex(groupedNotifications.older)} />
+                  </>
+                )}
 
                 {hasMore && (
                   <div className="flex justify-center pb-8 pt-2">
@@ -1065,7 +1196,7 @@ export default function NotificationsPage() {
                 </div>
                 <div className="mt-4 grid grid-cols-3 gap-2">
                   <div className="rounded-2xl bg-muted/55 p-3 text-center">
-                    <p className="text-lg font-bold tabular-nums">{unreadCount}</p>
+                    <p className="text-lg font-bold tabular-nums">{totalUnreadCount}</p>
                     <p className="mt-0.5 text-[10px] text-muted-foreground">Yangi</p>
                   </div>
                   <div className="rounded-2xl bg-muted/55 p-3 text-center">
@@ -1077,11 +1208,11 @@ export default function NotificationsPage() {
                     <p className="mt-0.5 text-[10px] text-muted-foreground">Taklif</p>
                   </div>
                 </div>
-                {actionableUnread > 0 && (
+                {(actionableUnread + sellerNotifications.length) > 0 && (
                   <div className="mt-3 flex items-start gap-2 rounded-xl border border-border bg-background px-3 py-2.5">
                     <Bell className="mt-0.5 h-4 w-4 text-foreground" />
                     <p className="text-xs leading-relaxed text-muted-foreground">
-                      <strong className="text-foreground">{actionableUnread} ta</strong> bildirishnoma sizning harakatingizni kutmoqda.
+                      <strong className="text-foreground">{actionableUnread + sellerNotifications.length} ta</strong> bildirishnoma sizning harakatingizni kutmoqda.
                     </p>
                   </div>
                 )}
