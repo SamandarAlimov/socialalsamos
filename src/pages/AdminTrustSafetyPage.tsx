@@ -44,8 +44,10 @@ import {
   bulkTriageReports,
   createCaseFromReport,
   decideModerationCase,
+  reviewModerationAppeal,
   updateModerationCase,
   useTrustSafetyControl,
+  type ModerationAppeal,
   type ModerationCase,
   type TrustSafetyPriority,
   type TrustSafetyReport,
@@ -137,6 +139,11 @@ export default function AdminTrustSafetyPage() {
     rationale: '',
     actionType: 'warning',
     actionHours: '',
+  });
+  const [appealTarget, setAppealTarget] = useState<ModerationAppeal | null>(null);
+  const [appealForm, setAppealForm] = useState({
+    decision: 'upheld' as 'upheld' | 'overturned' | 'modified',
+    note: '',
   });
 
   const selectedSet = useMemo(() => new Set(selectedReportIds), [selectedReportIds]);
@@ -232,6 +239,26 @@ export default function AdminTrustSafetyPage() {
       await refresh();
     } catch (caught: any) {
       toast.error(caught?.message || 'Qarorni saqlab bo‘lmadi');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const reviewAppeal = async () => {
+    if (!appealTarget || appealForm.note.trim().length < 3) return;
+    setBusy(true);
+    try {
+      await reviewModerationAppeal({
+        appealId: appealTarget.id,
+        decision: appealForm.decision,
+        note: appealForm.note.trim(),
+      });
+      toast.success('Appeal qarori audit bilan saqlandi');
+      setAppealTarget(null);
+      setAppealForm({ decision: 'upheld', note: '' });
+      await refresh();
+    } catch (caught: any) {
+      toast.error(caught?.message || 'Appealni ko‘rib chiqib bo‘lmadi');
     } finally {
       setBusy(false);
     }
@@ -504,7 +531,7 @@ export default function AdminTrustSafetyPage() {
               ) : (
                 <div className="divide-y">
                   {snapshot.appeals.map((appeal) => (
-                    <div key={appeal.id} className="grid gap-3 p-4 xl:grid-cols-[minmax(0,1fr)_180px_180px]">
+                    <div key={appeal.id} className="grid gap-3 p-4 xl:grid-cols-[minmax(0,1fr)_180px_180px_auto] xl:items-center">
                       <div>
                         <div className="flex flex-wrap items-center gap-2">
                           <p className="font-semibold">{appeal.action_type}</p>
@@ -522,6 +549,18 @@ export default function AdminTrustSafetyPage() {
                         <p className="text-xs text-muted-foreground">Enforcement</p>
                         <p className="mt-1 text-sm">{appeal.enforcement_status}</p>
                       </div>
+                      {canManage && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setAppealTarget(appeal);
+                            setAppealForm({ decision: 'upheld', note: '' });
+                          }}
+                        >
+                          Review
+                        </Button>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -530,6 +569,60 @@ export default function AdminTrustSafetyPage() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <Dialog open={Boolean(appealTarget)} onOpenChange={(open) => !open && setAppealTarget(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Appeal review</DialogTitle>
+            <DialogDescription>
+              Qaror enforcement ledger va immutable auditga yoziladi. Overturn qilingan action reverted holatiga o‘tadi.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Decision</Label>
+              <Select
+                value={appealForm.decision}
+                onValueChange={(value) =>
+                  setAppealForm((current) => ({
+                    ...current,
+                    decision: value as 'upheld' | 'overturned' | 'modified',
+                  }))
+                }
+              >
+                <SelectTrigger className="mt-2"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="upheld">Upheld</SelectItem>
+                  <SelectItem value="overturned">Overturned</SelectItem>
+                  <SelectItem value="modified">Modified</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Decision note</Label>
+              <Textarea
+                className="mt-2"
+                rows={4}
+                value={appealForm.note}
+                onChange={(event) => setAppealForm((current) => ({ ...current, note: event.target.value }))}
+                placeholder="Dalil, policy va qaror sababini yozing."
+              />
+            </div>
+            {appealForm.decision === 'modified' && (
+              <div className="flex gap-3 rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                <p>Modified qaror executionni avtomatik o‘zgartirmaydi; action manual modification flag bilan belgilanadi.</p>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAppealTarget(null)}>Bekor qilish</Button>
+            <Button disabled={busy || appealForm.note.trim().length < 3} onClick={() => void reviewAppeal()}>
+              {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Qarorni saqlash
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={Boolean(caseTarget)} onOpenChange={(open) => !open && setCaseTarget(null)}>
         <DialogContent className="max-w-2xl">
