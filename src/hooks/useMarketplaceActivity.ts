@@ -144,6 +144,31 @@ export function useMarketplaceActivity(options: MarketplaceActivityOptions = {})
     [notifications],
   );
 
+  const markNotificationRead = useCallback(
+    async (notificationId: string) => {
+      if (!user) return;
+
+      const target = notifications.find(notification => notification.id === notificationId);
+      if (!target) return;
+
+      setNotifications(previous =>
+        previous.filter(notification => notification.id !== notificationId),
+      );
+
+      const { error } = await db
+        .from('marketplace_notifications')
+        .update({ is_read: true, read_at: new Date().toISOString() })
+        .eq('id', notificationId)
+        .eq('user_id', user.id);
+
+      if (error) {
+        console.warn('Marketplace notification could not be marked read:', error);
+        void refresh();
+      }
+    },
+    [notifications, refresh, user],
+  );
+
   const markRoleRead = useCallback(
     async (role: MarketplaceActivityRole) => {
       if (!user) return;
@@ -192,5 +217,6 @@ export function useMarketplaceActivity(options: MarketplaceActivityOptions = {})
     refresh,
     markBuyerRead,
     markSellerRead,
+    markNotificationRead,
   };
 }
