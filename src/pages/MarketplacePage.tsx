@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   AlertTriangle,
+  ArrowLeft,
   BadgePercent,
   ChevronRight,
   ClipboardList,
@@ -56,7 +57,8 @@ import {
 } from '@/components/marketplace/MarketplaceFilters';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
+import { Drawer, DrawerContent, DrawerTitle } from '@/components/ui/drawer';
 import { cn } from '@/lib/utils';
 import { conditionLabel, formatPrice } from '@/lib/marketplace';
 import { marketplaceUz } from '@/i18n/marketplace';
@@ -393,6 +395,38 @@ export default function MarketplacePage() {
     { id: 'orders' as const, label: 'Buyurtmalar', icon: ClipboardList },
   ];
 
+  const exitMarketplace = useCallback(() => {
+    triggerHaptic('light');
+    navigate('/');
+  }, [navigate, triggerHaptic]);
+
+  const filterPanel = (
+    <MarketplaceFilters
+      categories={categories}
+      selectedCategory={selectedCategory}
+      onCategoryChange={handleCategorySelect}
+      sortBy={sortBy}
+      onSortChange={setSortBy}
+      priceRange={priceRange}
+      sliderMax={sliderMax}
+      onPriceRangeChange={setPriceRange}
+      conditionFilter={conditionFilter}
+      availableConditions={availableConditions}
+      onConditionChange={setConditionFilter}
+      minDiscount={minDiscount}
+      onMinDiscountChange={setMinDiscount}
+      inStockOnly={inStockOnly}
+      onInStockOnlyChange={setInStockOnly}
+      deliveryMode={deliveryMode}
+      onDeliveryModeChange={setDeliveryMode}
+      activeFilterCount={activeFilterCount}
+      resultCount={sortedProducts.length}
+      onReset={resetFilters}
+      onApply={() => setShowFilters(false)}
+      onClose={() => setShowFilters(false)}
+    />
+  );
+
   const browseContent = (
     <div className="min-w-0 space-y-6">
       {nearCenter && (
@@ -697,6 +731,16 @@ export default function MarketplacePage() {
               </div>
             </div>
 
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-11 w-11 shrink-0 rounded-2xl border border-border/50 bg-background shadow-sm md:hidden"
+              onClick={exitMarketplace}
+              aria-label="Marketplace’dan chiqish"
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+
             <div className="relative min-w-0 flex-1 md:ml-1 xl:ml-3">
               <Search className="pointer-events-none absolute left-3.5 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
@@ -843,11 +887,10 @@ export default function MarketplacePage() {
             </Button>
 
             <Button
-              className="h-11 shrink-0 rounded-2xl px-3 text-xs font-extrabold md:px-4"
+              className="hidden h-11 shrink-0 rounded-2xl px-4 text-xs font-extrabold md:inline-flex"
               onClick={() => selectTab('selling')}
             >
-              <Plus className="h-4 w-4 min-[390px]:mr-1.5" />
-              <span className="hidden min-[390px]:inline">Sotish</span>
+              Sotish
             </Button>
           </div>
 
@@ -1106,42 +1149,27 @@ export default function MarketplacePage() {
         onProductSelect={handleProductSelect}
       />
 
-      <Sheet open={showFilters} onOpenChange={setShowFilters}>
-        <SheetContent
-          side={isMobile ? 'bottom' : 'right'}
-          className={cn(
-            'flex overflow-hidden p-0',
-            isMobile
-              ? 'h-[92dvh] max-h-[92dvh] rounded-t-[30px] border-x border-t border-border/60'
-              : 'h-full w-[460px] border-l border-border/60 sm:max-w-[460px]',
-          )}
-        >
-          <SheetTitle className="sr-only">Filtr va saralash</SheetTitle>
-          <MarketplaceFilters
-            categories={categories}
-            selectedCategory={selectedCategory}
-            onCategoryChange={handleCategorySelect}
-            sortBy={sortBy}
-            onSortChange={setSortBy}
-            priceRange={priceRange}
-            sliderMax={sliderMax}
-            onPriceRangeChange={setPriceRange}
-            conditionFilter={conditionFilter}
-            availableConditions={availableConditions}
-            onConditionChange={setConditionFilter}
-            minDiscount={minDiscount}
-            onMinDiscountChange={setMinDiscount}
-            inStockOnly={inStockOnly}
-            onInStockOnlyChange={setInStockOnly}
-            deliveryMode={deliveryMode}
-            onDeliveryModeChange={setDeliveryMode}
-            activeFilterCount={activeFilterCount}
-            resultCount={sortedProducts.length}
-            onReset={resetFilters}
-            onApply={() => setShowFilters(false)}
-          />
-        </SheetContent>
-      </Sheet>
+      {isMobile ? (
+        <Drawer open={showFilters} onOpenChange={setShowFilters}>
+          <DrawerContent
+            hideHandle
+            className="h-[94dvh] max-h-[94dvh] overflow-hidden rounded-t-[30px] border-x border-t border-border/60 bg-background p-0 shadow-[0_-24px_70px_rgba(0,0,0,0.18)]"
+          >
+            <DrawerTitle className="sr-only">Filtr va saralash</DrawerTitle>
+            {filterPanel}
+          </DrawerContent>
+        </Drawer>
+      ) : (
+        <Dialog open={showFilters} onOpenChange={setShowFilters}>
+          <DialogContent
+            hideDefaultClose
+            className="h-[min(86dvh,860px)] w-[min(94vw,1040px)] max-w-[1040px] overflow-hidden rounded-[30px] border border-border/60 bg-background p-0 shadow-[0_32px_100px_rgba(0,0,0,0.28)]"
+          >
+            <DialogTitle className="sr-only">Filtr va saralash</DialogTitle>
+            {filterPanel}
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 
