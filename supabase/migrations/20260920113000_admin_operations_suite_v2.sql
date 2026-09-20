@@ -28,12 +28,9 @@ set category = excluded.category,
 insert into public.admin_role_permissions(role_key, permission_key)
 values
   ('support', 'admin.users.view'),
-  ('support', 'admin.users.edit'),
-  ('support', 'admin.users.email.manage'),
   ('support', 'admin.notes.view'),
   ('support', 'admin.notes.manage'),
   ('trust_safety', 'admin.users.view'),
-  ('trust_safety', 'admin.users.edit'),
   ('trust_safety', 'admin.users.suspend'),
   ('trust_safety', 'admin.audit.view'),
   ('trust_safety', 'admin.operations.view'),
