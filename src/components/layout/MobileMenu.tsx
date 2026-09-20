@@ -15,6 +15,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { MobileMenuDrawer, type MobileMenuNavItem } from "./MobileMenuDrawer";
+import { useMarketplaceActivity } from '@/hooks/useMarketplaceActivity';
 
 const menuItems: MobileMenuNavItem[] = [
   { icon: Compass, label: 'Kashf etish', path: '/discover' },
@@ -34,6 +35,7 @@ export function MobileMenu({ className }: MobileMenuProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const { logout } = useAuth();
+  const { buyerUnreadCount, sellerUnreadCount } = useMarketplaceActivity();
   const [isOpen, setIsOpen] = useState(false);
 
   const handleNavigate = (path: string) => {
@@ -77,6 +79,10 @@ export function MobileMenu({ className }: MobileMenuProps) {
             }}
             activePath={activePath}
             items={menuItems}
+            marketplaceBadges={{
+              buyer: buyerUnreadCount,
+              seller: sellerUnreadCount,
+            }}
           />,
           document.body
         )}
