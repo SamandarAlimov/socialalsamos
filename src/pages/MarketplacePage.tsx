@@ -1163,7 +1163,7 @@ export default function MarketplacePage() {
         <Dialog open={showFilters} onOpenChange={setShowFilters}>
           <DialogContent
             hideDefaultClose
-            className="h-[min(86dvh,860px)] w-[min(94vw,1040px)] max-w-[1040px] overflow-hidden rounded-[30px] border border-border/60 bg-background p-0 shadow-[0_32px_100px_rgba(0,0,0,0.28)]"
+            className="!flex !gap-0 h-[min(86dvh,860px)] w-[min(94vw,1040px)] max-w-[1040px] overflow-hidden rounded-[30px] border border-border/60 bg-background p-0 shadow-[0_32px_100px_rgba(0,0,0,0.28)]"
           >
             <DialogTitle className="sr-only">Filtr va saralash</DialogTitle>
             {filterPanel}
