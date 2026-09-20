@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
+import { useMarketplaceActivity } from '@/hooks/useMarketplaceActivity';
 
 export type MarketplaceNavSection =
   | 'browse'
@@ -35,6 +36,7 @@ export function MarketplaceBottomNav({
   onOrders,
 }: MarketplaceBottomNavProps) {
   const navigate = useNavigate();
+  const { buyerUnreadCount, sellerUnreadCount } = useMarketplaceActivity();
 
   const items = [
     {
@@ -70,7 +72,7 @@ export function MarketplaceBottomNav({
       label: 'Buyurtmalar',
       icon: ClipboardList,
       onClick: () => (onOrders ? onOrders() : navigate('/marketplace?tab=orders')),
-      badge: 0,
+      badge: buyerUnreadCount,
     },
   ];
 
@@ -88,7 +90,7 @@ export function MarketplaceBottomNav({
 
       <button
         type="button"
-        aria-label="Sotuvchi markazi"
+        aria-label={sellerUnreadCount > 0 ? `Sotuvchi markazi, ${sellerUnreadCount} ta yangi` : 'Sotuvchi markazi'}
         aria-current={activeTab === 'selling' ? 'page' : undefined}
         onClick={() => navigate('/marketplace?tab=selling')}
         className={cn(
@@ -100,6 +102,11 @@ export function MarketplaceBottomNav({
       >
         <Plus className="h-4 w-4" strokeWidth={2.3} />
         Sotish
+        {sellerUnreadCount > 0 && (
+          <span className="ml-0.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-orange-500 px-1.5 text-[9px] font-black text-white shadow-sm ring-2 ring-background">
+            {sellerUnreadCount > 99 ? '99+' : sellerUnreadCount}
+          </span>
+        )}
       </button>
 
       <nav
