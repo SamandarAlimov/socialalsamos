@@ -411,24 +411,52 @@ export default function AdminTrustSafetyPage() {
         </Card>
       )}
 
+      {enforcementError && (
+        <Card className="border-destructive/30 bg-destructive/5">
+          <CardContent className="flex items-center gap-3 p-4 text-sm">
+            <AlertTriangle className="h-5 w-5 shrink-0 text-destructive" />
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold">Enforcement queue yuklanmadi</p>
+              <p className="truncate text-muted-foreground">{enforcementError}</p>
+            </div>
+            <Button variant="outline" size="sm" onClick={() => void refreshEnforcement()}>
+              Qayta urinish
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
         <Metric title="Open reports" value={snapshot.counts.reports_open} detail="triage kutmoqda" icon={FileWarning} attention />
         <Metric title="In review" value={snapshot.counts.reports_in_review} detail="case / operator ishida" icon={UserRoundCheck} />
         <Metric title="Open cases" value={snapshot.counts.cases_open} detail="faol investigation" icon={ClipboardList} attention />
         <Metric title="Overdue" value={snapshot.counts.cases_overdue} detail="SLA muddatidan o‘tgan" icon={Clock3} attention />
         <Metric title="Appeals" value={snapshot.counts.appeals_open} detail="ko‘rib chiqish navbati" icon={Scale} attention />
-        <Metric title="Enforcement" value={snapshot.counts.pending_enforcement} detail="pending execution" icon={Gavel} attention />
+        <Metric
+          title="Enforcement"
+          value={enforcementSnapshot.actions.length}
+          detail="approval / execution navbati"
+          icon={Gavel}
+          attention
+        />
       </div>
 
       <Tabs value={tab} onValueChange={setTab} className="space-y-4">
         <div className="flex flex-col gap-3 rounded-2xl border bg-card p-2 shadow-sm lg:flex-row lg:items-center lg:justify-between">
-          <TabsList className="grid h-auto w-full grid-cols-3 gap-1 bg-muted/50 p-1 lg:w-auto lg:min-w-[560px]">
+          <TabsList className="grid h-auto w-full grid-cols-5 gap-1 bg-muted/50 p-1 lg:w-auto lg:min-w-[780px]">
             <TabsTrigger value="reports" className="rounded-lg py-2">Reports</TabsTrigger>
             <TabsTrigger value="cases" className="rounded-lg py-2">Cases</TabsTrigger>
+            <TabsTrigger value="enforcement" className="rounded-lg py-2">Enforcement</TabsTrigger>
             <TabsTrigger value="appeals" className="rounded-lg py-2">Appeals</TabsTrigger>
+            <TabsTrigger value="policies" className="rounded-lg py-2">Policies</TabsTrigger>
           </TabsList>
-          <Button variant="outline" size="sm" disabled={loading} onClick={() => void refresh()}>
-            <RefreshCw className={cn('mr-2 h-4 w-4', loading && 'animate-spin')} />
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={loading || enforcementLoading}
+            onClick={() => void refreshAll()}
+          >
+            <RefreshCw className={cn('mr-2 h-4 w-4', (loading || enforcementLoading) && 'animate-spin')} />
             Yangilash
           </Button>
         </div>
