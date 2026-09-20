@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import {
   Activity,
@@ -6,6 +6,8 @@ import {
   Binary,
   Clock3,
   Database,
+  Download,
+  Fingerprint,
   HardDrive,
   Laptop,
   Loader2,
@@ -40,12 +42,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { useAdminAccess } from '@/hooks/useAdminAccess';
 import {
+  exportAdminAudit,
   fetchAuditEventDetail,
+  fetchSecurityPosture,
   fetchUserSecuritySnapshot,
   revokeDeviceTrust,
   useSystemControl,
   type AdminAuditEvent,
   type AdminDevice,
+  type SecurityPosture,
   type UserSecuritySnapshot,
 } from '@/hooks/useAdminControlPlane';
 import { supabase } from '@/integrations/supabase/client';
@@ -130,6 +135,48 @@ export default function AdminSystemPage() {
   const [deviceTarget, setDeviceTarget] = useState<AdminDevice | null>(null);
   const [deviceReason, setDeviceReason] = useState('');
   const [deviceSaving, setDeviceSaving] = useState(false);
+  const [posture, setPosture] = useState<SecurityPosture | null>(null);
+  const [postureLoading, setPostureLoading] = useState(false);
+  const [auditExporting, setAuditExporting] = useState(false);
+
+  const loadPosture = async () => {
+    if (!isAdmin || !canView) return;
+    setPostureLoading(true);
+    try {
+      setPosture(await fetchSecurityPosture());
+    } catch (caught: any) {
+      toast.error(caught?.message || 'Security posture yuklanmadi');
+    } finally {
+      setPostureLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadPosture();
+    // Permissions are stable for the mounted admin shell; refresh is also available manually.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAdmin, canView]);
+
+  const downloadAudit = async () => {
+    setAuditExporting(true);
+    try {
+      const payload = await exportAdminAudit(5000);
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `alsamos-admin-audit-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+      toast.success('Audit export tayyorlandi');
+    } catch (caught: any) {
+      toast.error(caught?.message || 'Audit export yaratilmadi');
+    } finally {
+      setAuditExporting(false);
+    }
+  };
 
   if (accessLoading) {
     return <div className="flex min-h-[60vh] items-center justify-center"><Loader2 className="h-7 w-7 animate-spin" /></div>;
@@ -259,13 +306,40 @@ export default function AdminSystemPage() {
           </TabsList>
           <div className="flex items-center justify-end gap-2">
             <span className="hidden text-xs text-muted-foreground xl:inline">Snapshot: {dt(snapshot.generated_at)}</span>
-            <Button variant="outline" size="sm" disabled={loading} onClick={() => void refresh()}>
-              <RefreshCw className={cn('mr-2 h-4 w-4', loading && 'animate-spin')} />Yangilash
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={loading || postureLoading}
+              onClick={() => void Promise.all([refresh(), loadPosture()])}
+            >
+              <RefreshCw className={cn('mr-2 h-4 w-4', (loading || postureLoading) && 'animate-spin')} />Yangilash
             </Button>
           </div>
         </div>
 
-        <TabsContent value="health" className="m-0">
+        <TabsContent value="health" className="m-0 space-y-4">
+          <Card className="border-primary/20 bg-primary/[0.02] shadow-sm">
+            <CardHeader>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2 text-base"><Fingerprint className="h-4 w-4" />Security advisor</CardTitle>
+                  <p className="mt-1 text-sm text-muted-foreground">Live database governance, immutable audit va geo-resolution posture.</p>
+                </div>
+                <Button variant="outline" size="sm" disabled={postureLoading} onClick={() => void loadPosture()}>
+                  <RefreshCw className={cn('mr-2 h-4 w-4', postureLoading && 'animate-spin')} />Tekshirish
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+              <div className="rounded-xl border bg-background p-3"><p className="text-xs text-muted-foreground">Audit chain</p><p className={cn('mt-1 font-semibold', posture && !posture.audit_chain.valid && 'text-destructive')}>{posture ? (posture.audit_chain.valid ? 'Verified' : 'Invalid') : '—'}</p><p className="mt-1 text-[11px] text-muted-foreground">{posture?.audit_chain.rows_checked ?? 0} event</p></div>
+              <div className="rounded-xl border bg-background p-3"><p className="text-xs text-muted-foreground">Country coverage</p><p className="mt-1 font-semibold tabular-nums">{posture ? `${posture.country_resolution.coverage_pct}%` : '—'}</p><p className="mt-1 text-[11px] text-muted-foreground">{posture?.country_resolution.unknown ?? 0} unresolved</p></div>
+              <div className="rounded-xl border bg-background p-3"><p className="text-xs text-muted-foreground">RLS exposure</p><p className={cn('mt-1 font-semibold tabular-nums', Number(posture?.rls_exposed_without_policy || 0) > 0 && 'text-amber-600')}>{posture?.rls_exposed_without_policy ?? '—'}</p><p className="mt-1 text-[11px] text-muted-foreground">exposed/no policy</p></div>
+              <div className="rounded-xl border bg-background p-3"><p className="text-xs text-muted-foreground">Definer surface</p><p className={cn('mt-1 font-semibold tabular-nums', Number(posture?.security_definer_public_execute || 0) > 0 && 'text-amber-600')}>{posture?.security_definer_public_execute ?? '—'}</p><p className="mt-1 text-[11px] text-muted-foreground">PUBLIC execute</p></div>
+              <div className="rounded-xl border bg-background p-3"><p className="text-xs text-muted-foreground">SLA breached</p><p className={cn('mt-1 font-semibold tabular-nums', Number(posture?.sla.breached || 0) > 0 && 'text-destructive')}>{posture?.sla.breached ?? '—'}</p><p className="mt-1 text-[11px] text-muted-foreground">{posture?.sla.at_risk ?? 0} at risk</p></div>
+              <div className="rounded-xl border bg-background p-3"><p className="text-xs text-muted-foreground">Enforcement failed</p><p className={cn('mt-1 font-semibold tabular-nums', Number(posture?.enforcement.failed || 0) > 0 && 'text-destructive')}>{posture?.enforcement.failed ?? '—'}</p><p className="mt-1 text-[11px] text-muted-foreground">{posture?.enforcement.retry_requests ?? 0} retry</p></div>
+            </CardContent>
+          </Card>
+
           <div className="grid gap-4 xl:grid-cols-2">
             <Card className="shadow-sm">
               <CardHeader>
@@ -367,10 +441,25 @@ export default function AdminSystemPage() {
         <TabsContent value="audit" className="m-0">
           <Card className="overflow-hidden shadow-sm">
             <CardHeader className="border-b bg-muted/10">
-              <CardTitle className="text-base">Immutable admin audit</CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Row ustiga bosing — before/after snapshot va metadata diff ochiladi.
-              </p>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <CardTitle className="text-base">Immutable admin audit</CardTitle>
+                    {posture && (
+                      <Badge variant={posture.audit_chain.valid ? 'secondary' : 'destructive'}>
+                        {posture.audit_chain.valid ? 'Hash chain verified' : 'Hash chain invalid'}
+                      </Badge>
+                    )}
+                  </div>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Row ustiga bosing — before/after snapshot va metadata diff ochiladi.
+                  </p>
+                </div>
+                <Button variant="outline" size="sm" disabled={auditExporting} onClick={() => void downloadAudit()}>
+                  {auditExporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
+                  Export JSON
+                </Button>
+              </div>
             </CardHeader>
             <CardContent className="p-0">
               <div className="divide-y">

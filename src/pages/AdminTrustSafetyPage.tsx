@@ -56,11 +56,13 @@ import {
   fetchAdminCaseDetail,
   fetchEnforcementPreflight,
   fetchModerationPolicyHistory,
+  retryEnforcement,
   reviewEnforcement,
   reviewModerationAppeal,
   updateModerationCase,
   updateModerationPolicy,
   useEnforcementQueue,
+  useSlaControl,
   useTrustSafetyControl,
   type AdminCaseDetail,
   type EnforcementAction,
@@ -171,6 +173,12 @@ export default function AdminTrustSafetyPage() {
     error: enforcementError,
     refresh: refreshEnforcement,
   } = useEnforcementQueue(isAdmin && canView);
+  const {
+    snapshot: slaSnapshot,
+    loading: slaLoading,
+    error: slaError,
+    refresh: refreshSla,
+  } = useSlaControl(isAdmin && canView);
 
   const [tab, setTab] = useState('reports');
   const [selectedReportIds, setSelectedReportIds] = useState<string[]>([]);
@@ -201,7 +209,7 @@ export default function AdminTrustSafetyPage() {
   const [caseDetail, setCaseDetail] = useState<AdminCaseDetail | null>(null);
   const [caseDetailLoading, setCaseDetailLoading] = useState(false);
   const [enforcementTarget, setEnforcementTarget] = useState<EnforcementAction | null>(null);
-  const [enforcementMode, setEnforcementMode] = useState<'approve' | 'reject' | 'execute'>('approve');
+  const [enforcementMode, setEnforcementMode] = useState<'approve' | 'reject' | 'execute' | 'retry'>('approve');
   const [enforcementNote, setEnforcementNote] = useState('');
   const [enforcementPreflight, setEnforcementPreflight] = useState<EnforcementPreflight | null>(null);
   const [enforcementPreflightLoading, setEnforcementPreflightLoading] = useState(false);
@@ -221,6 +229,10 @@ export default function AdminTrustSafetyPage() {
   const selectedSet = useMemo(() => new Set(selectedReportIds), [selectedReportIds]);
   const allVisibleSelected =
     snapshot.reports.length > 0 && snapshot.reports.every((item) => selectedSet.has(item.id));
+  const slaByCase = useMemo(
+    () => new Map(slaSnapshot.cases.map((item) => [item.id, item])),
+    [slaSnapshot.cases],
+  );
 
   if (accessLoading) {
     return <div className="flex min-h-[60vh] items-center justify-center"><Loader2 className="h-7 w-7 animate-spin" /></div>;
@@ -344,7 +356,7 @@ export default function AdminTrustSafetyPage() {
 
   const openEnforcementAction = (
     item: EnforcementAction,
-    mode: 'approve' | 'reject' | 'execute',
+    mode: 'approve' | 'reject' | 'execute' | 'retry',
   ) => {
     setEnforcementTarget(item);
     setEnforcementMode(mode);
@@ -366,7 +378,10 @@ export default function AdminTrustSafetyPage() {
     if (!enforcementTarget || enforcementNote.trim().length < 3) return;
     setBusy(true);
     try {
-      if (enforcementMode === 'execute') {
+      if (enforcementMode === 'retry') {
+        await retryEnforcement(enforcementTarget.id, enforcementNote.trim());
+        toast.success('Failed enforcement qayta execution navbatiga qo‘yildi');
+      } else if (enforcementMode === 'execute') {
         const latestPreflight = await fetchEnforcementPreflight(enforcementTarget.id);
         setEnforcementPreflight(latestPreflight);
         if (!latestPreflight.ready) {
@@ -389,7 +404,7 @@ export default function AdminTrustSafetyPage() {
       }
       setEnforcementTarget(null);
       setEnforcementNote('');
-      await Promise.all([refresh(), refreshEnforcement()]);
+      await Promise.all([refresh(), refreshEnforcement(), refreshSla()]);
       if (caseTarget) {
         setCaseDetail(await fetchAdminCaseDetail(caseTarget.id));
       }
@@ -408,7 +423,7 @@ export default function AdminTrustSafetyPage() {
   };
 
   const refreshAll = async () => {
-    await Promise.all([refresh(), refreshEnforcement()]);
+    await Promise.all([refresh(), refreshEnforcement(), refreshSla()]);
   };
 
   const openPolicyHistory = (policy: ModerationPolicy) => {
@@ -516,6 +531,21 @@ export default function AdminTrustSafetyPage() {
         </Card>
       )}
 
+      {slaError && (
+        <Card className="border-amber-500/30 bg-amber-500/5">
+          <CardContent className="flex items-center gap-3 p-4 text-sm">
+            <AlertTriangle className="h-5 w-5 shrink-0 text-amber-600" />
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold">SLA monitoring snapshot yuklanmadi</p>
+              <p className="truncate text-muted-foreground">{slaError}</p>
+            </div>
+            <Button variant="outline" size="sm" onClick={() => void refreshSla()}>
+              Qayta urinish
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
       {enforcementError && (
         <Card className="border-destructive/30 bg-destructive/5">
           <CardContent className="flex items-center gap-3 p-4 text-sm">
@@ -558,10 +588,10 @@ export default function AdminTrustSafetyPage() {
           <Button
             variant="outline"
             size="sm"
-            disabled={loading || enforcementLoading}
+            disabled={loading || enforcementLoading || slaLoading}
             onClick={() => void refreshAll()}
           >
-            <RefreshCw className={cn('mr-2 h-4 w-4', (loading || enforcementLoading) && 'animate-spin')} />
+            <RefreshCw className={cn('mr-2 h-4 w-4', (loading || enforcementLoading || slaLoading) && 'animate-spin')} />
             Yangilash
           </Button>
         </div>
@@ -684,7 +714,24 @@ export default function AdminTrustSafetyPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="cases" className="m-0">
+        <TabsContent value="cases" className="m-0 space-y-4">
+          <Card className="border-primary/20 bg-primary/[0.02] shadow-sm">
+            <CardContent className="grid gap-3 p-4 sm:grid-cols-3">
+              <div className="rounded-xl border bg-background p-3">
+                <p className="text-xs text-muted-foreground">On track</p>
+                <p className="mt-1 text-2xl font-semibold tabular-nums">{slaSnapshot.counts.on_track.toLocaleString()}</p>
+              </div>
+              <div className="rounded-xl border bg-background p-3">
+                <p className="text-xs text-muted-foreground">At risk</p>
+                <p className="mt-1 text-2xl font-semibold tabular-nums text-amber-600">{slaSnapshot.counts.at_risk.toLocaleString()}</p>
+              </div>
+              <div className="rounded-xl border bg-background p-3">
+                <p className="text-xs text-muted-foreground">Breached</p>
+                <p className="mt-1 text-2xl font-semibold tabular-nums text-destructive">{slaSnapshot.counts.breached.toLocaleString()}</p>
+              </div>
+            </CardContent>
+          </Card>
+
           <Card className="overflow-hidden shadow-sm">
             <CardHeader className="border-b bg-muted/10">
               <CardTitle className="text-base">Investigation cases</CardTitle>
@@ -700,6 +747,7 @@ export default function AdminTrustSafetyPage() {
                       Boolean(item.due_at) &&
                       !['resolved', 'dismissed'].includes(item.status) &&
                       new Date(item.due_at as string).getTime() < Date.now();
+                    const sla = slaByCase.get(item.id);
                     return (
                       <button
                         key={item.id}
@@ -713,7 +761,13 @@ export default function AdminTrustSafetyPage() {
                             <p className="font-semibold">#{item.case_number} · {item.title}</p>
                             {severityBadge(item.severity)}
                             {priorityBadge(item.priority)}
-                            {overdue && <Badge variant="destructive">Overdue</Badge>}
+                            {sla?.sla_state === 'breached' ? (
+                              <Badge variant="destructive">SLA breached · L{sla.sla_escalation_level}</Badge>
+                            ) : sla?.sla_state === 'at_risk' ? (
+                              <Badge variant="outline" className="border-amber-500/40 text-amber-700 dark:text-amber-400">SLA at risk</Badge>
+                            ) : overdue ? (
+                              <Badge variant="destructive">Overdue</Badge>
+                            ) : null}
                           </div>
                           <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{item.summary || '—'}</p>
                           <p className="mt-2 text-[11px] text-muted-foreground">
@@ -866,6 +920,18 @@ export default function AdminTrustSafetyPage() {
                             >
                               <PlayCircle className="mr-2 h-4 w-4" />
                               Execute
+                            </Button>
+                          )}
+
+                          {action.status === 'failed' && canExecute && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={Number(action.retry_count || 0) >= 5}
+                              onClick={() => openEnforcementAction(action, 'retry')}
+                            >
+                              <RefreshCw className="mr-2 h-4 w-4" />
+                              Retry {Number(action.retry_count || 0) > 0 ? `(${action.retry_count}/5)` : ''}
                             </Button>
                           )}
 
@@ -1276,9 +1342,11 @@ export default function AdminTrustSafetyPage() {
             <DialogTitle>
               {enforcementMode === 'execute'
                 ? 'Enforcementni ijro etish'
-                : enforcementMode === 'approve'
-                  ? 'Independent approval'
-                  : 'Enforcementni rad etish'}
+                : enforcementMode === 'retry'
+                  ? 'Failed enforcementni qayta navbatga qo‘yish'
+                  : enforcementMode === 'approve'
+                    ? 'Independent approval'
+                    : 'Enforcementni rad etish'}
             </DialogTitle>
             <DialogDescription>
               {enforcementTarget
@@ -1307,6 +1375,15 @@ export default function AdminTrustSafetyPage() {
                   <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-blue-600" />
                   <p>
                     Siz action yaratuvchisidan mustaqil reviewer sifatida policy, evidence va targetni tekshirganingizni tasdiqlaysiz.
+                  </p>
+                </div>
+              )}
+
+              {enforcementMode === 'retry' && (
+                <div className="flex gap-3 rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
+                  <RefreshCw className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                  <p>
+                    Failure sababi ledgerda saqlanadi. Action qayta pending_execution holatiga o‘tadi va executiondan oldin preflight yana ishlaydi.
                   </p>
                 </div>
               )}
@@ -1381,7 +1458,11 @@ export default function AdminTrustSafetyPage() {
 
               <div>
                 <Label>
-                  {enforcementMode === 'execute' ? 'Execution reason' : 'Reviewer note'}
+                  {enforcementMode === 'execute'
+                    ? 'Execution reason'
+                    : enforcementMode === 'retry'
+                      ? 'Retry reason'
+                      : 'Reviewer note'}
                 </Label>
                 <Textarea
                   className="mt-2"
@@ -1391,7 +1472,9 @@ export default function AdminTrustSafetyPage() {
                   placeholder={
                     enforcementMode === 'execute'
                       ? 'Nega aynan hozir bu action ijro qilinmoqda?'
-                      : 'Evidence va policy asosidagi qisqa izoh.'
+                      : enforcementMode === 'retry'
+                        ? 'Failure tekshirildi. Nega actionni qayta navbatga qo‘yish mumkin?'
+                        : 'Evidence va policy asosidagi qisqa izoh.'
                   }
                 />
               </div>
@@ -1415,9 +1498,11 @@ export default function AdminTrustSafetyPage() {
               {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {enforcementMode === 'execute'
                 ? 'Execute'
-                : enforcementMode === 'approve'
-                  ? 'Approve'
-                  : 'Reject'}
+                : enforcementMode === 'retry'
+                  ? 'Requeue'
+                  : enforcementMode === 'approve'
+                    ? 'Approve'
+                    : 'Reject'}
             </Button>
           </DialogFooter>
         </DialogContent>

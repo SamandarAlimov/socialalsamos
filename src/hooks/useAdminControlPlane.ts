@@ -43,6 +43,10 @@ export interface ModerationCase {
   due_at: string | null;
   resolved_at: string | null;
   updated_at: string;
+  sla_state?: 'on_track' | 'at_risk' | 'breached' | 'resolved';
+  sla_escalation_level?: number;
+  sla_last_evaluated_at?: string | null;
+  escalated_at?: string | null;
   assigned_username?: string | null;
   assigned_name?: string | null;
   report_count: number;
@@ -287,6 +291,8 @@ export interface EnforcementAction {
   approved_count?: number;
   policy_code: string | null;
   execution_result?: Record<string, unknown>;
+  retry_count?: number;
+  last_retry_at?: string | null;
   created_username?: string | null;
   created_name?: string | null;
   creator_username?: string | null;
@@ -373,6 +379,76 @@ export interface ModerationPolicyRevision {
   changed_name?: string | null;
 }
 
+export interface SlaCase {
+  id: string;
+  case_number: number;
+  title: string;
+  priority: TrustSafetyPriority;
+  status: ModerationCaseStatus;
+  due_at: string | null;
+  sla_state: 'on_track' | 'at_risk' | 'breached' | 'resolved';
+  sla_escalation_level: number;
+  sla_last_evaluated_at: string | null;
+  escalated_at: string | null;
+}
+
+export interface SlaEvent {
+  id: string;
+  case_id: string;
+  event_type: 'at_risk' | 'breached' | 'recovered' | 'resolved';
+  escalation_level: number;
+  prior_priority: string | null;
+  new_priority: string | null;
+  due_at: string | null;
+  observed_at: string;
+  detail: Record<string, unknown>;
+  case_number: number;
+  title: string;
+}
+
+export interface SlaSnapshot {
+  generated_at?: string;
+  counts: {
+    on_track: number;
+    at_risk: number;
+    breached: number;
+  };
+  cases: SlaCase[];
+  events: SlaEvent[];
+}
+
+export interface SecurityPosture {
+  checked_at?: string;
+  audit_chain: {
+    valid: boolean;
+    rows_checked: number;
+    head_hash?: string;
+    first_invalid_id?: string;
+    checked_at?: string;
+  };
+  rls_exposed_without_policy: number;
+  security_definer_public_execute: number;
+  country_resolution: {
+    resolved: number;
+    unknown: number;
+    coverage_pct: number;
+  };
+  sla: {
+    at_risk: number;
+    breached: number;
+  };
+  enforcement: {
+    failed: number;
+    retry_requests: number;
+  };
+}
+
+export interface AdminAuditExport {
+  exported_at: string;
+  chain: SecurityPosture['audit_chain'];
+  events: Array<AdminAuditEvent & { prev_hash?: string | null; event_hash?: string | null }>;
+}
+
 const EMPTY_TRUST_SAFETY: TrustSafetySnapshot = {
   counts: {
     reports_open: 0,
@@ -385,6 +461,12 @@ const EMPTY_TRUST_SAFETY: TrustSafetySnapshot = {
   reports: [],
   cases: [],
   appeals: [],
+};
+
+const EMPTY_SLA: SlaSnapshot = {
+  counts: { on_track: 0, at_risk: 0, breached: 0 },
+  cases: [],
+  events: [],
 };
 
 const EMPTY_RBAC: RbacMatrix = {
@@ -441,6 +523,41 @@ export function useTrustSafetyControl(enabled = true) {
         reports: Array.isArray(data?.reports) ? data.reports : [],
         cases: Array.isArray(data?.cases) ? data.cases : [],
         appeals: Array.isArray(data?.appeals) ? data.appeals : [],
+      });
+    }
+    setLoading(false);
+  }, [enabled]);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  return { snapshot, loading, error, refresh };
+}
+
+export function useSlaControl(enabled = true) {
+  const [snapshot, setSnapshot] = useState<SlaSnapshot>(EMPTY_SLA);
+  const [loading, setLoading] = useState(enabled);
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = useCallback(async () => {
+    if (!enabled) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    const { data, error: rpcError } = await rpc<SlaSnapshot>('admin_sla_snapshot_v1', {
+      p_limit: 100,
+    });
+    if (rpcError) {
+      setError(rpcError.message || 'SLA snapshot yuklanmadi');
+    } else {
+      setError(null);
+      setSnapshot({
+        generated_at: data?.generated_at,
+        counts: { ...EMPTY_SLA.counts, ...(data?.counts || {}) },
+        cases: Array.isArray(data?.cases) ? data.cases : [],
+        events: Array.isArray(data?.events) ? data.events : [],
       });
     }
     setLoading(false);
@@ -754,6 +871,31 @@ export async function fetchModerationPolicyHistory(code: string, limit = 25) {
   );
   if (error) throw error;
   return Array.isArray(data) ? data : [];
+}
+
+export async function retryEnforcement(actionId: string, reason: string) {
+  const { data, error } = await rpc<Record<string, unknown>>('admin_retry_enforcement_v1', {
+    p_action_id: actionId,
+    p_reason: reason,
+  });
+  if (error) throw error;
+  return data;
+}
+
+export async function fetchSecurityPosture() {
+  const { data, error } = await rpc<SecurityPosture>('admin_security_posture_v1');
+  if (error) throw error;
+  return data;
+}
+
+export async function exportAdminAudit(limit = 1000) {
+  const { data, error } = await rpc<AdminAuditExport>('admin_audit_export_v1', {
+    p_from: null,
+    p_to: null,
+    p_limit: limit,
+  });
+  if (error) throw error;
+  return data;
 }
 
 export async function reviewEnforcement(input: {
