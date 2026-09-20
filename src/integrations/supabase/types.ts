@@ -1555,6 +1555,102 @@ export type Database = {
           },
         ]
       }
+      admin_notification_reads: {
+        Row: {
+          notification_id: string
+          read_at: string
+          user_id: string
+        }
+        Insert: {
+          notification_id: string
+          read_at?: string
+          user_id: string
+        }
+        Update: {
+          notification_id?: string
+          read_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "admin_notification_reads_notification_id_fkey"
+            columns: ["notification_id"]
+            isOneToOne: false
+            referencedRelation: "admin_notifications"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "admin_notification_reads_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      admin_notifications: {
+        Row: {
+          action_url: string | null
+          body: string | null
+          created_at: string
+          entity_id: string | null
+          entity_type: string | null
+          expires_at: string | null
+          id: string
+          kind: string
+          metadata: Json
+          severity: string
+          target_role_key: string | null
+          title: string
+          user_id: string | null
+        }
+        Insert: {
+          action_url?: string | null
+          body?: string | null
+          created_at?: string
+          entity_id?: string | null
+          entity_type?: string | null
+          expires_at?: string | null
+          id?: string
+          kind?: string
+          metadata?: Json
+          severity?: string
+          target_role_key?: string | null
+          title: string
+          user_id?: string | null
+        }
+        Update: {
+          action_url?: string | null
+          body?: string | null
+          created_at?: string
+          entity_id?: string | null
+          entity_type?: string | null
+          expires_at?: string | null
+          id?: string
+          kind?: string
+          metadata?: Json
+          severity?: string
+          target_role_key?: string | null
+          title?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "admin_notifications_target_role_key_fkey"
+            columns: ["target_role_key"]
+            isOneToOne: false
+            referencedRelation: "admin_roles"
+            referencedColumns: ["key"]
+          },
+          {
+            foreignKeyName: "admin_notifications_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       admin_permissions: {
         Row: {
           category: string
@@ -1562,6 +1658,7 @@ export type Database = {
           description: string
           key: string
           label: string
+          risk_level: string
         }
         Insert: {
           category: string
@@ -1569,6 +1666,7 @@ export type Database = {
           description?: string
           key: string
           label: string
+          risk_level?: string
         }
         Update: {
           category?: string
@@ -1576,6 +1674,7 @@ export type Database = {
           description?: string
           key?: string
           label?: string
+          risk_level?: string
         }
         Relationships: []
       }
@@ -2546,6 +2645,67 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      appeals: {
+        Row: {
+          appellant_id: string | null
+          assigned_admin_id: string | null
+          created_at: string
+          decision_note: string | null
+          enforcement_action_id: string
+          id: string
+          reason: string
+          resolved_at: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          appellant_id?: string | null
+          assigned_admin_id?: string | null
+          created_at?: string
+          decision_note?: string | null
+          enforcement_action_id: string
+          id?: string
+          reason: string
+          resolved_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          appellant_id?: string | null
+          assigned_admin_id?: string | null
+          created_at?: string
+          decision_note?: string | null
+          enforcement_action_id?: string
+          id?: string
+          reason?: string
+          resolved_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "appeals_appellant_id_fkey"
+            columns: ["appellant_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "appeals_assigned_admin_id_fkey"
+            columns: ["assigned_admin_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "appeals_enforcement_action_id_fkey"
+            columns: ["enforcement_action_id"]
+            isOneToOne: false
+            referencedRelation: "enforcement_actions"
             referencedColumns: ["id"]
           },
         ]
@@ -5133,6 +5293,69 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      enforcement_actions: {
+        Row: {
+          action_type: string
+          case_id: string | null
+          created_at: string
+          created_by: string | null
+          ends_at: string | null
+          executed_at: string | null
+          failure_reason: string | null
+          id: string
+          metadata: Json
+          starts_at: string
+          status: string
+          target_id: string
+          target_type: string
+        }
+        Insert: {
+          action_type: string
+          case_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          ends_at?: string | null
+          executed_at?: string | null
+          failure_reason?: string | null
+          id?: string
+          metadata?: Json
+          starts_at?: string
+          status?: string
+          target_id: string
+          target_type: string
+        }
+        Update: {
+          action_type?: string
+          case_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          ends_at?: string | null
+          executed_at?: string | null
+          failure_reason?: string | null
+          id?: string
+          metadata?: Json
+          starts_at?: string
+          status?: string
+          target_id?: string
+          target_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "enforcement_actions_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "moderation_cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "enforcement_actions_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       escrow_holds: {
         Row: {
@@ -8236,6 +8459,232 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      moderation_case_reports: {
+        Row: {
+          case_id: string
+          linked_at: string
+          linked_by: string | null
+          report_id: string
+        }
+        Insert: {
+          case_id: string
+          linked_at?: string
+          linked_by?: string | null
+          report_id: string
+        }
+        Update: {
+          case_id?: string
+          linked_at?: string
+          linked_by?: string | null
+          report_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "moderation_case_reports_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "moderation_cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "moderation_case_reports_linked_by_fkey"
+            columns: ["linked_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "moderation_case_reports_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "reports_v2"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      moderation_cases: {
+        Row: {
+          assigned_admin_id: string | null
+          assigned_team: string
+          case_number: number
+          case_type: string
+          due_at: string | null
+          id: string
+          metadata: Json
+          opened_at: string
+          opened_by: string | null
+          policy_code: string | null
+          priority: string
+          resolved_at: string | null
+          severity: string
+          status: string
+          subject_id: string
+          subject_type: string
+          summary: string | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          assigned_admin_id?: string | null
+          assigned_team?: string
+          case_number?: never
+          case_type?: string
+          due_at?: string | null
+          id?: string
+          metadata?: Json
+          opened_at?: string
+          opened_by?: string | null
+          policy_code?: string | null
+          priority?: string
+          resolved_at?: string | null
+          severity?: string
+          status?: string
+          subject_id: string
+          subject_type: string
+          summary?: string | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          assigned_admin_id?: string | null
+          assigned_team?: string
+          case_number?: never
+          case_type?: string
+          due_at?: string | null
+          id?: string
+          metadata?: Json
+          opened_at?: string
+          opened_by?: string | null
+          policy_code?: string | null
+          priority?: string
+          resolved_at?: string | null
+          severity?: string
+          status?: string
+          subject_id?: string
+          subject_type?: string
+          summary?: string | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "moderation_cases_assigned_admin_id_fkey"
+            columns: ["assigned_admin_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "moderation_cases_opened_by_fkey"
+            columns: ["opened_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      moderation_decisions: {
+        Row: {
+          case_id: string
+          created_at: string
+          decided_by: string | null
+          decision: string
+          id: string
+          metadata: Json
+          policy_code: string | null
+          rationale: string
+        }
+        Insert: {
+          case_id: string
+          created_at?: string
+          decided_by?: string | null
+          decision: string
+          id?: string
+          metadata?: Json
+          policy_code?: string | null
+          rationale: string
+        }
+        Update: {
+          case_id?: string
+          created_at?: string
+          decided_by?: string | null
+          decision?: string
+          id?: string
+          metadata?: Json
+          policy_code?: string | null
+          rationale?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "moderation_decisions_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "moderation_cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "moderation_decisions_decided_by_fkey"
+            columns: ["decided_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      moderation_evidence: {
+        Row: {
+          captured_at: string
+          captured_by: string | null
+          case_id: string
+          evidence_type: string
+          id: string
+          media_reference: string | null
+          metadata: Json
+          object_id: string
+          object_type: string
+          snapshot_json: Json
+        }
+        Insert: {
+          captured_at?: string
+          captured_by?: string | null
+          case_id: string
+          evidence_type?: string
+          id?: string
+          media_reference?: string | null
+          metadata?: Json
+          object_id: string
+          object_type: string
+          snapshot_json?: Json
+        }
+        Update: {
+          captured_at?: string
+          captured_by?: string | null
+          case_id?: string
+          evidence_type?: string
+          id?: string
+          media_reference?: string | null
+          metadata?: Json
+          object_id?: string
+          object_type?: string
+          snapshot_json?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "moderation_evidence_captured_by_fkey"
+            columns: ["captured_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "moderation_evidence_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "moderation_cases"
             referencedColumns: ["id"]
           },
         ]
@@ -11406,6 +11855,71 @@ export type Database = {
           {
             foreignKeyName: "reports_user_id_fkey"
             columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      reports_v2: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          legacy_id: string | null
+          legacy_source: string | null
+          metadata: Json
+          priority: string
+          reason_code: string
+          reporter_id: string | null
+          resolved_at: string | null
+          source_surface: string | null
+          status: string
+          subreason_code: string | null
+          target_id: string
+          target_type: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          legacy_id?: string | null
+          legacy_source?: string | null
+          metadata?: Json
+          priority?: string
+          reason_code: string
+          reporter_id?: string | null
+          resolved_at?: string | null
+          source_surface?: string | null
+          status?: string
+          subreason_code?: string | null
+          target_id: string
+          target_type: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          legacy_id?: string | null
+          legacy_source?: string | null
+          metadata?: Json
+          priority?: string
+          reason_code?: string
+          reporter_id?: string | null
+          resolved_at?: string | null
+          source_surface?: string | null
+          status?: string
+          subreason_code?: string | null
+          target_id?: string
+          target_type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reports_v2_reporter_id_fkey"
+            columns: ["reporter_id"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -15363,6 +15877,19 @@ export type Database = {
       }
     }
     Functions: {
+      _admin_emit_notification: {
+        Args: {
+          p_action_url: string
+          p_body: string
+          p_entity_id: string
+          p_entity_type: string
+          p_metadata?: Json
+          p_severity: string
+          p_target_role_key: string
+          p_title: string
+        }
+        Returns: string
+      }
       _rtc_capacity_for_mode: { Args: { p_call_mode: string }; Returns: number }
       _rtc_conversation_type: {
         Args: { p_conversation_id: string }
@@ -15392,6 +15919,10 @@ export type Database = {
         Returns: string
       }
       admin_analytics_snapshot_v1: { Args: never; Returns: Json }
+      admin_audit_event_detail_v1: {
+        Args: { p_event_id: string }
+        Returns: Json
+      }
       admin_bulk_reserve: {
         Args: { p_category: string; p_reason?: string; p_usernames: string[] }
         Returns: {
@@ -15399,9 +15930,26 @@ export type Database = {
           skipped: number
         }[]
       }
+      admin_bulk_triage_reports_v1: {
+        Args: {
+          p_action: string
+          p_priority?: string
+          p_reason?: string
+          p_report_ids: string[]
+        }
+        Returns: number
+      }
       admin_control_authorized: {
         Args: { p_permission?: string }
         Returns: boolean
+      }
+      admin_create_case_from_report_v1: {
+        Args: {
+          p_assigned_to?: string
+          p_report_id: string
+          p_severity?: string
+        }
+        Returns: string
       }
       admin_create_incident_v1: {
         Args: {
@@ -15413,6 +15961,17 @@ export type Database = {
           p_title: string
         }
         Returns: string
+      }
+      admin_decide_case_v1: {
+        Args: {
+          p_action_hours?: number
+          p_action_type?: string
+          p_case_id: string
+          p_decision: string
+          p_policy_code: string
+          p_rationale: string
+        }
+        Returns: Json
       }
       admin_delete_entity_note_v1: {
         Args: { p_note_id: string; p_reason: string }
@@ -15474,11 +16033,32 @@ export type Database = {
           username: string
         }[]
       }
+      admin_mark_all_notifications_read_v1: { Args: never; Returns: number }
+      admin_mark_notification_read_v1: {
+        Args: { p_notification_id: string; p_read?: boolean }
+        Returns: boolean
+      }
+      admin_notification_inbox_v1: {
+        Args: { p_limit?: number }
+        Returns: {
+          action_url: string
+          body: string
+          created_at: string
+          entity_id: string
+          entity_type: string
+          id: string
+          is_read: boolean
+          kind: string
+          severity: string
+          title: string
+        }[]
+      }
       admin_operations_snapshot_v1: { Args: never; Returns: Json }
       admin_prepare_user_deletion_v3: {
         Args: { p_reason: string; p_user_id: string }
         Returns: string
       }
+      admin_rbac_matrix_v1: { Args: never; Returns: Json }
       admin_recent_audit_v3: {
         Args: { p_limit?: number }
         Returns: {
@@ -15542,9 +16122,17 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      admin_review_appeal_v1: {
+        Args: { p_appeal_id: string; p_decision: string; p_note: string }
+        Returns: Json
+      }
       admin_review_verification_request_v1: {
         Args: { p_decision: string; p_reason?: string; p_request_id: string }
         Returns: Json
+      }
+      admin_revoke_device_trust_v1: {
+        Args: { p_device_id: string; p_reason: string }
+        Returns: boolean
       }
       admin_set_feature_flag_v1: {
         Args: {
@@ -15557,6 +16145,15 @@ export type Database = {
           p_rollout_percentage?: number
         }
         Returns: Json
+      }
+      admin_set_role_permission_v1: {
+        Args: {
+          p_enabled: boolean
+          p_permission_key: string
+          p_reason: string
+          p_role_key: string
+        }
+        Returns: boolean
       }
       admin_set_user_account_status_v3: {
         Args: {
@@ -15571,10 +16168,27 @@ export type Database = {
         Args: { p_reason?: string; p_user_id: string; p_verified: boolean }
         Returns: Json
       }
+      admin_system_control_snapshot_v4: { Args: never; Returns: Json }
       admin_system_health_v3: { Args: never; Returns: Json }
+      admin_trust_safety_snapshot_v1: {
+        Args: { p_limit?: number }
+        Returns: Json
+      }
       admin_unreserve_username: {
         Args: { p_username: string }
         Returns: boolean
+      }
+      admin_update_case_v1: {
+        Args: {
+          p_assigned_admin_id?: string
+          p_case_id: string
+          p_policy_code?: string
+          p_priority?: string
+          p_severity?: string
+          p_status?: string
+          p_summary?: string
+        }
+        Returns: Json
       }
       admin_update_incident_v1: {
         Args: {
@@ -15604,6 +16218,10 @@ export type Database = {
         }[]
       }
       admin_user_role_keys: { Args: { p_user_id: string }; Returns: string[] }
+      admin_user_security_snapshot_v1: {
+        Args: { p_user_id: string }
+        Returns: Json
+      }
       admin_write_audit: {
         Args: {
           p_action: string
