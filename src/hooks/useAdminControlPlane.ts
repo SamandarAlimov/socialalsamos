@@ -339,6 +339,40 @@ export interface EnforcementQueueSnapshot {
   policies: ModerationPolicy[];
 }
 
+export interface EnforcementPreflightCheck {
+  key: string;
+  ok: boolean;
+  label: string;
+  detail: string;
+}
+
+export interface EnforcementPreflight {
+  action_id: string;
+  ready: boolean;
+  status: EnforcementStatus;
+  action_type: string;
+  target_type: string;
+  approved_count: number;
+  required_approvals: number;
+  policy_code: string | null;
+  policy_revision_id: number | null;
+  policy_revision_created_at: string | null;
+  policy_snapshot: Record<string, unknown> | null;
+  checks: EnforcementPreflightCheck[];
+  checked_at: string;
+}
+
+export interface ModerationPolicyRevision {
+  id: number;
+  policy_code: string;
+  snapshot: Record<string, unknown>;
+  changed_by: string | null;
+  change_reason: string;
+  created_at: string;
+  changed_username?: string | null;
+  changed_name?: string | null;
+}
+
 const EMPTY_TRUST_SAFETY: TrustSafetySnapshot = {
   counts: {
     reports_open: 0,
@@ -696,6 +730,30 @@ export async function fetchAdminCaseDetail(caseId: string) {
     decisions: Array.isArray(data?.decisions) ? data.decisions : [],
     enforcement: Array.isArray(data?.enforcement) ? data.enforcement : [],
   } satisfies AdminCaseDetail;
+}
+
+export async function fetchEnforcementPreflight(actionId: string) {
+  const { data, error } = await rpc<EnforcementPreflight>(
+    'admin_enforcement_preflight_v1',
+    { p_action_id: actionId },
+  );
+  if (error) throw error;
+  return {
+    ...data,
+    checks: Array.isArray(data?.checks) ? data.checks : [],
+  } satisfies EnforcementPreflight;
+}
+
+export async function fetchModerationPolicyHistory(code: string, limit = 25) {
+  const { data, error } = await rpc<ModerationPolicyRevision[]>(
+    'admin_policy_revision_history_v1',
+    {
+      p_code: code,
+      p_limit: limit,
+    },
+  );
+  if (error) throw error;
+  return Array.isArray(data) ? data : [];
 }
 
 export async function reviewEnforcement(input: {

@@ -54,6 +54,8 @@ import {
   decideModerationCase,
   executeEnforcement,
   fetchAdminCaseDetail,
+  fetchEnforcementPreflight,
+  fetchModerationPolicyHistory,
   reviewEnforcement,
   reviewModerationAppeal,
   updateModerationCase,
@@ -62,8 +64,10 @@ import {
   useTrustSafetyControl,
   type AdminCaseDetail,
   type EnforcementAction,
+  type EnforcementPreflight,
   type ModerationAppeal,
   type ModerationPolicy,
+  type ModerationPolicyRevision,
   type ModerationCase,
   type TrustSafetyPriority,
   type TrustSafetyReport,
@@ -199,7 +203,12 @@ export default function AdminTrustSafetyPage() {
   const [enforcementTarget, setEnforcementTarget] = useState<EnforcementAction | null>(null);
   const [enforcementMode, setEnforcementMode] = useState<'approve' | 'reject' | 'execute'>('approve');
   const [enforcementNote, setEnforcementNote] = useState('');
+  const [enforcementPreflight, setEnforcementPreflight] = useState<EnforcementPreflight | null>(null);
+  const [enforcementPreflightLoading, setEnforcementPreflightLoading] = useState(false);
   const [policyTarget, setPolicyTarget] = useState<ModerationPolicy | null>(null);
+  const [policyHistoryCode, setPolicyHistoryCode] = useState<string | null>(null);
+  const [policyHistory, setPolicyHistory] = useState<ModerationPolicyRevision[]>([]);
+  const [policyHistoryLoading, setPolicyHistoryLoading] = useState(false);
   const [policyForm, setPolicyForm] = useState({
     description: '',
     defaultAction: 'none',
@@ -340,6 +349,17 @@ export default function AdminTrustSafetyPage() {
     setEnforcementTarget(item);
     setEnforcementMode(mode);
     setEnforcementNote('');
+    setEnforcementPreflight(null);
+    setEnforcementPreflightLoading(mode === 'execute');
+
+    if (mode === 'execute') {
+      void fetchEnforcementPreflight(item.id)
+        .then(setEnforcementPreflight)
+        .catch((caught: any) => {
+          toast.error(caught?.message || 'Execution preflight bajarilmadi');
+        })
+        .finally(() => setEnforcementPreflightLoading(false));
+    }
   };
 
   const submitEnforcementAction = async () => {
@@ -347,6 +367,12 @@ export default function AdminTrustSafetyPage() {
     setBusy(true);
     try {
       if (enforcementMode === 'execute') {
+        const latestPreflight = await fetchEnforcementPreflight(enforcementTarget.id);
+        setEnforcementPreflight(latestPreflight);
+        if (!latestPreflight.ready) {
+          toast.error('Execution preflight bloklandi. Failed checklarni tuzating.');
+          return;
+        }
         await executeEnforcement(enforcementTarget.id, enforcementNote.trim());
         toast.success('Enforcement canonical platform state’ga qo‘llandi');
       } else {
@@ -383,6 +409,16 @@ export default function AdminTrustSafetyPage() {
 
   const refreshAll = async () => {
     await Promise.all([refresh(), refreshEnforcement()]);
+  };
+
+  const openPolicyHistory = (policy: ModerationPolicy) => {
+    setPolicyHistoryCode(policy.code);
+    setPolicyHistory([]);
+    setPolicyHistoryLoading(true);
+    void fetchModerationPolicyHistory(policy.code)
+      .then(setPolicyHistory)
+      .catch((caught: any) => toast.error(caught?.message || 'Policy revision history yuklanmadi'))
+      .finally(() => setPolicyHistoryLoading(false));
   };
 
   const openPolicy = (policy: ModerationPolicy) => {
@@ -883,6 +919,16 @@ export default function AdminTrustSafetyPage() {
                     </div>
                     <div className="flex items-center gap-1">
                       {severityBadge(policy.severity_default)}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 rounded-lg"
+                        onClick={() => openPolicyHistory(policy)}
+                        aria-label={policy.title + ' revision history'}
+                      >
+                        <History className="h-4 w-4" />
+                      </Button>
                       {canManagePolicies && (
                         <Button
                           type="button"
@@ -1039,6 +1085,83 @@ export default function AdminTrustSafetyPage() {
       </Dialog>
 
       <Dialog
+        open={Boolean(policyHistoryCode)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPolicyHistoryCode(null);
+            setPolicyHistory([]);
+          }
+        }}
+      >
+        <DialogContent className="max-h-[84vh] max-w-3xl overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Policy revision history</DialogTitle>
+            <DialogDescription>
+              {policyHistoryCode} · immutable snapshotlar, actor va change reason bilan.
+            </DialogDescription>
+          </DialogHeader>
+
+          {policyHistoryLoading ? (
+            <div className="flex min-h-48 items-center justify-center">
+              <Loader2 className="h-6 w-6 animate-spin" />
+            </div>
+          ) : policyHistory.length === 0 ? (
+            <div className="rounded-2xl border border-dashed p-10 text-center text-sm text-muted-foreground">
+              Revision history topilmadi.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {policyHistory.map((revision) => {
+                const snapshot = revision.snapshot || {};
+                return (
+                  <div key={revision.id} className="rounded-2xl border bg-card p-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge variant="outline">Revision #{revision.id}</Badge>
+                          <span className="text-xs text-muted-foreground">{dt(revision.created_at)}</span>
+                        </div>
+                        <p className="mt-2 text-sm font-medium">{revision.change_reason}</p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {revision.changed_name || revision.changed_username
+                            ? revision.changed_name || '@' + revision.changed_username
+                            : 'System snapshot'}
+                        </p>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-xs sm:min-w-[300px]">
+                        <div className="rounded-xl border p-2.5">
+                          <p className="text-muted-foreground">Action</p>
+                          <p className="mt-1 font-medium">
+                            {snapshot.default_action ? actionLabel(String(snapshot.default_action)) : 'None'}
+                          </p>
+                        </div>
+                        <div className="rounded-xl border p-2.5">
+                          <p className="text-muted-foreground">Approvals</p>
+                          <p className="mt-1 font-medium">{String(snapshot.required_approvals ?? '—')}</p>
+                        </div>
+                        <div className="rounded-xl border p-2.5">
+                          <p className="text-muted-foreground">State</p>
+                          <p className="mt-1 font-medium">{snapshot.active === false ? 'Inactive' : 'Active'}</p>
+                        </div>
+                        <div className="rounded-xl border p-2.5">
+                          <p className="text-muted-foreground">Duration</p>
+                          <p className="mt-1 font-medium">
+                            {snapshot.default_duration_hours
+                              ? String(snapshot.default_duration_hours) + 'h'
+                              : '—'}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
         open={Boolean(policyTarget)}
         onOpenChange={(open) => {
           if (!open) setPolicyTarget(null);
@@ -1143,6 +1266,8 @@ export default function AdminTrustSafetyPage() {
           if (!open) {
             setEnforcementTarget(null);
             setEnforcementNote('');
+            setEnforcementPreflight(null);
+            setEnforcementPreflightLoading(false);
           }
         }}
       >
@@ -1195,6 +1320,65 @@ export default function AdminTrustSafetyPage() {
                 </div>
               )}
 
+              {enforcementMode === 'execute' && (
+                <div className="rounded-2xl border bg-muted/10 p-3">
+                  {enforcementPreflightLoading ? (
+                    <div className="flex items-center gap-2 py-2 text-sm text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Execution preflight tekshirilmoqda...
+                    </div>
+                  ) : enforcementPreflight ? (
+                    <div className="space-y-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <p className="text-xs font-medium text-muted-foreground">Execution preflight</p>
+                          <p className="mt-1 text-sm font-semibold">
+                            {enforcementPreflight.ready ? 'Barcha blocking checklar o‘tdi' : 'Execution bloklangan'}
+                          </p>
+                        </div>
+                        <Badge variant={enforcementPreflight.ready ? 'secondary' : 'destructive'}>
+                          {enforcementPreflight.ready ? 'READY' : 'BLOCKED'}
+                        </Badge>
+                      </div>
+
+                      {(enforcementPreflight.policy_code || enforcementPreflight.policy_revision_id) && (
+                        <div className="rounded-xl border bg-background px-3 py-2 text-xs text-muted-foreground">
+                          Policy: {enforcementPreflight.policy_code || '—'}
+                          {enforcementPreflight.policy_revision_id
+                            ? ' · revision #' + enforcementPreflight.policy_revision_id
+                            : ''}
+                        </div>
+                      )}
+
+                      <div className="space-y-2">
+                        {enforcementPreflight.checks.map((check) => (
+                          <div
+                            key={check.key}
+                            className="flex items-start gap-2 rounded-xl border bg-background p-2.5"
+                          >
+                            {check.ok ? (
+                              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+                            ) : (
+                              <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+                            )}
+                            <div className="min-w-0">
+                              <p className="text-xs font-semibold">{check.label}</p>
+                              <p className="mt-0.5 text-[11px] leading-4 text-muted-foreground">
+                                {check.detail}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-sm text-destructive">
+                      Preflight natijasi mavjud emas. Dialogni yopib qayta oching.
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div>
                 <Label>
                   {enforcementMode === 'execute' ? 'Execution reason' : 'Reviewer note'}
@@ -1220,7 +1404,12 @@ export default function AdminTrustSafetyPage() {
             </Button>
             <Button
               variant={enforcementMode === 'reject' ? 'destructive' : 'default'}
-              disabled={busy || enforcementNote.trim().length < 3}
+              disabled={
+                busy ||
+                enforcementNote.trim().length < 3 ||
+                (enforcementMode === 'execute' &&
+                  (enforcementPreflightLoading || !enforcementPreflight?.ready))
+              }
               onClick={() => void submitEnforcementAction()}
             >
               {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
