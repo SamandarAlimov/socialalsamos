@@ -5297,14 +5297,19 @@ export type Database = {
       enforcement_actions: {
         Row: {
           action_type: string
+          approved_at: string | null
           case_id: string | null
           created_at: string
           created_by: string | null
           ends_at: string | null
           executed_at: string | null
+          executed_by: string | null
+          execution_result: Json
           failure_reason: string | null
           id: string
           metadata: Json
+          policy_code: string | null
+          required_approvals: number
           starts_at: string
           status: string
           target_id: string
@@ -5312,14 +5317,19 @@ export type Database = {
         }
         Insert: {
           action_type: string
+          approved_at?: string | null
           case_id?: string | null
           created_at?: string
           created_by?: string | null
           ends_at?: string | null
           executed_at?: string | null
+          executed_by?: string | null
+          execution_result?: Json
           failure_reason?: string | null
           id?: string
           metadata?: Json
+          policy_code?: string | null
+          required_approvals?: number
           starts_at?: string
           status?: string
           target_id: string
@@ -5327,14 +5337,19 @@ export type Database = {
         }
         Update: {
           action_type?: string
+          approved_at?: string | null
           case_id?: string | null
           created_at?: string
           created_by?: string | null
           ends_at?: string | null
           executed_at?: string | null
+          executed_by?: string | null
+          execution_result?: Json
           failure_reason?: string | null
           id?: string
           metadata?: Json
+          policy_code?: string | null
+          required_approvals?: number
           starts_at?: string
           status?: string
           target_id?: string
@@ -5353,6 +5368,104 @@ export type Database = {
             columns: ["created_by"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "enforcement_actions_executed_by_fkey"
+            columns: ["executed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "enforcement_actions_policy_code_fkey"
+            columns: ["policy_code"]
+            isOneToOne: false
+            referencedRelation: "moderation_policies"
+            referencedColumns: ["code"]
+          },
+        ]
+      }
+      enforcement_approvals: {
+        Row: {
+          approver_id: string
+          created_at: string
+          decision: string
+          enforcement_action_id: string
+          id: string
+          note: string
+        }
+        Insert: {
+          approver_id: string
+          created_at?: string
+          decision: string
+          enforcement_action_id: string
+          id?: string
+          note: string
+        }
+        Update: {
+          approver_id?: string
+          created_at?: string
+          decision?: string
+          enforcement_action_id?: string
+          id?: string
+          note?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "enforcement_approvals_approver_id_fkey"
+            columns: ["approver_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "enforcement_approvals_enforcement_action_id_fkey"
+            columns: ["enforcement_action_id"]
+            isOneToOne: false
+            referencedRelation: "enforcement_actions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      enforcement_execution_events: {
+        Row: {
+          actor_id: string | null
+          created_at: string
+          detail: Json
+          enforcement_action_id: string
+          event_type: string
+          id: string
+        }
+        Insert: {
+          actor_id?: string | null
+          created_at?: string
+          detail?: Json
+          enforcement_action_id: string
+          event_type: string
+          id?: string
+        }
+        Update: {
+          actor_id?: string | null
+          created_at?: string
+          detail?: Json
+          enforcement_action_id?: string
+          event_type?: string
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "enforcement_execution_events_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "enforcement_execution_events_enforcement_action_id_fkey"
+            columns: ["enforcement_action_id"]
+            isOneToOne: false
+            referencedRelation: "enforcement_actions"
             referencedColumns: ["id"]
           },
         ]
@@ -8685,6 +8798,68 @@ export type Database = {
             columns: ["case_id"]
             isOneToOne: false
             referencedRelation: "moderation_cases"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      moderation_policies: {
+        Row: {
+          active: boolean
+          allowed_target_types: string[]
+          category: string
+          code: string
+          created_at: string
+          default_action: string | null
+          default_duration_hours: number | null
+          description: string
+          execution_mode: string
+          required_approvals: number
+          requires_independent_approval: boolean
+          severity_default: string
+          title: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          active?: boolean
+          allowed_target_types?: string[]
+          category: string
+          code: string
+          created_at?: string
+          default_action?: string | null
+          default_duration_hours?: number | null
+          description?: string
+          execution_mode?: string
+          required_approvals?: number
+          requires_independent_approval?: boolean
+          severity_default?: string
+          title: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          active?: boolean
+          allowed_target_types?: string[]
+          category?: string
+          code?: string
+          created_at?: string
+          default_action?: string | null
+          default_duration_hours?: number | null
+          description?: string
+          execution_mode?: string
+          required_approvals?: number
+          requires_independent_approval?: boolean
+          severity_default?: string
+          title?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "moderation_policies_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -15890,6 +16065,19 @@ export type Database = {
         }
         Returns: string
       }
+      _admin_enforcement_event: {
+        Args: {
+          p_action_id: string
+          p_actor_id: string
+          p_detail?: Json
+          p_event_type: string
+        }
+        Returns: undefined
+      }
+      _admin_enforcement_required_approvals: {
+        Args: { p_action_type: string; p_policy_code: string }
+        Returns: number
+      }
       _rtc_capacity_for_mode: { Args: { p_call_mode: string }; Returns: number }
       _rtc_conversation_type: {
         Args: { p_conversation_id: string }
@@ -15939,6 +16127,7 @@ export type Database = {
         }
         Returns: number
       }
+      admin_case_detail_v1: { Args: { p_case_id: string }; Returns: Json }
       admin_control_authorized: {
         Args: { p_permission?: string }
         Returns: boolean
@@ -15980,6 +16169,11 @@ export type Database = {
       admin_delete_mailbox_alias_v3: {
         Args: { p_alias: string; p_reason: string; p_user_id: string }
         Returns: boolean
+      }
+      admin_enforcement_queue_v1: { Args: { p_limit?: number }; Returns: Json }
+      admin_execute_enforcement_v1: {
+        Args: { p_action_id: string; p_reason: string }
+        Returns: Json
       }
       admin_finalize_user_deletion_v3: {
         Args: { p_error?: string; p_job_id: string; p_success: boolean }
@@ -16122,8 +16316,16 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      admin_revert_enforcement_v1: {
+        Args: { p_action_id: string; p_reason: string }
+        Returns: Json
+      }
       admin_review_appeal_v1: {
         Args: { p_appeal_id: string; p_decision: string; p_note: string }
+        Returns: Json
+      }
+      admin_review_enforcement_v1: {
+        Args: { p_action_id: string; p_decision: string; p_note: string }
         Returns: Json
       }
       admin_review_verification_request_v1: {
@@ -16197,6 +16399,18 @@ export type Database = {
           p_resolution_note?: string
           p_severity?: string
           p_status?: string
+        }
+        Returns: Json
+      }
+      admin_update_moderation_policy_v1: {
+        Args: {
+          p_active: boolean
+          p_code: string
+          p_default_action: string
+          p_default_duration_hours: number
+          p_description: string
+          p_reason: string
+          p_required_approvals: number
         }
         Returns: Json
       }
