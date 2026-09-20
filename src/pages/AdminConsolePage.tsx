@@ -57,6 +57,13 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Textarea } from '@/components/ui/textarea';
 
@@ -137,6 +144,22 @@ const SECTION_BY_ID = Object.fromEntries(
   ADMIN_SECTIONS.map((item) => [item.id, item]),
 ) as Record<AdminSection, (typeof ADMIN_SECTIONS)[number]>;
 
+const ADMIN_ROLE_OPTIONS = [
+  { key: 'support', label: 'Support' },
+  { key: 'trust_safety', label: 'Trust & Safety' },
+  { key: 'analytics_viewer', label: 'Analytics Viewer' },
+  { key: 'security_analyst', label: 'Security Analyst' },
+  { key: 'ads_reviewer', label: 'Ads Reviewer' },
+  { key: 'marketplace_reviewer', label: 'Marketplace Reviewer' },
+  { key: 'mini_apps_reviewer', label: 'Mini Apps Reviewer' },
+  { key: 'finance', label: 'Finance' },
+  { key: 'super_admin', label: 'Super Admin' },
+] as const;
+
+function adminRoleLabel(role: string) {
+  return ADMIN_ROLE_OPTIONS.find((item) => item.key === role)?.label || role;
+}
+
 function sectionFromPath(pathname: string): AdminSection {
   const raw = pathname.replace(/^\/admin\/?/, '').split('/')[0];
   if (!raw) return 'overview';
@@ -189,7 +212,7 @@ export default function AdminConsolePage() {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, profile } = useAuth();
-  const { isAdmin, isLoading: adminLoading, grantAdminRole, revokeAdminRole } = useAdminAccess();
+  const { isAdmin, isLoading: adminLoading, grantRole, revokeRole } = useAdminAccess();
   const analytics = useAdminAnalytics();
   const section = sectionFromPath(location.pathname);
   const sectionMeta = SECTION_BY_ID[section];
@@ -207,6 +230,7 @@ export default function AdminConsolePage() {
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [addAdminOpen, setAddAdminOpen] = useState(false);
   const [newAdminUsername, setNewAdminUsername] = useState('');
+  const [newAdminRole, setNewAdminRole] = useState<string>('support');
   const [removeAdmin, setRemoveAdmin] = useState<AdminUser | null>(null);
 
   useEffect(() => {
@@ -235,19 +259,23 @@ export default function AdminConsolePage() {
   }, []);
 
   const fetchAdmins = useCallback(async () => {
-    const { data, error } = await supabase
-      .from('user_roles')
+    const { data, error } = await (supabase as any)
+      .from('admin_role_assignments')
       .select(`
-        *,
-        profile:profiles!user_roles_user_id_fkey(
+        id,
+        user_id,
+        role:role_key,
+        created_at:granted_at,
+        profile:profiles!admin_role_assignments_user_id_fkey(
           username, display_name, avatar_url
         )
       `)
-      .eq('role', 'admin')
-      .order('created_at', { ascending: true });
+      .is('revoked_at', null)
+      .order('granted_at', { ascending: true });
 
     if (error) {
       console.error('Admin role list failed:', error);
+      toast.error('Admin rollarini yuklab bo‘lmadi');
       return;
     }
     setAdmins((data || []) as unknown as AdminUser[]);
@@ -414,10 +442,13 @@ export default function AdminConsolePage() {
         return;
       }
 
-      const { error } = await grantAdminRole(target.id);
+      const { error } = await grantRole(target.id, newAdminRole);
       if (error) throw new Error(error);
-      toast.success(`@${target.username || username} admin qilindi`);
+      toast.success(
+        `@${target.username || username} uchun ${adminRoleLabel(newAdminRole)} roli berildi`,
+      );
       setNewAdminUsername('');
+      setNewAdminRole('support');
       setAddAdminOpen(false);
       await fetchAdmins();
     } catch (error) {
@@ -438,9 +469,9 @@ export default function AdminConsolePage() {
 
     setProcessingId(removeAdmin.id);
     try {
-      const { error } = await revokeAdminRole(removeAdmin.user_id);
+      const { error } = await revokeRole(removeAdmin.user_id, removeAdmin.role);
       if (error) throw new Error(error);
-      toast.success('Admin huquqi olib tashlandi');
+      toast.success(`${adminRoleLabel(removeAdmin.role)} roli olib tashlandi`);
       setRemoveAdmin(null);
       await fetchAdmins();
     } catch (error) {
@@ -786,7 +817,7 @@ export default function AdminConsolePage() {
           <div key={admin.id} className="flex items-center gap-4 px-5 py-4">
             <Avatar className="h-10 w-10"><AvatarImage src={admin.profile?.avatar_url || ''} /><AvatarFallback>{(admin.profile?.display_name || admin.profile?.username || '?')[0]?.toUpperCase()}</AvatarFallback></Avatar>
             <div className="min-w-0 flex-1"><div className="flex items-center gap-2"><p className="truncate font-medium">{admin.profile?.display_name || admin.profile?.username || 'Admin'}</p>{admin.user_id === user?.id && <Badge variant="secondary" className="rounded-full font-normal">Siz</Badge>}</div><p className="truncate text-sm text-muted-foreground">@{admin.profile?.username || 'username-yoq'}</p></div>
-            <div className="hidden text-right text-xs text-muted-foreground sm:block"><p>Admin</p><p>{format(new Date(admin.created_at), 'dd.MM.yyyy')}</p></div>
+            <div className="hidden text-right text-xs text-muted-foreground sm:block"><p>{adminRoleLabel(admin.role)}</p><p>{format(new Date(admin.created_at), 'dd.MM.yyyy')}</p></div>
             <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-destructive" onClick={() => setRemoveAdmin(admin)} disabled={admin.user_id === user?.id || processingId === admin.id}><UserMinus className="mr-1.5 h-4 w-4" />Olib tashlash</Button>
           </div>
         ))}{admins.length === 0 && <div className="p-5"><EmptyState title="Admin topilmadi" description="Admin rollari ro‘yxati bo‘sh." /></div>}</div>}
@@ -878,15 +909,25 @@ export default function AdminConsolePage() {
 
       <Dialog open={addAdminOpen} onOpenChange={setAddAdminOpen}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Admin qo‘shish</DialogTitle><DialogDescription>Username orqali mavjud foydalanuvchiga admin huquqini bering.</DialogDescription></DialogHeader>
-          <div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">@</span><Input value={newAdminUsername} onChange={(event) => setNewAdminUsername(event.target.value)} placeholder="username" className="pl-7" onKeyDown={(event) => { if (event.key === 'Enter') void addAdmin(); }} /></div>
+          <DialogHeader><DialogTitle>Admin operator qo‘shish</DialogTitle><DialogDescription>Username va vazifaga mos RBAC rolini tanlang. Super Admin faqat to‘liq platforma boshqaruvi kerak bo‘lganda berilsin.</DialogDescription></DialogHeader>
+          <div className="space-y-3">
+            <div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">@</span><Input value={newAdminUsername} onChange={(event) => setNewAdminUsername(event.target.value)} placeholder="username" className="pl-7" onKeyDown={(event) => { if (event.key === 'Enter') void addAdmin(); }} /></div>
+            <Select value={newAdminRole} onValueChange={setNewAdminRole}>
+              <SelectTrigger><SelectValue placeholder="Rolni tanlang" /></SelectTrigger>
+              <SelectContent>
+                {ADMIN_ROLE_OPTIONS.map((role) => (
+                  <SelectItem key={role.key} value={role.key}>{role.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <DialogFooter><Button variant="outline" onClick={() => setAddAdminOpen(false)}>Bekor qilish</Button><Button onClick={() => void addAdmin()} disabled={!newAdminUsername.trim() || processingId === 'add-admin'}>{processingId === 'add-admin' && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Huquq berish</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 
       <Dialog open={!!removeAdmin} onOpenChange={(open) => !open && setRemoveAdmin(null)}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Admin huquqini olib tashlash</DialogTitle><DialogDescription>@{removeAdmin?.profile?.username || 'admin'} platforma boshqaruviga kira olmay qoladi. Bu amal foydalanuvchi hisobini o‘chirmaydi.</DialogDescription></DialogHeader>
+          <DialogHeader><DialogTitle>Admin rolini olib tashlash</DialogTitle><DialogDescription>@{removeAdmin?.profile?.username || 'admin'} hisobidan {removeAdmin ? adminRoleLabel(removeAdmin.role) : 'admin'} roli olib tashlanadi. Agar boshqa admin roli qolsa, platforma boshqaruviga kirish saqlanishi mumkin.</DialogDescription></DialogHeader>
           <DialogFooter><Button variant="outline" onClick={() => setRemoveAdmin(null)}>Bekor qilish</Button><Button variant="destructive" onClick={() => void confirmRemoveAdmin()} disabled={!removeAdmin || processingId === removeAdmin.id}>{processingId === removeAdmin?.id && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Huquqni olib tashlash</Button></DialogFooter>
         </DialogContent>
       </Dialog>
