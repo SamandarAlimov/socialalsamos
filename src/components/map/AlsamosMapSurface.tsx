@@ -29,6 +29,8 @@ interface AlsamosMapSurfaceProps {
   renderMode?: 'default' | 'preview';
   /** Force a specific renderer for operational surfaces that must be deterministic. */
   engineOverride?: MapEngineId;
+  /** Optional trusted style override for operational surfaces. */
+  vectorStyleOverride?: string;
   referenceCenter?: { latitude: number; longitude: number };
   controllerRef?: MutableRefObject<MapEngineController | null>;
   className?: string;
@@ -60,6 +62,7 @@ export function AlsamosMapSurface({
   pickMode = false,
   renderMode = 'default',
   engineOverride,
+  vectorStyleOverride,
   referenceCenter,
   controllerRef,
   className,
@@ -117,7 +120,7 @@ export function AlsamosMapSurface({
           controllerRef={activeControllerRef}
           center={center}
           zoom={zoom}
-          styleUrl={vectorStyleUrl(layerId === 'night')}
+          styleUrl={vectorStyleOverride || vectorStyleUrl(layerId === 'night')}
           markers={markers}
           lines={lines}
           buildings3d={false}
@@ -167,6 +170,7 @@ export function AlsamosMapSurface({
     overlays,
     pickMode,
     stableReferenceCenter,
+    vectorStyleOverride,
     zoom,
   ]);
 
