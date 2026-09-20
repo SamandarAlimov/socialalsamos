@@ -1,10 +1,10 @@
 import { FormEvent, ReactNode } from 'react';
 import {
+  ArrowLeft,
   ClipboardList,
   Grid3X3,
   Heart,
   Package,
-  Plus,
   Search,
   ShoppingBag,
   SlidersHorizontal,
@@ -69,6 +69,19 @@ export function MarketplaceSectionHeader({
               <p className="truncate text-[11px] text-muted-foreground">Xavfsiz savdo · keng katalog</p>
             </div>
           </div>
+
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-11 w-11 shrink-0 rounded-2xl border border-border/50 bg-background shadow-sm md:hidden"
+            onClick={() => {
+              if (window.history.length > 1) navigate(-1);
+              else navigate('/marketplace');
+            }}
+            aria-label="Ortga qaytish"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
 
           <form
             onSubmit={onSearchSubmit}
@@ -168,7 +181,6 @@ export function MarketplaceSectionHeader({
             className="hidden h-11 shrink-0 rounded-2xl px-4 text-xs font-extrabold md:inline-flex"
             onClick={() => navigate('/marketplace?tab=selling')}
           >
-            <Plus className="mr-1.5 h-4 w-4" />
             Sotish
           </Button>
         </div>
