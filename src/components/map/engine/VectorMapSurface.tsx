@@ -904,10 +904,7 @@ export function VectorMapSurface({
 
     markerRefs.current.forEach((marker) => marker.remove?.());
     markerRefs.current = markers
-      .filter(
-        (marker) =>
-          marker.kind !== 'place' && marker.kind !== 'cluster',
-      )
+      .filter((marker) => marker.kind !== 'place')
       .map((marker) => {
       const element = document.createElement('button');
       element.type = 'button';
