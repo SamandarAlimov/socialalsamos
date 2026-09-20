@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   MapPin, CreditCard, Truck, ShieldCheck, ChevronRight, Loader2, CheckCircle,
   Package, ArrowLeft, Wallet, Banknote, Plus, AlertCircle, AlertTriangle, ShoppingBag,
-  LocateFixed, X, Store, Clock3, Utensils, Navigation,
+  LocateFixed, X, Store, Clock3, Utensils, Navigation, TicketPercent,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { CategoryIcon } from '@/components/marketplace/CategoryIcon';
@@ -29,6 +29,11 @@ import { cn } from '@/lib/utils';
 import { marketplaceUz } from '@/i18n/marketplace';
 import { toast } from 'sonner';
 import { db } from '@/lib/db';
+import {
+  promoErrorMessage,
+  quoteMarketplacePromo,
+  type MarketplacePromoQuote,
+} from '@/hooks/useMarketplacePromotions';
 
 interface CheckoutSheetProps {
   open: boolean;
@@ -83,11 +88,18 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
   const [paymentProviderId, setPaymentProviderId] = useState<PaymentProviderId>(DEFAULT_PAYMENT_PROVIDER);
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
   const [walletLoading, setWalletLoading] = useState(false);
+  const [promoInput, setPromoInput] = useState('');
+  const [promoQuote, setPromoQuote] = useState<MarketplacePromoQuote | null>(null);
+  const [promoChecking, setPromoChecking] = useState(false);
   const [lastResult, setLastResult] = useState<{
     success?: boolean;
     order_ids?: string[];
     payment_status?: string;
     total?: number;
+    subtotal?: number;
+    shipping_total?: number;
+    discount_amount?: number;
+    promo_code?: string | null;
     error?: string;
   } | null>(null);
 
@@ -148,7 +160,10 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
       : cartItems.reduce((sum, item) => sum + getShippingCost(item.product, item.quantity), 0),
     [cartItems, isPickup],
   );
-  const grandTotal = cartTotal + shippingCost;
+  const promoDiscount = promoQuote?.success
+    ? Math.max(0, Number(promoQuote.discount_amount ?? 0))
+    : 0;
+  const grandTotal = Math.max(0, cartTotal + shippingCost - promoDiscount);
 
   const unavailableItems = useMemo(
     () => cartItems.filter(item =>
@@ -217,6 +232,9 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
       setPaymentProviderId(DEFAULT_PAYMENT_PROVIDER);
       setUseCoordinates(true);
       setFulfillmentType(restaurantCheckout && !restaurantCanDeliver ? 'pickup' : 'delivery');
+      setPromoInput('');
+      setPromoQuote(null);
+      setPromoChecking(false);
     }
   }, [open, restaurantCheckout, restaurantCanDeliver]);
 
@@ -275,6 +293,30 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
     setStep('failed');
   };
 
+  const applyPromo = async () => {
+    const code = promoInput.trim();
+    if (!code || promoChecking) return;
+
+    setPromoChecking(true);
+    try {
+      const quote = await quoteMarketplacePromo(code);
+      setPromoQuote(quote);
+      if (quote.success && quote.code) {
+        setPromoInput(quote.code);
+        toast.success('Promokod qo‘llandi', {
+          description: `Siz ${formatPrice(Number(quote.discount_amount ?? 0), quote.currency || currency)} tejaysiz`,
+        });
+      }
+    } finally {
+      setPromoChecking(false);
+    }
+  };
+
+  const removePromo = () => {
+    setPromoQuote(null);
+    setPromoInput('');
+  };
+
   const handlePlaceOrder = async () => {
     if (isProcessing || !selectedProvider) return;
 
@@ -318,7 +360,12 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
       if (attachedLocation.label) shippingPayload.geo_label = attachedLocation.label;
     }
 
-    const result = await placeOrder(shippingPayload, selectedProvider.method, notes || undefined);
+    const result = await placeOrder(
+      shippingPayload,
+      selectedProvider.method,
+      notes || undefined,
+      promoQuote?.success ? promoQuote.code : undefined,
+    );
     setLastResult(result);
 
     if (!result?.success) {
@@ -404,6 +451,9 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
     setLastResult(null);
     setNotes('');
     setFulfillmentType('delivery');
+    setPromoInput('');
+    setPromoQuote(null);
+    setPromoChecking(false);
     onOpenChange(false);
   };
 
@@ -704,6 +754,100 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
                     <button onClick={() => setStep('payment')} className="text-xs text-foreground font-semibold">O'zgartirish</button>
                   </div>
 
+                  <div
+                    className={cn(
+                      'rounded-2xl border p-3.5 transition',
+                      promoQuote?.success
+                        ? 'border-emerald-500/25 bg-emerald-500/[0.05]'
+                        : promoQuote && !promoQuote.success
+                          ? 'border-destructive/25 bg-destructive/[0.035]'
+                          : 'border-border/50 bg-card',
+                    )}
+                  >
+                    <div className="flex items-start gap-3">
+                      <span className={cn(
+                        'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl',
+                        promoQuote?.success
+                          ? 'bg-emerald-500/10 text-emerald-600'
+                          : 'bg-muted text-foreground',
+                      )}>
+                        <TicketPercent className="h-5 w-5" />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-bold">Promokod</p>
+                        <p className="mt-0.5 text-[11px] text-muted-foreground">
+                          Chegirma kodi bo‘lsa shu yerda qo‘llang
+                        </p>
+                      </div>
+                      {promoQuote?.success && (
+                        <button
+                          type="button"
+                          onClick={removePromo}
+                          className="rounded-lg p-1.5 text-muted-foreground transition hover:bg-background hover:text-foreground"
+                          aria-label="Promokodni olib tashlash"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
+
+                    {promoQuote?.success ? (
+                      <div className="mt-3 rounded-xl border border-emerald-500/15 bg-background/70 px-3 py-2.5">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-black tracking-wide">{promoQuote.code}</p>
+                            <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                              {promoQuote.name}
+                            </p>
+                          </div>
+                          <span className="shrink-0 rounded-full bg-emerald-500/10 px-2.5 py-1 text-xs font-black text-emerald-600 tabular-nums">
+                            − {formatPrice(promoDiscount, promoQuote.currency || currency)}
+                          </span>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="mt-3 flex gap-2">
+                          <Input
+                            value={promoInput}
+                            onChange={event => {
+                              setPromoInput(event.target.value.toUpperCase().replace(/\s+/g, ''));
+                              if (promoQuote) setPromoQuote(null);
+                            }}
+                            onKeyDown={event => {
+                              if (event.key === 'Enter') {
+                                event.preventDefault();
+                                void applyPromo();
+                              }
+                            }}
+                            placeholder="Masalan: ALSAMOS10"
+                            autoCapitalize="characters"
+                            autoComplete="off"
+                            className="h-11 rounded-xl font-bold tracking-wide"
+                          />
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="h-11 shrink-0 rounded-xl px-4 font-bold"
+                            disabled={promoChecking || promoInput.trim().length < 3}
+                            onClick={() => void applyPromo()}
+                          >
+                            {promoChecking ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Qo‘llash'}
+                          </Button>
+                        </div>
+                        {promoQuote && !promoQuote.success && (
+                          <p className="mt-2 text-[11px] font-medium text-destructive">
+                            {promoErrorMessage(
+                              promoQuote.error,
+                              promoQuote.min_subtotal,
+                              promoQuote.currency || currency,
+                            )}
+                          </p>
+                        )}
+                      </>
+                    )}
+                  </div>
+
                   <div className="space-y-2">
                     <h4 className="text-sm font-medium">{marketplaceUz.checkout.products} ({cartItems.length})</h4>
                     {cartItems.map(item => {
@@ -736,8 +880,19 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
                   <div className="p-3 rounded-xl bg-muted/30 border border-border/20 space-y-2">
                     <div className="flex justify-between text-sm"><span className="text-muted-foreground">{marketplaceUz.checkout.products}</span><span className="tabular-nums">{formatPrice(cartTotal, currency)}</span></div>
                     <div className="flex justify-between text-sm"><span className="text-muted-foreground">{isPickup ? 'Olib ketish' : marketplaceUz.checkout.delivery}</span><span className="tabular-nums">{isPickup ? 'Bepul' : shippingCost > 0 ? formatPrice(shippingCost, currency) : 'Bepul'}</span></div>
+                    {promoDiscount > 0 && (
+                      <div className="flex justify-between text-sm font-semibold text-emerald-600">
+                        <span>Promokod · {promoQuote?.code}</span>
+                        <span className="tabular-nums">− {formatPrice(promoDiscount, currency)}</span>
+                      </div>
+                    )}
                     <div className="h-px bg-border/30" />
                     <div className="flex justify-between font-bold"><span>{marketplaceUz.checkout.total}</span><span className="text-foreground text-lg tabular-nums">{formatPrice(grandTotal, currency)}</span></div>
+                    {promoDiscount > 0 && (
+                      <p className="text-right text-[11px] font-medium text-emerald-600">
+                        Siz {formatPrice(promoDiscount, currency)} tejadingiz
+                      </p>
+                    )}
                   </div>
 
                   <div className="flex items-center gap-4 text-xs text-muted-foreground">
@@ -767,6 +922,7 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
                   <div className="mb-5 w-full rounded-2xl border border-border/50 bg-muted/20 p-4 text-left">
                     <div className="mb-2 flex justify-between text-sm"><span className="text-muted-foreground">{marketplaceUz.checkout.orders}</span><span className="font-semibold tabular-nums">{lastResult?.order_ids?.length ?? 0}</span></div>
                     <div className="mb-2 flex justify-between text-sm"><span className="text-muted-foreground">{marketplaceUz.checkout.paymentMethod}</span><span className="font-semibold">{selectedProvider?.label}</span></div>
+                    {(lastResult?.discount_amount ?? 0) > 0 && <div className="mb-2 flex justify-between text-sm text-emerald-600"><span>Promokod · {lastResult?.promo_code}</span><span className="font-semibold tabular-nums">− {formatPrice(lastResult?.discount_amount ?? 0, currency)}</span></div>}
                     <div className="flex justify-between text-sm"><span className="text-muted-foreground">{marketplaceUz.checkout.overall}</span><span className="font-bold text-foreground tabular-nums">{formatPrice(paidTotal, currency)}</span></div>
                   </div>
                   <div className="flex w-full flex-col gap-2">
