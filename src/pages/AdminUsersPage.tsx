@@ -330,7 +330,7 @@ export default function AdminUsersPage() {
                 <Button variant="outline" disabled={!canSuspend || !schemaReady || protectedTarget} onClick={() => { setReason(''); setSuspendedUntil(''); setStatusAction('suspended'); }}><Ban className="mr-2 h-4 w-4" />Suspend</Button>
                 <Button variant="outline" className="text-destructive" disabled={!canSuspend || !schemaReady || protectedTarget} onClick={() => { setReason(''); setStatusAction('banned'); }}><ShieldAlert className="mr-2 h-4 w-4" />Ban</Button>
                 <Button variant="destructive" disabled={!canDelete || !schemaReady || protectedTarget} onClick={() => { setReason(''); setConfirmDelete(''); setDangerOpen(true); }}><Trash2 className="mr-2 h-4 w-4" />Hard delete</Button>
-                <Button variant="ghost" onClick={() => navigate('/admin/team')}><KeyRound className="mr-2 h-4 w-4" />Rollar</Button>
+                <Button variant="ghost" onClick={() => navigate('/admin/access')}><KeyRound className="mr-2 h-4 w-4" />Rollar</Button>
               </div>
 
               <Card><CardHeader className="pb-2"><CardTitle className="text-sm">Audit timeline</CardTitle></CardHeader><CardContent>{audit.length === 0 ? <p className="text-sm text-muted-foreground">Hozircha audit event yo‘q.</p> : <div className="space-y-3">{audit.slice(0, 20).map((event) => <div key={event.id} className="rounded-xl border p-3"><div className="flex items-start justify-between gap-3"><div><p className="text-sm font-medium">{event.action}</p><p className="text-xs text-muted-foreground">{event.reason || 'Sabab ko‘rsatilmagan'}</p></div><span className="whitespace-nowrap text-[11px] text-muted-foreground">{dateTime(event.created_at)}</span></div></div>)}</div>}</CardContent></Card>
