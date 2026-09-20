@@ -244,6 +244,11 @@ export function SellerOrdersView() {
                   {order.payment_status === 'paid' && <Badge variant="outline" className="border-green-500/20 bg-green-500/10 text-[10px] text-green-600">To‘landi</Badge>}
                   {order.payment_status === 'pending' && <Badge variant="outline" className="border-amber-500/20 bg-amber-500/10 text-[10px] text-amber-600">Yetkazganda to‘lov</Badge>}
                   {order.payment_status === 'refunded' && <Badge variant="outline" className="border-sky-500/20 bg-sky-500/10 text-[10px] text-sky-600">Qaytarilgan</Badge>}
+                  {(order.discount_amount ?? 0) > 0 && (
+                    <Badge variant="outline" className="border-emerald-500/20 bg-emerald-500/10 text-[10px] text-emerald-600">
+                      Promo {order.promo_code ? `· ${order.promo_code}` : ''}
+                    </Badge>
+                  )}
                 </div>
                 <span className="shrink-0 text-xs text-muted-foreground">{formatDistanceToNow(new Date(order.created_at))} oldin</span>
               </div>
@@ -285,6 +290,23 @@ export function SellerOrdersView() {
                     <div className="space-y-1 rounded-lg bg-muted/20 p-2.5 text-xs text-muted-foreground">
                       <p className="flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5 text-foreground" />{order.shipping_address.street}, {order.shipping_address.city}{order.shipping_address.country ? `, ${order.shipping_address.country}` : ''}</p>
                       <p className="flex items-center gap-1.5"><Phone className="h-3.5 w-3.5 text-foreground" />{order.shipping_address.full_name} • {order.shipping_address.phone}</p>
+                    </div>
+                  )}
+
+                  {(order.discount_amount ?? 0) > 0 && (
+                    <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/[0.05] p-3">
+                      <div className="flex items-center justify-between gap-3 text-xs">
+                        <span className="font-bold text-emerald-700 dark:text-emerald-400">
+                          Promokod{order.promo_code ? ` · ${order.promo_code}` : ''}
+                        </span>
+                        <span className="font-black tabular-nums text-emerald-700 dark:text-emerald-400">
+                          − {formatPrice(order.discount_amount ?? 0, order.currency)}
+                        </span>
+                      </div>
+                      <div className="mt-1.5 flex items-center justify-between gap-3 text-[11px] text-muted-foreground">
+                        <span>Mahsulotlar: {formatPrice(order.subtotal, order.currency)}</span>
+                        <span>Yakuniy: {formatPrice(order.total, order.currency)}</span>
+                      </div>
                     </div>
                   )}
 
