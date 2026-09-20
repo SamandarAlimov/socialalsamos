@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   DollarSign, Package, Eye, ShoppingCart, TrendingUp, Clock, CheckCircle, ChevronRight,
   BarChart3, ArrowUpRight, Loader2, Truck, XCircle, RotateCcw, AlertTriangle, MapPin, Phone,
@@ -22,6 +22,7 @@ import { formatPrice, formatPriceCompact } from '@/lib/marketplace';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { CreateProductDialog } from '@/components/marketplace/CreateProductDialog';
+import { useMarketplaceActivity } from '@/hooks/useMarketplaceActivity';
 
 interface SellerDashboardProps {
   onClose?: () => void;
@@ -65,6 +66,11 @@ export function SellerDashboard({ onClose }: SellerDashboardProps) {
     updateOrderStatus, refresh, sellerId,
   } = useSellerDashboard();
   const { toast } = useToast();
+  const { sellerUnreadCount, markSellerRead } = useMarketplaceActivity();
+
+  useEffect(() => {
+    if (sellerUnreadCount > 0) void markSellerRead();
+  }, [markSellerRead, sellerUnreadCount]);
 
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
@@ -121,27 +127,27 @@ export function SellerDashboard({ onClose }: SellerDashboardProps) {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-4 sm:space-y-5 lg:space-y-6">
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <h2 className="text-2xl font-bold">Sotuvchi paneli</h2>
           <p className="text-sm text-muted-foreground">Savdo va buyurtmalarni boshqaring</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="grid w-full grid-cols-[minmax(0,1fr)_auto] gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center">
           <Button
-            className="h-9 rounded-xl px-3"
+            className="h-10 min-w-0 rounded-xl px-3 sm:h-9"
             onClick={() => setShowCreateProduct(true)}
           >
             <PackagePlus className="mr-1.5 h-4 w-4" />
             <span className="hidden sm:inline">Mahsulot qo‘shish</span>
             <span className="sm:hidden">Qo‘shish</span>
           </Button>
-          <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl" onClick={refresh} aria-label="Yangilash">
+          <Button variant="ghost" size="icon" className="h-10 w-10 rounded-xl sm:h-9 sm:w-9" onClick={refresh} aria-label="Yangilash">
             <RotateCcw className="h-4 w-4" />
           </Button>
           <Select value={dateRange.toString()} onValueChange={v => setDateRange(parseInt(v, 10))}>
-            <SelectTrigger className="w-[140px] rounded-xl">
+            <SelectTrigger className="col-span-2 h-10 w-full rounded-xl sm:col-auto sm:h-9 sm:w-[140px]">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -162,7 +168,7 @@ export function SellerDashboard({ onClose }: SellerDashboardProps) {
       )}
 
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 gap-2.5 sm:gap-4 xl:grid-cols-4">
         <Card className="bg-gradient-to-br from-foreground/5 to-foreground/10 border-foreground/20">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
@@ -191,8 +197,8 @@ export function SellerDashboard({ onClose }: SellerDashboardProps) {
       </div>
 
       {/* Charts */}
-      <div className="grid md:grid-cols-2 gap-4">
-        <Card>
+      <div className="grid min-w-0 grid-cols-1 gap-3 xl:grid-cols-2 xl:gap-4">
+        <Card className="min-w-0 overflow-hidden">
           <CardHeader className="pb-2">
             <CardTitle className="text-base font-semibold flex items-center gap-2">
               <TrendingUp className="h-4 w-4 text-foreground" />
@@ -200,7 +206,7 @@ export function SellerDashboard({ onClose }: SellerDashboardProps) {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <ChartContainer config={chartConfig} className="h-[200px] w-full">
+            <ChartContainer config={chartConfig} className="h-[190px] w-full min-w-0 sm:h-[220px]">
               <AreaChart data={revenueData}>
                 <defs>
                   <linearGradient id="revenueGradient" x1="0" y1="0" x2="0" y2="1">
@@ -219,7 +225,7 @@ export function SellerDashboard({ onClose }: SellerDashboardProps) {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="min-w-0 overflow-hidden">
           <CardHeader className="pb-2">
             <CardTitle className="text-base font-semibold flex items-center gap-2">
               <BarChart3 className="h-4 w-4 text-chart-2" />
@@ -227,7 +233,7 @@ export function SellerDashboard({ onClose }: SellerDashboardProps) {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <ChartContainer config={chartConfig} className="h-[200px] w-full">
+            <ChartContainer config={chartConfig} className="h-[190px] w-full min-w-0 sm:h-[220px]">
               <BarChart data={revenueData}>
                 <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                 <XAxis dataKey="date" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
@@ -241,7 +247,7 @@ export function SellerDashboard({ onClose }: SellerDashboardProps) {
       </div>
 
       {/* Quick stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 gap-2.5 sm:gap-4 xl:grid-cols-4">
         <MiniStat icon={<Clock className="h-5 w-5 text-yellow-600" />} tone="bg-yellow-500/10"
           wrapper="bg-yellow-500/5 border-yellow-500/20" value={stats.pendingOrders} label="Faol" />
         <MiniStat icon={<CheckCircle className="h-5 w-5 text-green-600" />} tone="bg-green-500/10"
@@ -253,14 +259,14 @@ export function SellerDashboard({ onClose }: SellerDashboardProps) {
       </div>
 
       {/* Orders */}
-      <Card>
-        <CardHeader>
+      <Card className="min-w-0 overflow-hidden">
+        <CardHeader className="px-3 py-4 sm:px-6 sm:py-5">
           <CardTitle className="text-base font-semibold flex items-center gap-2">
             Kelgan buyurtmalar
             {stats.pendingOrders > 0 && <Badge className="text-[10px]">{stats.pendingOrders} faol</Badge>}
           </CardTitle>
         </CardHeader>
-        <CardContent className="p-0">
+        <CardContent className="min-w-0 p-0">
           {orders.length === 0 ? (
             <div className="text-center py-12 px-4">
               <ShoppingCart className="h-12 w-12 mx-auto text-muted-foreground/30 mb-3" />
@@ -270,7 +276,7 @@ export function SellerDashboard({ onClose }: SellerDashboardProps) {
               </p>
             </div>
           ) : (
-            <ScrollArea className="h-[420px]">
+            <ScrollArea className="h-[min(62dvh,560px)]">
               <div className="divide-y">
                 {orders.map(order => {
                   const isOpen = selectedOrder?.id === order.id;
@@ -282,11 +288,11 @@ export function SellerDashboard({ onClose }: SellerDashboardProps) {
                   return (
                     <div
                       key={order.id}
-                      className="p-4 hover:bg-muted/50 transition-colors cursor-pointer"
+                      className="cursor-pointer p-3 transition-colors hover:bg-muted/50 sm:p-4"
                       onClick={() => setSelectedOrder(isOpen ? null : order)}
                     >
-                      <div className="flex items-center gap-4">
-                        <Avatar className="h-10 w-10">
+                      <div className="flex items-start gap-3 sm:items-center sm:gap-4">
+                        <Avatar className="h-9 w-9 shrink-0 sm:h-10 sm:w-10">
                           <AvatarImage src={order.buyer?.avatar_url || ''} />
                           <AvatarFallback>
                             {(order.buyer?.display_name || order.buyer?.username || 'X').charAt(0).toUpperCase()}
@@ -317,13 +323,17 @@ export function SellerDashboard({ onClose }: SellerDashboardProps) {
                               </Badge>
                             )}
                           </div>
-                          <p className="text-xs text-muted-foreground truncate">
+                          <p className="truncate text-xs text-muted-foreground">
                             {order.order_number || order.id.slice(0, 8).toUpperCase()} •{' '}
                             {format(new Date(order.created_at), 'dd.MM.yyyy HH:mm')}
                           </p>
+                          <div className="mt-1.5 flex items-center justify-between gap-2 sm:hidden">
+                            <p className="truncate text-sm font-bold tabular-nums">{formatPrice(order.total, order.currency)}</p>
+                            <p className="shrink-0 text-[11px] text-muted-foreground">{order.items.length} ta mahsulot</p>
+                          </div>
                         </div>
 
-                        <div className="text-right shrink-0">
+                        <div className="hidden shrink-0 text-right sm:block">
                           <p className="font-semibold tabular-nums">{formatPrice(order.total, order.currency)}</p>
                           <p className="text-xs text-muted-foreground">{order.items.length} ta mahsulot</p>
                         </div>
@@ -338,7 +348,7 @@ export function SellerDashboard({ onClose }: SellerDashboardProps) {
                         <div className="mt-4 pt-4 border-t space-y-4" onClick={e => e.stopPropagation()}>
                           <div className="space-y-2">
                             {order.items.map(item => (
-                              <div key={item.id} className="flex items-center gap-3">
+                              <div key={item.id} className="flex min-w-0 items-center gap-2.5 sm:gap-3">
                                 <div className="h-12 w-12 rounded-lg bg-muted overflow-hidden flex items-center justify-center">
                                   {item.product?.images?.[0]?.url ? (
                                     <img src={item.product.images[0].url} alt={item.title}
@@ -353,7 +363,7 @@ export function SellerDashboard({ onClose }: SellerDashboardProps) {
                                     {formatPrice(item.price, order.currency)} × {item.quantity}
                                   </p>
                                 </div>
-                                <p className="font-medium tabular-nums">{formatPrice(item.total, order.currency)}</p>
+                                <p className="max-w-[42%] shrink-0 truncate text-right text-sm font-medium tabular-nums sm:max-w-none">{formatPrice(item.total, order.currency)}</p>
                               </div>
                             ))}
                           </div>
@@ -453,11 +463,11 @@ export function SellerDashboard({ onClose }: SellerDashboardProps) {
 
 function StatCard({ icon, tone, value, label }: { icon: React.ReactNode; tone: string; value: string; label: string }) {
   return (
-    <Card>
+    <Card className="min-w-0 overflow-hidden">
       <CardContent className="p-4">
         <div className={cn('h-10 w-10 rounded-xl flex items-center justify-center', tone)}>{icon}</div>
         <div className="mt-3">
-          <p className="text-2xl font-bold tabular-nums">{value}</p>
+          <p className="truncate text-lg font-bold tabular-nums sm:text-2xl">{value}</p>
           <p className="text-xs text-muted-foreground">{label}</p>
         </div>
       </CardContent>
@@ -471,11 +481,11 @@ function MiniStat({
   icon: React.ReactNode; tone: string; wrapper?: string; value: string | number; label: string;
 }) {
   return (
-    <Card className={wrapper}>
-      <CardContent className="p-4 flex items-center gap-3">
+    <Card className={cn('min-w-0 overflow-hidden', wrapper)}>
+      <CardContent className="flex items-center gap-2.5 p-3 sm:gap-3 sm:p-4">
         <div className={cn('h-10 w-10 rounded-full flex items-center justify-center shrink-0', tone)}>{icon}</div>
         <div className="min-w-0">
-          <p className="text-xl font-bold tabular-nums truncate">{value}</p>
+          <p className="truncate text-lg font-bold tabular-nums sm:text-xl">{value}</p>
           <p className="text-xs text-muted-foreground">{label}</p>
         </div>
       </CardContent>
