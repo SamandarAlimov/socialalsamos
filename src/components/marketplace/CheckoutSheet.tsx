@@ -950,6 +950,12 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
                   <div className="w-full rounded-2xl border border-border/50 bg-muted/20 p-4 mb-5 text-left">
                     <div className="flex justify-between text-sm mb-2"><span className="text-muted-foreground">{marketplaceUz.checkout.orders}</span><span className="font-semibold tabular-nums">{lastResult?.order_ids?.length ?? 0}</span></div>
                     <div className="flex justify-between text-sm mb-2"><span className="text-muted-foreground">{marketplaceUz.checkout.paymentMethod}</span><span className="font-semibold">{selectedProvider?.label || "To'lov usuli"}</span></div>
+                    {(lastResult?.discount_amount ?? 0) > 0 && (
+                      <div className="mb-2 flex justify-between text-sm text-emerald-600">
+                        <span>Promokod · {lastResult?.promo_code}</span>
+                        <span className="font-semibold tabular-nums">− {formatPrice(lastResult?.discount_amount ?? 0, currency)}</span>
+                      </div>
+                    )}
                     <div className="flex justify-between text-sm"><span className="text-muted-foreground">{marketplaceUz.checkout.overall}</span><span className="font-bold text-foreground tabular-nums">{formatPrice(paidTotal, currency)}</span></div>
                   </div>
                   <div className="flex flex-col gap-2 w-full">
