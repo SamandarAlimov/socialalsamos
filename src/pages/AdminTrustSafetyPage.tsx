@@ -5,14 +5,20 @@ import {
   CheckCircle2,
   ClipboardList,
   Clock3,
+  BookOpen,
+  CheckCheck,
+  Eye,
   FileWarning,
   Gavel,
+  History,
   Loader2,
+  PlayCircle,
   RefreshCw,
   Scale,
   ShieldAlert,
   ShieldCheck,
   UserRoundCheck,
+  XCircle,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -39,14 +45,21 @@ import {
 } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
+import { useAuth } from '@/contexts/AuthContext';
 import { useAdminAccess } from '@/hooks/useAdminAccess';
 import {
   bulkTriageReports,
   createCaseFromReport,
   decideModerationCase,
+  executeEnforcement,
+  fetchAdminCaseDetail,
+  reviewEnforcement,
   reviewModerationAppeal,
   updateModerationCase,
+  useEnforcementQueue,
   useTrustSafetyControl,
+  type AdminCaseDetail,
+  type EnforcementAction,
   type ModerationAppeal,
   type ModerationCase,
   type TrustSafetyPriority,
@@ -109,6 +122,7 @@ function Metric({
 }
 
 export default function AdminTrustSafetyPage() {
+  const { user } = useAuth();
   const { isAdmin, isLoading: accessLoading, hasPermission } = useAdminAccess();
   const canView =
     hasPermission('admin.trust_safety.view') ||
@@ -117,7 +131,19 @@ export default function AdminTrustSafetyPage() {
   const canManage =
     hasPermission('admin.trust_safety.manage') ||
     hasPermission('reports.review');
+  const canApprove =
+    hasPermission('admin.enforcement.approve') ||
+    hasPermission('admin.trust_safety.manage');
+  const canExecute =
+    hasPermission('admin.enforcement.execute') ||
+    hasPermission('admin.trust_safety.manage');
   const { snapshot, loading, error, refresh } = useTrustSafetyControl(isAdmin && canView);
+  const {
+    snapshot: enforcementSnapshot,
+    loading: enforcementLoading,
+    error: enforcementError,
+    refresh: refreshEnforcement,
+  } = useEnforcementQueue(isAdmin && canView);
 
   const [tab, setTab] = useState('reports');
   const [selectedReportIds, setSelectedReportIds] = useState<string[]>([]);
@@ -145,6 +171,11 @@ export default function AdminTrustSafetyPage() {
     decision: 'upheld' as 'upheld' | 'overturned' | 'modified',
     note: '',
   });
+  const [caseDetail, setCaseDetail] = useState<AdminCaseDetail | null>(null);
+  const [caseDetailLoading, setCaseDetailLoading] = useState(false);
+  const [enforcementTarget, setEnforcementTarget] = useState<EnforcementAction | null>(null);
+  const [enforcementMode, setEnforcementMode] = useState<'approve' | 'reject' | 'execute'>('approve');
+  const [enforcementNote, setEnforcementNote] = useState('');
 
   const selectedSet = useMemo(() => new Set(selectedReportIds), [selectedReportIds]);
   const allVisibleSelected =
@@ -163,6 +194,12 @@ export default function AdminTrustSafetyPage() {
 
   const openCase = (item: ModerationCase) => {
     setCaseTarget(item);
+    setCaseDetail(null);
+    setCaseDetailLoading(true);
+    void fetchAdminCaseDetail(item.id)
+      .then(setCaseDetail)
+      .catch((caught: any) => toast.error(caught?.message || 'Case timeline yuklanmadi'))
+      .finally(() => setCaseDetailLoading(false));
     setCaseForm({
       status: item.status,
       priority: item.priority,
@@ -262,6 +299,58 @@ export default function AdminTrustSafetyPage() {
     } finally {
       setBusy(false);
     }
+  };
+
+  const openEnforcementAction = (
+    item: EnforcementAction,
+    mode: 'approve' | 'reject' | 'execute',
+  ) => {
+    setEnforcementTarget(item);
+    setEnforcementMode(mode);
+    setEnforcementNote('');
+  };
+
+  const submitEnforcementAction = async () => {
+    if (!enforcementTarget || enforcementNote.trim().length < 3) return;
+    setBusy(true);
+    try {
+      if (enforcementMode === 'execute') {
+        await executeEnforcement(enforcementTarget.id, enforcementNote.trim());
+        toast.success('Enforcement canonical platform state’ga qo‘llandi');
+      } else {
+        await reviewEnforcement({
+          actionId: enforcementTarget.id,
+          decision: enforcementMode === 'approve' ? 'approved' : 'rejected',
+          note: enforcementNote.trim(),
+        });
+        toast.success(
+          enforcementMode === 'approve'
+            ? 'Independent approval saqlandi'
+            : 'Enforcement rad etildi',
+        );
+      }
+      setEnforcementTarget(null);
+      setEnforcementNote('');
+      await Promise.all([refresh(), refreshEnforcement()]);
+      if (caseTarget) {
+        setCaseDetail(await fetchAdminCaseDetail(caseTarget.id));
+      }
+    } catch (caught: any) {
+      const message = String(caught?.message || '');
+      if (message.includes('four_eyes_creator_cannot_approve')) {
+        toast.error('Action yaratuvchisi o‘z enforcementini tasdiqlay olmaydi.');
+      } else if (message.includes('super_admin_approval_required')) {
+        toast.error('Permanent disable uchun boshqa super admin approval kerak.');
+      } else {
+        toast.error(message || 'Enforcement action bajarilmadi');
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const refreshAll = async () => {
+    await Promise.all([refresh(), refreshEnforcement()]);
   };
 
   const runBulk = async (action: 'dismiss' | 'mark_in_review' | 'set_priority') => {
