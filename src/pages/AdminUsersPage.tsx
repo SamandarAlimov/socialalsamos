@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { AdminControlNav } from '@/components/admin/AdminControlNav';
+import { AdminEntityNotesCard } from '@/components/admin/AdminEntityNotesCard';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -319,6 +320,8 @@ export default function AdminUsersPage() {
               <Card><CardHeader className="pb-2"><CardTitle className="text-sm">Supabase Auth identity</CardTitle></CardHeader><CardContent className="grid gap-3 text-sm sm:grid-cols-2"><div><p className="text-xs text-muted-foreground">Email</p><p className="break-all font-medium">{authUser?.email || 'Edge Function deployidan keyin'}</p></div><div><p className="text-xs text-muted-foreground">Oxirgi login</p><p>{dateTime(authUser?.last_sign_in_at)}</p></div><div><p className="text-xs text-muted-foreground">Email tasdiqlangan</p><p>{authUser?.email_confirmed_at ? 'Ha' : 'Yo‘q / noma’lum'}</p></div><div><p className="text-xs text-muted-foreground">Provider</p><p>{authUser?.providers?.join(', ') || '—'}</p></div></CardContent></Card>
 
               <Card><CardHeader className="pb-2"><CardTitle className="text-sm">Alsamos mailbox aliases</CardTitle></CardHeader><CardContent>{aliases.length === 0 ? <p className="text-sm text-muted-foreground">Alias yo‘q yoki migration hali deploy qilinmagan.</p> : <div className="space-y-2">{aliases.map((alias) => <div key={alias} className="flex items-center justify-between gap-3 rounded-xl border p-3"><span className="min-w-0 truncate font-mono text-sm">{alias}</span><Button size="sm" variant="ghost" disabled={!canEmail || protectedTarget} onClick={() => { setReason(''); setAliasToDelete(alias); }}><Trash2 className="mr-2 h-4 w-4" />O‘chirish</Button></div>)}</div>}</CardContent></Card>
+
+              {selected && <AdminEntityNotesCard entityType="user" entityId={selected.user_id} />}
 
               <div className="flex flex-wrap gap-2">
                 <Button variant="outline" disabled={!canEdit || !schemaReady || protectedTarget} onClick={() => { setReason(''); setEditOpen(true); }}><UserCog className="mr-2 h-4 w-4" />Profil</Button>
