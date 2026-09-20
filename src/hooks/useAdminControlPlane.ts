@@ -434,6 +434,7 @@ export interface SecurityPosture {
     rls_enabled_no_policy: number;
     mutable_search_path: number;
     anon_security_definer_rpc: number;
+    anon_security_definer_unreviewed: number;
     anon_security_definer_trigger: number;
     extensions_in_public: number;
   };
@@ -455,6 +456,24 @@ export interface SecurityPosture {
     total: number;
     latest_at: string | null;
   };
+}
+
+export interface SecurityRpcSurfaceItem {
+  function_name: string;
+  arguments: string;
+  result_type: string;
+  reviewed: boolean;
+  category: string | null;
+  reason: string | null;
+  reviewed_at: string | null;
+}
+
+export interface SecurityRpcSurface {
+  generated_at?: string;
+  total_anon_definer: number;
+  reviewed: number;
+  unreviewed: number;
+  items: SecurityRpcSurfaceItem[];
 }
 
 export interface AdminAuditExport {
@@ -924,6 +943,18 @@ export async function fetchSecurityPosture() {
   const { data, error } = await rpc<SecurityPosture>('admin_security_posture_v1');
   if (error) throw error;
   return data;
+}
+
+export async function fetchSecurityRpcSurface() {
+  const { data, error } = await rpc<SecurityRpcSurface>('admin_security_rpc_surface_v1');
+  if (error) throw error;
+  return {
+    generated_at: data?.generated_at,
+    total_anon_definer: Number(data?.total_anon_definer || 0),
+    reviewed: Number(data?.reviewed || 0),
+    unreviewed: Number(data?.unreviewed || 0),
+    items: Array.isArray(data?.items) ? data.items : [],
+  } satisfies SecurityRpcSurface;
 }
 
 export async function exportAdminAudit(limit = 1000) {

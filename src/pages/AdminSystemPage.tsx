@@ -45,12 +45,14 @@ import {
   exportAdminAudit,
   fetchAuditEventDetail,
   fetchSecurityPosture,
+  fetchSecurityRpcSurface,
   fetchUserSecuritySnapshot,
   revokeDeviceTrust,
   useSystemControl,
   type AdminAuditEvent,
   type AdminDevice,
   type SecurityPosture,
+  type SecurityRpcSurface,
   type UserSecuritySnapshot,
 } from '@/hooks/useAdminControlPlane';
 import { supabase } from '@/integrations/supabase/client';
@@ -136,6 +138,7 @@ export default function AdminSystemPage() {
   const [deviceReason, setDeviceReason] = useState('');
   const [deviceSaving, setDeviceSaving] = useState(false);
   const [posture, setPosture] = useState<SecurityPosture | null>(null);
+  const [rpcSurface, setRpcSurface] = useState<SecurityRpcSurface | null>(null);
   const [postureLoading, setPostureLoading] = useState(false);
   const [auditExporting, setAuditExporting] = useState(false);
 
@@ -143,7 +146,12 @@ export default function AdminSystemPage() {
     if (!isAdmin || !canView) return;
     setPostureLoading(true);
     try {
-      setPosture(await fetchSecurityPosture());
+      const [nextPosture, nextRpcSurface] = await Promise.all([
+        fetchSecurityPosture(),
+        fetchSecurityRpcSurface(),
+      ]);
+      setPosture(nextPosture);
+      setRpcSurface(nextRpcSurface);
     } catch (caught: any) {
       toast.error(caught?.message || 'Security posture yuklanmadi');
     } finally {
@@ -358,8 +366,10 @@ export default function AdminSystemPage() {
               </div>
               <div className="rounded-xl border bg-background p-3">
                 <p className="text-xs text-muted-foreground">Anon definer surface</p>
-                <p className={cn('mt-1 font-semibold tabular-nums', Number(posture?.advisor.anon_security_definer_rpc || 0) > 0 && 'text-amber-600')}>{posture?.advisor.anon_security_definer_rpc ?? '—'}</p>
-                <p className="mt-1 text-[11px] text-muted-foreground">{posture?.advisor.anon_security_definer_trigger ?? 0} trigger RPC · {posture?.advisor.extensions_in_public ?? 0} public extension</p>
+                <p className={cn('mt-1 font-semibold tabular-nums', Number(posture?.advisor.anon_security_definer_unreviewed || 0) > 0 && 'text-destructive')}>{posture?.advisor.anon_security_definer_rpc ?? '—'}</p>
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  {posture?.advisor.anon_security_definer_unreviewed ?? 0} unreviewed · {posture?.advisor.anon_security_definer_trigger ?? 0} trigger · {posture?.advisor.extensions_in_public ?? 0} public extension
+                </p>
               </div>
               <div className="rounded-xl border bg-background p-3">
                 <p className="text-xs text-muted-foreground">SLA breached</p>
@@ -370,6 +380,54 @@ export default function AdminSystemPage() {
                 <p className="text-xs text-muted-foreground">Enforcement failed</p>
                 <p className={cn('mt-1 font-semibold tabular-nums', Number(posture?.enforcement.failed || 0) > 0 && 'text-destructive')}>{posture?.enforcement.failed ?? '—'}</p>
                 <p className="mt-1 text-[11px] text-muted-foreground">{posture?.enforcement.retry_requests ?? 0} retry · {posture?.enforcement.retry_failed ?? 0} retry failed</p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="overflow-hidden shadow-sm">
+            <CardHeader className="border-b bg-muted/10">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <CardTitle className="text-base">Reviewed anonymous RPC surface</CardTitle>
+                    <Badge variant={Number(rpcSurface?.unreviewed || 0) > 0 ? 'destructive' : 'secondary'}>
+                      {rpcSurface?.unreviewed ?? 0} unreviewed
+                    </Badge>
+                    <Badge variant="outline">{rpcSurface?.reviewed ?? 0} reviewed</Badge>
+                  </div>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Anonymous SECURITY DEFINER funksiyalar faqat explicit registry bilan public qoladi. Sensitive identity/admin RPC’lar anon’dan yopilgan.
+                  </p>
+                </div>
+                <Badge variant="outline">{rpcSurface?.total_anon_definer ?? 0} public definer</Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="divide-y">
+                {(rpcSurface?.items || []).map((item) => (
+                  <div
+                    key={`${item.function_name}|${item.arguments}`}
+                    className="grid gap-3 p-4 lg:grid-cols-[minmax(220px,0.8fr)_140px_minmax(0,1.4fr)] lg:items-center"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate font-mono text-xs font-semibold">{item.function_name}</p>
+                      <p className="mt-1 truncate font-mono text-[10px] text-muted-foreground">{item.arguments || '()'}</p>
+                    </div>
+                    <div>
+                      <Badge variant={item.reviewed ? 'secondary' : 'destructive'}>
+                        {item.reviewed ? item.category || 'reviewed' : 'needs review'}
+                      </Badge>
+                    </div>
+                    <p className="text-xs leading-relaxed text-muted-foreground">
+                      {item.reason || 'Explicit public exposure review talab qilinadi.'}
+                    </p>
+                  </div>
+                ))}
+                {rpcSurface && rpcSurface.items.length === 0 && (
+                  <div className="p-8 text-center text-sm text-muted-foreground">
+                    Anonymous SECURITY DEFINER RPC yo‘q.
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
