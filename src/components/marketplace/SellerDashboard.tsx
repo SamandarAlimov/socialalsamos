@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import {
   DollarSign, Package, Eye, ShoppingCart, TrendingUp, Clock, CheckCircle, ChevronRight,
   BarChart3, ArrowUpRight, Loader2, Truck, XCircle, RotateCcw, AlertTriangle, MapPin, Phone,
-  PackagePlus,
+  PackagePlus, TicketPercent,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -23,6 +23,7 @@ import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { CreateProductDialog } from '@/components/marketplace/CreateProductDialog';
 import { useMarketplaceActivity } from '@/hooks/useMarketplaceActivity';
+import { MarketplacePromotionManager } from '@/components/marketplace/MarketplacePromotionManager';
 
 interface SellerDashboardProps {
   onClose?: () => void;
@@ -76,6 +77,7 @@ export function SellerDashboard({ onClose }: SellerDashboardProps) {
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [cancelTarget, setCancelTarget] = useState<Order | null>(null);
   const [showCreateProduct, setShowCreateProduct] = useState(false);
+  const [showPromotions, setShowPromotions] = useState(false);
 
   const runStatusChange = async (
     order: Order,
@@ -143,6 +145,15 @@ export function SellerDashboard({ onClose }: SellerDashboardProps) {
             <span className="hidden sm:inline">Mahsulot qo‘shish</span>
             <span className="sm:hidden">Qo‘shish</span>
           </Button>
+          <Button
+            variant={showPromotions ? 'default' : 'outline'}
+            className="h-10 min-w-0 rounded-xl px-3 sm:h-9"
+            onClick={() => setShowPromotions(value => !value)}
+          >
+            <TicketPercent className="mr-1.5 h-4 w-4" />
+            <span className="hidden sm:inline">Promokodlar</span>
+            <span className="sm:hidden">Promo</span>
+          </Button>
           <Button variant="ghost" size="icon" className="h-10 w-10 rounded-xl sm:h-9 sm:w-9" onClick={refresh} aria-label="Yangilash">
             <RotateCcw className="h-4 w-4" />
           </Button>
@@ -165,6 +176,10 @@ export function SellerDashboard({ onClose }: SellerDashboardProps) {
           <span className="flex-1">Ma'lumotlarni yuklashda xatolik</span>
           <Button size="sm" variant="ghost" className="h-7" onClick={refresh}>Qayta urinish</Button>
         </div>
+      )}
+
+      {showPromotions && (
+        <MarketplacePromotionManager mode="seller" sellerId={sellerId} />
       )}
 
       {/* Stats */}
