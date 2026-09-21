@@ -13,11 +13,11 @@ const stylesheet = fs.readFileSync(
 );
 
 describe('video comments nested scroll handoff', () => {
-  it('hands a downward pull to the sheet only after the comment list reaches scrollTop zero', () => {
-    expect(source).toContain("querySelector<HTMLElement>('[data-comment-list=\"true\"]')");
-    expect(source).toContain('commentList.scrollTop > COMMENT_SCROLL_EPSILON');
+  it('delegates a downward edge pull from comments to the sheet in capture phase', () => {
+    expect(source).toContain("closest<HTMLElement>('[data-comment-list=\"true\"]')");
+    expect(source).toContain('isVideoCommentsListAtPullDismissEdge(');
     expect(source).toContain("beginMobileDrag(activationY, -1, 'comments')");
-    expect(source).toContain("commentList.addEventListener('touchmove', handleTouchMove, { passive: false })");
+    expect(source).toContain("document.addEventListener('touchmove', handleTouchMove, { capture: true, passive: false })");
   });
 
   it('translates the whole compact sheet instead of shrinking below the reference detent', () => {
