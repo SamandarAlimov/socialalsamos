@@ -9,12 +9,13 @@ import { RichTextContent } from '@/components/RichTextContent';
 import { VerifiedBadge } from '@/components/VerifiedBadge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Heart,
   Loader2,
   MessageCircle,
   MoreHorizontal,
+  Pin,
   Send,
   Sticker,
   Trash2,
@@ -78,7 +79,7 @@ function serializeCommentContent(text: string, media: SelectedMedia): string {
 }
 
 function commentDisplayName(comment: Comment): string {
-  return comment.profile?.display_name || comment.profile?.username || 'User';
+  return comment.profile?.username?.trim() || 'user';
 }
 
 function commentProfilePath(comment: Comment, currentUserId?: string): string {
@@ -111,7 +112,7 @@ function CommentAttachmentPreview({
         className="absolute right-2 top-2 z-10 flex h-6 w-6 items-center justify-center rounded-full bg-black/70 text-white shadow-sm backdrop-blur transition hover:bg-black/85"
         aria-label="Biriktirilgan mediani olib tashlash"
       >
-        <X className="h-3.5 w-3.5" />
+        <X className="h-3 w-3" />
       </button>
       {media.type === 'video' ? (
         <video
@@ -139,9 +140,11 @@ interface CommentItemProps {
   replyingToId: string | null;
   highlightedCommentId: string | null;
   immersive: boolean;
+  canPin: boolean;
   onLike: (commentId: string) => void;
   onDelete: (commentId: string) => void;
   onReply: (comment: Comment) => void;
+  onTogglePin: (commentId: string, pinned: boolean) => void;
 }
 
 function CommentItem({
@@ -152,13 +155,15 @@ function CommentItem({
   replyingToId,
   highlightedCommentId,
   immersive,
+  canPin,
   onLike,
   onDelete,
   onReply,
+  onTogglePin,
 }: CommentItemProps) {
   const indentation = immersive
     ? depth > 0
-      ? 'ml-10'
+      ? 'ml-9'
       : ''
     : depth === 1
       ? 'ml-7 border-l border-border/70 pl-3'
@@ -179,14 +184,14 @@ function CommentItem({
             : 'bg-muted/80 shadow-[0_0_0_1px_hsl(var(--border))]'),
       )}
     >
-      <div className={cn('flex gap-3', immersive ? 'py-2.5' : 'py-3')}>
+      <div className={cn('flex gap-2.5', immersive ? 'py-[7px]' : 'py-2.5')}>
         <Link
           to={commentProfilePath(comment, currentUserId)}
           onClick={(event) => event.stopPropagation()}
           className="shrink-0 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
           aria-label={commentDisplayName(comment) + ' profilini ochish'}
         >
-          <Avatar className={cn('ring-1 transition-opacity hover:opacity-90', immersive ? 'h-9 w-9 ring-white/10' : 'h-8 w-8 ring-border/80')}>
+          <Avatar className={cn('ring-1 transition-opacity hover:opacity-90', immersive ? 'h-8 w-8 ring-white/10' : 'h-8 w-8 ring-border/80')}>
             <AvatarImage src={comment.profile?.avatar_url || ''} />
             <AvatarFallback className={cn('text-xs', immersive ? 'bg-white/10 text-white/80' : 'bg-muted')}>
               {commentDisplayName(comment).charAt(0).toUpperCase()}
@@ -200,7 +205,7 @@ function CommentItem({
               to={commentProfilePath(comment, currentUserId)}
               onClick={(event) => event.stopPropagation()}
               className={cn(
-                'inline-flex min-w-0 items-center gap-1 text-sm font-semibold transition hover:underline',
+                'inline-flex min-w-0 items-center gap-1 text-[13px] font-semibold leading-5 transition hover:underline',
                 immersive ? 'text-white' : 'text-foreground',
               )}
             >
@@ -208,54 +213,61 @@ function CommentItem({
               {comment.profile?.is_verified && <VerifiedBadge size="xs" />}
             </Link>
 
-            {comment.profile?.username && (
-              <Link
-                to={commentProfilePath(comment, currentUserId)}
-                onClick={(event) => event.stopPropagation()}
-                className={cn(
-                  'max-w-[180px] truncate text-xs transition hover:underline',
-                  immersive ? 'text-white/55 hover:text-white/80' : 'text-muted-foreground hover:text-foreground',
-                )}
-              >
-                @{comment.profile.username}
-              </Link>
-            )}
-
-            <span className={cn('text-xs', immersive ? 'text-white/45' : 'text-muted-foreground')}>
+            <span className={cn('text-[11px]', immersive ? 'text-white/42' : 'text-muted-foreground')}>
               {formatDistanceToNow(new Date(comment.created_at), { addSuffix: true })}
             </span>
 
-            {currentUserId === comment.user_id && (
+            {(currentUserId === comment.user_id || (canPin && depth === 0)) && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
                     variant="ghost"
                     size="icon"
                     className={cn(
-                      'h-6 w-6 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:focus:opacity-100',
-                      immersive && 'text-white/55 hover:bg-white/10 hover:text-white',
+                      'h-6 w-6 rounded-full transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:focus:opacity-100',
+                      immersive && 'text-white/50 hover:bg-white/[0.08] hover:text-white',
                     )}
                     aria-label="Izoh amallari"
                   >
                     <MoreHorizontal className="h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => onDelete(comment.id)} className="text-destructive">
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    O‘chirish
-                  </DropdownMenuItem>
+                <DropdownMenuContent align="end" className="min-w-48">
+                  {canPin && depth === 0 && (
+                    <DropdownMenuItem onClick={() => onTogglePin(comment.id, !comment.is_pinned)}>
+                      <Pin className={cn('mr-2 h-4 w-4', comment.is_pinned && 'fill-current')} />
+                      {comment.is_pinned ? 'Mahkamlashni olib tashlash' : 'Izohni mahkamlash'}
+                    </DropdownMenuItem>
+                  )}
+                  {currentUserId === comment.user_id && (
+                    <DropdownMenuItem onClick={() => onDelete(comment.id)} className="text-destructive">
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      O‘chirish
+                    </DropdownMenuItem>
+                  )}
                 </DropdownMenuContent>
               </DropdownMenu>
             )}
           </div>
 
+          {comment.is_pinned && depth === 0 && (
+            <div
+              className={cn(
+                'mt-0.5 inline-flex items-center gap-1 text-[10px] font-medium',
+                immersive ? 'text-white/45' : 'text-muted-foreground',
+              )}
+            >
+              <Pin className="h-3 w-3 fill-current" />
+              Mahkamlangan
+            </div>
+          )}
+
           <RichTextContent
             content={comment.content}
-            className={cn('mt-1 text-sm leading-relaxed', immersive && 'text-white/95')}
+            className={cn('mt-0.5 text-[13px] leading-[1.35rem]', immersive && 'text-white/95')}
           />
 
-          <div className={cn('mt-2 flex items-center', immersive ? 'gap-5' : 'gap-4')}>
+          <div className={cn('mt-1 flex items-center', immersive ? 'gap-4' : 'gap-3')}>
             <button
               type="button"
               onClick={() => onLike(comment.id)}
@@ -287,7 +299,7 @@ function CommentItem({
                       : 'text-muted-foreground hover:text-foreground',
                 )}
               >
-                <MessageCircle className="h-3.5 w-3.5" />
+                <MessageCircle className="h-3 w-3" />
                 Javob
               </button>
             )}
@@ -307,9 +319,11 @@ function CommentItem({
               replyingToId={replyingToId}
               highlightedCommentId={highlightedCommentId}
               immersive={immersive}
+              canPin={canPin}
               onLike={onLike}
               onDelete={onDelete}
               onReply={onReply}
+              onTogglePin={onTogglePin}
             />
           ))}
         </div>
@@ -327,7 +341,15 @@ export function CommentsSection({
   focusComposerRequest = 0,
 }: CommentsSectionProps) {
   const { user } = useAuth();
-  const { comments, isLoading, addComment, likeComment, deleteComment } = useComments(postId);
+  const {
+    comments,
+    isLoading,
+    addComment,
+    likeComment,
+    deleteComment,
+    togglePinComment,
+    canPinComments,
+  } = useComments(postId);
 
   const [newComment, setNewComment] = useState('');
   const [selectedMedia, setSelectedMedia] = useState<SelectedMedia>(null);
@@ -336,7 +358,7 @@ export function CommentsSection({
   const [highlightedCommentId, setHighlightedCommentId] = useState<string | null>(null);
 
   const rootRef = useRef<HTMLDivElement>(null);
-  const commentInputRef = useRef<HTMLInputElement>(null);
+  const commentInputRef = useRef<HTMLTextAreaElement>(null);
   const savedBaseDraftRef = useRef<SavedComposerDraft>(null);
 
   const {
@@ -348,6 +370,22 @@ export function CommentsSection({
 
   const isPanel = layout === 'panel';
   const immersive = appearance === 'immersive';
+
+  const resizeComposer = useCallback(() => {
+    const input = commentInputRef.current;
+    if (!input) return;
+
+    input.style.height = '0px';
+    const maxHeight = 112;
+    const nextHeight = Math.min(Math.max(input.scrollHeight, 36), maxHeight);
+    input.style.height = `${nextHeight}px`;
+    input.style.overflowY = input.scrollHeight > maxHeight ? 'auto' : 'hidden';
+  }, []);
+
+  useEffect(() => {
+    const frame = requestAnimationFrame(resizeComposer);
+    return () => cancelAnimationFrame(frame);
+  }, [newComment, resizeComposer]);
 
   const focusComposer = useCallback(() => {
     requestAnimationFrame(() => {
@@ -493,7 +531,7 @@ export function CommentsSection({
           {quickReactions && immersive && (
             <div
               data-comment-quick-reactions="true"
-              className="mb-2 flex items-center justify-between gap-1 overflow-x-auto px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+              className="mb-1.5 flex items-center justify-between gap-1 overflow-x-auto px-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
               aria-label="Tezkor reaksiyalar"
             >
               {QUICK_REACTIONS.map((reaction) => (
@@ -501,7 +539,7 @@ export function CommentsSection({
                   key={reaction}
                   type="button"
                   onClick={() => appendQuickReaction(reaction)}
-                  className="flex h-8 min-w-8 shrink-0 items-center justify-center rounded-full text-[22px] leading-none transition active:scale-90"
+                  className="flex h-7 min-w-7 shrink-0 items-center justify-center rounded-full text-[20px] leading-none transition active:scale-90"
                   aria-label={reaction + ' reaksiyasini qo‘shish'}
                 >
                   {reaction}
@@ -529,13 +567,13 @@ export function CommentsSection({
                 )}
                 aria-label="Javobni bekor qilish"
               >
-                <X className="h-3.5 w-3.5" />
+                <X className="h-3 w-3" />
               </button>
             </div>
           )}
 
-          <div className="flex items-center gap-2">
-            <Avatar className={cn('shrink-0', immersive ? 'h-9 w-9 ring-1 ring-white/10' : 'h-8 w-8')}>
+          <div className="flex items-end gap-2">
+            <Avatar className={cn('mb-1 shrink-0', immersive ? 'h-8 w-8 ring-1 ring-white/10' : 'h-8 w-8')}>
               <AvatarImage src={(user.user_metadata?.avatar_url as string | undefined) || ''} />
               <AvatarFallback className={cn('text-xs', immersive ? 'bg-white/10 text-white/75' : 'bg-muted text-muted-foreground')}>
                 {user.email?.[0]?.toUpperCase() || 'U'}
@@ -545,14 +583,15 @@ export function CommentsSection({
             <div className="relative min-w-0 flex-1">
               <div
                 className={cn(
-                  'flex items-center gap-1 rounded-full border px-3 py-1',
+                  'flex min-h-11 items-end gap-1 rounded-[22px] border px-3 py-1',
                   immersive
-                    ? 'min-h-11 border-white/10 bg-white/[0.035] shadow-inner shadow-black/20 focus-within:border-white/25'
+                    ? 'border-white/10 bg-white/[0.035] shadow-inner shadow-black/20'
                     : 'border-border bg-background',
                 )}
               >
-                <Input
+                <Textarea
                   ref={commentInputRef}
+                  rows={1}
                   value={newComment}
                   onChange={(event) =>
                     handleInputChange(
@@ -563,14 +602,15 @@ export function CommentsSection({
                   }
                   placeholder={replyingTo ? `@${replyUsername} ga javob yozing…` : 'Izoh qoldiring…'}
                   className={cn(
-                    'h-8 min-w-0 border-0 bg-transparent px-0 text-sm focus-visible:ring-0',
+                    'max-h-28 min-h-9 min-w-0 flex-1 resize-none appearance-none overflow-y-hidden border-0 bg-transparent px-0 py-2 text-sm leading-5 shadow-none outline-none ring-0 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0',
                     immersive && 'text-white placeholder:text-white/40',
                   )}
                   autoComplete="off"
                   enterKeyHint="send"
+                  aria-label={replyingTo ? 'Javob matni' : 'Izoh matni'}
                 />
 
-                <div className={cn('flex shrink-0 items-center gap-0.5', immersive && '[&_button]:text-white/60 [&_button:hover]:text-white')}>
+                <div className={cn('mb-1 flex shrink-0 items-center gap-0.5', immersive && '[&_button]:text-white/60 [&_button:hover]:text-white')}>
                   <EmojiPicker onSelect={(emoji) => setNewComment((previous) => previous + emoji)} />
                   <CommentMediaUpload
                     onMediaSelect={(url, type) => setSelectedMedia({ url, type })}
@@ -623,7 +663,7 @@ export function CommentsSection({
               size="icon"
               disabled={(!newComment.trim() && !selectedMedia) || submittingComment}
               className={cn(
-                'h-10 w-10 shrink-0 rounded-full p-0 transition active:scale-95',
+                'mb-0.5 h-10 w-10 shrink-0 rounded-full p-0 transition active:scale-95',
                 immersive && 'bg-white text-black shadow-sm hover:bg-white/90 disabled:bg-white/10 disabled:text-white/25 disabled:opacity-100',
               )}
               aria-label={replyingTo ? 'Javobni yuborish' : 'Izohni yuborish'}
@@ -637,7 +677,7 @@ export function CommentsSection({
           </div>
 
           {selectedMedia && (
-            <div className="ml-11">
+            <div className="ml-10">
               <CommentAttachmentPreview
                 media={selectedMedia}
                 onClear={() => setSelectedMedia(null)}
@@ -654,7 +694,7 @@ export function CommentsSection({
           'overflow-y-auto px-3 md:px-4',
           isPanel ? 'order-1 min-h-0 flex-1 overscroll-contain' : 'max-h-[min(48vh,560px)]',
           isPanel && !immersive && 'bg-background text-foreground',
-          isPanel && immersive && 'bg-[#0a0a0b] px-4 text-white [scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
+          isPanel && immersive && 'bg-[#0a0a0b] px-3 text-white [scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
         )}
       >
         {isLoading ? (
@@ -668,7 +708,7 @@ export function CommentsSection({
             <p className="mt-1 text-xs">Birinchi bo‘lib fikr bildiring.</p>
           </div>
         ) : (
-          <div className={cn(immersive ? 'divide-y divide-white/[0.04]' : 'divide-y divide-border/40')}>
+          <div className={cn(immersive ? 'divide-y divide-white/[0.035]' : 'divide-y divide-border/40')}>
             {comments.map((comment) => (
               <CommentItem
                 key={comment.id}
@@ -678,9 +718,13 @@ export function CommentsSection({
                 replyingToId={replyingTo?.id || null}
                 highlightedCommentId={highlightedCommentId}
                 immersive={immersive}
+                canPin={canPinComments}
                 onLike={likeComment}
                 onDelete={deleteComment}
                 onReply={startReply}
+                onTogglePin={(commentId, pinned) => {
+                  void togglePinComment(commentId, pinned);
+                }}
               />
             ))}
           </div>
