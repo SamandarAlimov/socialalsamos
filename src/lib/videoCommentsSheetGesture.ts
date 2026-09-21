@@ -11,10 +11,22 @@ export type VideoCommentsSheetDragPosition = {
 
 export type VideoCommentsSheetDetent = 'initial' | 'expanded';
 
-export const VIDEO_COMMENTS_DISMISS_VELOCITY = 0.85;
+export const VIDEO_COMMENTS_DISMISS_VELOCITY = 0.72;
 export const VIDEO_COMMENTS_SNAP_VELOCITY = 0.45;
-export const VIDEO_COMMENTS_DISMISS_DISTANCE_RATIO = 0.12;
-export const VIDEO_COMMENTS_DISMISS_MIN_DISTANCE = 88;
+export const VIDEO_COMMENTS_DISMISS_DISTANCE_RATIO = 0.09;
+export const VIDEO_COMMENTS_DISMISS_MIN_DISTANCE = 72;
+export const VIDEO_COMMENTS_DISMISS_FLING_MIN_DISTANCE = 20;
+
+export function isVideoCommentsListAtPullDismissEdge(
+  scrollTop: number,
+  scrollHeight: number,
+  clientHeight: number,
+  epsilon = 1,
+) {
+  const safeScrollTop = Math.max(0, scrollTop);
+  const notScrollable = scrollHeight <= clientHeight + epsilon;
+  return notScrollable || safeScrollTop <= epsilon;
+}
 
 /**
  * Instagram uses two different phases for a downward gesture:
@@ -61,7 +73,10 @@ export function shouldDismissVideoCommentsSheet(
 
   return (
     dismissOffset >= distanceThreshold ||
-    (dismissOffset >= 28 && velocityY >= VIDEO_COMMENTS_DISMISS_VELOCITY)
+    (
+      dismissOffset >= VIDEO_COMMENTS_DISMISS_FLING_MIN_DISTANCE &&
+      velocityY >= VIDEO_COMMENTS_DISMISS_VELOCITY
+    )
   );
 }
 
