@@ -285,7 +285,7 @@ export function PostLikesViewsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="h-[min(820px,88vh)] w-[min(720px,calc(100vw-3rem))] max-w-[720px] gap-0 overflow-hidden rounded-[32px] border border-border/45 bg-background/95 p-0 shadow-[0_32px_110px_rgba(0,0,0,0.32)] backdrop-blur-2xl [&>button]:right-5 [&>button]:top-5 [&>button]:z-30 [&>button]:flex [&>button]:h-10 [&>button]:w-10 [&>button]:items-center [&>button]:justify-center [&>button]:rounded-full [&>button]:bg-muted/70 [&>button]:opacity-100 [&>button]:transition-colors [&>button]:hover:bg-muted">
+      <DialogContent className="h-[min(720px,84vh)] w-[min(640px,calc(100vw-3rem))] max-w-[640px] gap-0 overflow-hidden rounded-[28px] border border-border/45 bg-background/95 p-0 shadow-[0_28px_90px_rgba(0,0,0,0.28)] backdrop-blur-2xl [&>button]:right-4 [&>button]:top-4 [&>button]:z-30 [&>button]:flex [&>button]:h-9 [&>button]:w-9 [&>button]:items-center [&>button]:justify-center [&>button]:rounded-full [&>button]:bg-muted/70 [&>button]:opacity-100 [&>button]:transition-colors [&>button]:hover:bg-muted">
         <DialogTitle className="sr-only">{t('post.likesAndViews', 'Likes and views')}</DialogTitle>
         {content}
       </DialogContent>
@@ -413,7 +413,7 @@ function AudiencePanel({
               ))}
             </div>
           ) : (
-            <div className="space-y-0.5 md:space-y-1">
+            <div className="space-y-0 md:space-y-0.5">
               {views.map((row) => (
                 <AudienceRow
                   key={row.user_id}
