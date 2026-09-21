@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
 } from 'react';
+import { createPortal } from 'react-dom';
 import {
   AlertCircle,
   ArrowLeft,
@@ -154,6 +155,7 @@ export function VideoPlayer({
   const longPressOriginalRateRef = useRef(1);
   const resumeAfterSourceChangeRef = useRef(false);
   const restoreTimeAfterSourceChangeRef = useRef<number | null>(null);
+  const inlineRectRef = useRef<{ width: number; height: number } | null>(null);
 
   const {
     isMuted: globalMuted,
@@ -236,7 +238,7 @@ export function VideoPlayer({
     );
     observer.observe(container);
     return () => observer.disconnect();
-  }, [autoPlay, activeSource.src]);
+  }, [autoPlay, activeSource.src, isPseudoFullscreen]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -361,21 +363,43 @@ export function VideoPlayer({
     flashGesture({ kind: 'speed', text: next + '×' });
   }, [changeRate, flashGesture, playbackRate]);
 
+  const setPseudoFullscreenWithPlaybackPreserved = useCallback((active: boolean) => {
+    const video = videoRef.current;
+    const container = containerRef.current;
+
+    if (active && container) {
+      const rect = container.getBoundingClientRect();
+      inlineRectRef.current = {
+        width: Math.max(0, rect.width),
+        height: Math.max(0, rect.height),
+      };
+    }
+
+    if (video) {
+      restoreTimeAfterSourceChangeRef.current = Number.isFinite(video.currentTime)
+        ? video.currentTime
+        : currentTime;
+      resumeAfterSourceChangeRef.current = !video.paused && !video.ended;
+    } else {
+      restoreTimeAfterSourceChangeRef.current = currentTime;
+      resumeAfterSourceChangeRef.current = isPlaying;
+    }
+
+    setIsPseudoFullscreen(active);
+    setShowSettings(false);
+    setShowControls(true);
+
+    requestAnimationFrame(() => {
+      containerRef.current?.focus({ preventScroll: true });
+    });
+  }, [currentTime, isPlaying]);
+
   const toggleFullscreen = useCallback(() => {
     const container = containerRef.current;
     if (!container) return;
 
-    const enterPseudoFullscreen = () => {
-      // Capability-based fallback for browsers/webviews that do not expose
-      // usable element fullscreen. This is intentionally platform-agnostic.
-      setIsPseudoFullscreen(true);
-      setShowControls(true);
-      requestAnimationFrame(() => container.focus());
-    };
-
     if (isPseudoFullscreen) {
-      setIsPseudoFullscreen(false);
-      setShowControls(true);
+      setPseudoFullscreenWithPlaybackPreserved(false);
       return;
     }
 
@@ -397,14 +421,14 @@ export function VideoPlayer({
 
     const requestPromise = requestElementFullscreen(container);
     if (!requestPromise) {
-      enterPseudoFullscreen();
+      setPseudoFullscreenWithPlaybackPreserved(true);
       return;
     }
 
     void requestPromise.catch(() => {
-      enterPseudoFullscreen();
+      setPseudoFullscreenWithPlaybackPreserved(true);
     });
-  }, [isPseudoFullscreen]);
+  }, [isPseudoFullscreen, setPseudoFullscreenWithPlaybackPreserved]);
 
   const togglePictureInPicture = useCallback(async () => {
     const video = videoRef.current;
@@ -457,7 +481,13 @@ export function VideoPlayer({
 
     const restore = restoreTimeAfterSourceChangeRef.current;
     if (restore !== null) {
-      video.currentTime = Math.min(restore, Math.max(0, video.duration - 0.05));
+      const maxTime =
+        Number.isFinite(video.duration) && video.duration > 0
+          ? Math.max(0, video.duration - 0.05)
+          : restore;
+      const nextTime = Math.max(0, Math.min(restore, maxTime));
+      video.currentTime = nextTime;
+      setCurrentTime(nextTime);
       restoreTimeAfterSourceChangeRef.current = null;
     }
     if (resumeAfterSourceChangeRef.current) {
@@ -599,8 +629,7 @@ export function VideoPlayer({
 
       if (event.key === 'Escape' && isPseudoFullscreen) {
         event.preventDefault();
-        setIsPseudoFullscreen(false);
-        setShowControls(true);
+        setPseudoFullscreenWithPlaybackPreserved(false);
       } else if (event.key === ' ' || key === 'k') {
         event.preventDefault();
         togglePlay();
@@ -664,6 +693,7 @@ export function VideoPlayer({
     globalVolume,
     seekTo,
     setCaptions,
+    setPseudoFullscreenWithPlaybackPreserved,
     skip,
     stepRate,
     toggleFullscreen,
@@ -684,9 +714,9 @@ export function VideoPlayer({
   const isFullscreen = isNativeFullscreen || isPseudoFullscreen;
 
   // Keep the outer application shell synchronized with both native fullscreen
-  // and the capability-based CSS fallback. In fallback fullscreen the player
-  // remains inside the page DOM tree, so fixed shell chrome must be hidden
-  // explicitly on mobile, tablet, desktop and embedded webviews alike.
+  // and the capability-based CSS fallback. The fallback is portaled to <body>
+  // so transformed/overflow-hidden post cards cannot clip it; shell chrome is
+  // still hidden explicitly on mobile, tablet, desktop and embedded webviews.
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
@@ -719,7 +749,7 @@ export function VideoPlayer({
     'pictureInPictureEnabled' in document &&
     Boolean(document.pictureInPictureEnabled);
 
-  return (
+  const playerSurface = (
     <div
       ref={containerRef}
       tabIndex={0}
@@ -728,10 +758,10 @@ export function VideoPlayer({
       className={cn(
         'group/player relative w-full overflow-hidden bg-black text-white outline-none select-none',
         'focus-visible:ring-2 focus-visible:ring-white/70',
+        className,
         isNativeFullscreen && 'h-screen w-screen max-h-none max-w-none rounded-none',
         isPseudoFullscreen &&
-          'fixed inset-0 z-[9999] h-[100dvh] w-[100dvw] max-h-none max-w-none overscroll-none rounded-none',
-        className,
+          'fixed inset-0 z-[9999] isolate h-[100dvh] w-[100dvw] max-h-none max-w-none overscroll-none rounded-none bg-black',
       )}
       style={{
         ...(isFullscreen ? {} : { aspectRatio: String(effectiveRatio) }),
@@ -1030,8 +1060,13 @@ export function VideoPlayer({
         <div
           className={cn(
             'pointer-events-auto relative z-20 space-y-0.5 px-2.5 pb-2.5 sm:px-3 sm:pb-3',
-            isFullscreen && 'px-4 pb-4 md:px-6 md:pb-5',
+            isFullscreen && 'px-4 md:px-6',
           )}
+          style={
+            isFullscreen
+              ? { paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }
+              : undefined
+          }
           onPointerDown={(event) => event.stopPropagation()}
           onPointerUp={(event) => event.stopPropagation()}
           onClick={(event) => event.stopPropagation()}
@@ -1198,4 +1233,24 @@ export function VideoPlayer({
       </div>
     </div>
   );
+
+  if (isPseudoFullscreen && typeof document !== 'undefined') {
+    const inlineHeight = inlineRectRef.current?.height;
+
+    return (
+      <>
+        <div
+          aria-hidden="true"
+          className={cn('pointer-events-none invisible w-full', className)}
+          style={{
+            height: inlineHeight && inlineHeight > 0 ? inlineHeight : undefined,
+            aspectRatio: inlineHeight ? undefined : String(effectiveRatio),
+          }}
+        />
+        {createPortal(playerSurface, document.body)}
+      </>
+    );
+  }
+
+  return playerSurface;
 }
