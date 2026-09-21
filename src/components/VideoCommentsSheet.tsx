@@ -18,6 +18,7 @@ import {
   scaleVideoCommentsReference,
 } from '@/lib/videoCommentsGeometry';
 import {
+  isVideoCommentsListAtPullDismissEdge,
   resolveVideoCommentsSheetDrag,
   settleVideoCommentsSheetDetent,
   shouldDismissVideoCommentsSheet,
@@ -52,7 +53,7 @@ type CommentTouchState = {
   startX: number;
   startY: number;
   lastY: number;
-  startedAtTop: boolean;
+  startedAtDismissEdge: boolean;
   transferredToSheet: boolean;
 };
 
@@ -69,7 +70,7 @@ type ScrollLockSnapshot = {
 
 const PREVIEW_TRANSITION_MS = 240;
 const COMMENT_SCROLL_EPSILON = 1;
-const COMMENT_PULL_ACTIVATION_PX = 3;
+const COMMENT_PULL_ACTIVATION_PX = 2;
 
 function getViewportHeight() {
   if (typeof window === 'undefined') return 844;
@@ -615,16 +616,16 @@ export function VideoCommentsSheet({
 
   /**
    * Nested Instagram-style scroll handoff:
-   * - while comments still have scrollTop, the browser owns the gesture;
-   * - after scrollTop reaches zero, continuing the same downward pull transfers
-   *   the gesture to the sheet without requiring the small top handle;
-   * - once transferred, the sheet remains the owner until that touch ends.
+   * - the comments list owns ordinary vertical scrolling;
+   * - once a downward pull reaches the list's dismiss edge (or the list is too
+   *   short to scroll), the same gesture is transferred to the sheet;
+   * - delegated document capture keeps this reliable through Radix portals,
+   *   comment rerenders and touchend events that finish outside the list;
+   * - after handoff, the sheet stays attached to the finger until release and
+   *   can cross compact -> dismiss in one continuous gesture.
    */
   useEffect(() => {
-    if (!isOpen || !isMobile) return;
-    const sheet = sheetContentRef.current;
-    const commentList = sheet?.querySelector<HTMLElement>('[data-comment-list="true"]');
-    if (!commentList) return;
+    if (!isOpen || !isMobile || typeof document === 'undefined') return;
 
     const findTouch = (touches: TouchList, identifier: number) => {
       for (let index = 0; index < touches.length; index += 1) {
@@ -634,19 +635,38 @@ export function VideoCommentsSheet({
       return null;
     };
 
+    const commentListFromTarget = (target: EventTarget | null) => {
+      if (!(target instanceof Element)) return null;
+      const list = target.closest<HTMLElement>('[data-comment-list="true"]');
+      const sheet = sheetContentRef.current;
+      if (!list || !sheet || !sheet.contains(list)) return null;
+      return list;
+    };
+
     const handleTouchStart = (event: TouchEvent) => {
       if (event.touches.length !== 1) {
         commentTouchRef.current = null;
         return;
       }
+
+      const commentList = commentListFromTarget(event.target);
       const touch = event.touches.item(0);
-      if (!touch) return;
+      if (!commentList || !touch) {
+        commentTouchRef.current = null;
+        return;
+      }
+
       commentTouchRef.current = {
         identifier: touch.identifier,
         startX: touch.clientX,
         startY: touch.clientY,
         lastY: touch.clientY,
-        startedAtTop: commentList.scrollTop <= COMMENT_SCROLL_EPSILON,
+        startedAtDismissEdge: isVideoCommentsListAtPullDismissEdge(
+          commentList.scrollTop,
+          commentList.scrollHeight,
+          commentList.clientHeight,
+          COMMENT_SCROLL_EPSILON,
+        ),
         transferredToSheet: false,
       };
     };
@@ -654,6 +674,12 @@ export function VideoCommentsSheet({
     const handleTouchMove = (event: TouchEvent) => {
       const state = commentTouchRef.current;
       if (!state) return;
+
+      const commentList = commentListFromTarget(event.target)
+        ?? sheetContentRef.current?.querySelector<HTMLElement>('[data-comment-list="true"]')
+        ?? null;
+      if (!commentList) return;
+
       const touch = findTouch(event.touches, state.identifier);
       if (!touch) return;
 
@@ -665,16 +691,22 @@ export function VideoCommentsSheet({
         const totalX = touch.clientX - state.startX;
         const verticalIntent = Math.abs(totalY) >= Math.abs(totalX);
         const pullingDown = deltaSinceLast > 0 && totalY > COMMENT_PULL_ACTIVATION_PX;
+        const atDismissEdge = isVideoCommentsListAtPullDismissEdge(
+          commentList.scrollTop,
+          commentList.scrollHeight,
+          commentList.clientHeight,
+          COMMENT_SCROLL_EPSILON,
+        );
 
-        if (!verticalIntent || !pullingDown || commentList.scrollTop > COMMENT_SCROLL_EPSILON) {
-          if (commentList.scrollTop > COMMENT_SCROLL_EPSILON) state.startedAtTop = false;
+        if (!verticalIntent || !pullingDown || !atDismissEdge) {
+          if (!atDismissEdge) state.startedAtDismissEdge = false;
           return;
         }
 
-        // If this touch began while the list was already at the top, preserve
-        // the whole pull distance. If it reached the top mid-gesture, begin the
-        // sheet phase at the handoff point to avoid a visual jump.
-        const activationY = state.startedAtTop ? state.startY : touch.clientY;
+        // If the gesture began at the edge, retain the whole pull distance.
+        // If native scrolling reached the edge mid-gesture, hand off at the
+        // current finger position to avoid a visual jump.
+        const activationY = state.startedAtDismissEdge ? state.startY : touch.clientY;
         beginMobileDrag(activationY, -1, 'comments');
         state.transferredToSheet = true;
       }
@@ -687,6 +719,7 @@ export function VideoCommentsSheet({
     const finishTouch = (event: TouchEvent, cancelled: boolean) => {
       const state = commentTouchRef.current;
       if (!state) return;
+
       if (state.transferredToSheet) {
         if (event.cancelable) event.preventDefault();
         settleMobileDrag(cancelled);
@@ -697,16 +730,16 @@ export function VideoCommentsSheet({
     const handleTouchEnd = (event: TouchEvent) => finishTouch(event, false);
     const handleTouchCancel = (event: TouchEvent) => finishTouch(event, true);
 
-    commentList.addEventListener('touchstart', handleTouchStart, { passive: true });
-    commentList.addEventListener('touchmove', handleTouchMove, { passive: false });
-    commentList.addEventListener('touchend', handleTouchEnd, { passive: false });
-    commentList.addEventListener('touchcancel', handleTouchCancel, { passive: false });
+    document.addEventListener('touchstart', handleTouchStart, { capture: true, passive: true });
+    document.addEventListener('touchmove', handleTouchMove, { capture: true, passive: false });
+    document.addEventListener('touchend', handleTouchEnd, { capture: true, passive: false });
+    document.addEventListener('touchcancel', handleTouchCancel, { capture: true, passive: false });
 
     return () => {
-      commentList.removeEventListener('touchstart', handleTouchStart);
-      commentList.removeEventListener('touchmove', handleTouchMove);
-      commentList.removeEventListener('touchend', handleTouchEnd);
-      commentList.removeEventListener('touchcancel', handleTouchCancel);
+      document.removeEventListener('touchstart', handleTouchStart, true);
+      document.removeEventListener('touchmove', handleTouchMove, true);
+      document.removeEventListener('touchend', handleTouchEnd, true);
+      document.removeEventListener('touchcancel', handleTouchCancel, true);
       commentTouchRef.current = null;
     };
   }, [beginMobileDrag, isMobile, isOpen, settleMobileDrag, updateMobileDrag]);
