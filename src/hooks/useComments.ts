@@ -17,6 +17,9 @@ export interface Comment {
   content: string;
   likes_count: number;
   created_at: string;
+  is_pinned?: boolean;
+  pinned_at?: string | null;
+  pinned_by?: string | null;
   profile?: {
     id: string;
     username: string | null;
@@ -78,17 +81,34 @@ function buildCommentTree(
     rootComments.push(item);
   });
 
-  const sortRecursive = (items: Comment[]) => {
+  const sortReplies = (items: Comment[]) => {
     items.sort(
       (a, b) =>
         new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
     );
     items.forEach((item) => {
-      if (item.replies?.length) sortRecursive(item.replies);
+      if (item.replies?.length) sortReplies(item.replies);
     });
   };
 
-  sortRecursive(rootComments);
+  // Pinned comments stay at the top, newest pin first. Ordinary comments keep
+  // their conversational chronological order; replies are never promoted.
+  rootComments.sort((a, b) => {
+    const pinDelta = Number(Boolean(b.is_pinned)) - Number(Boolean(a.is_pinned));
+    if (pinDelta !== 0) return pinDelta;
+
+    if (a.is_pinned && b.is_pinned) {
+      const aPinnedAt = a.pinned_at ? new Date(a.pinned_at).getTime() : 0;
+      const bPinnedAt = b.pinned_at ? new Date(b.pinned_at).getTime() : 0;
+      if (aPinnedAt !== bPinnedAt) return bPinnedAt - aPinnedAt;
+    }
+
+    return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+  });
+  rootComments.forEach((item) => {
+    if (item.replies?.length) sortReplies(item.replies);
+  });
+
   return rootComments;
 }
 
@@ -109,6 +129,7 @@ function findCommentRecursive(
 export function useComments(postId: string | null) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [postOwnerId, setPostOwnerId] = useState<string | null>(null);
   const { user } = useAuth();
 
   const fetchComments = useCallback(async () => {
@@ -116,7 +137,8 @@ export function useComments(postId: string | null) {
     setIsLoading(true);
 
     try {
-      const { data: rows, error } = await runWithProfileEmbedFallback<CommentRow>(
+      const [commentsResult, postResult] = await Promise.all([
+        runWithProfileEmbedFallback<CommentRow>(
         commentEmbedGuard,
         (select) =>
           supabase
@@ -126,14 +148,23 @@ export function useComments(postId: string | null) {
             .order('created_at', { ascending: true }) as unknown as PromiseLike<
             EmbedQueryResult<CommentRow>
           >,
-        {
-          embedSelect: COMMENT_SELECT_WITH_PROFILE,
-          plainSelect: COMMENT_SELECT_PLAIN,
-        },
-      );
+          {
+            embedSelect: COMMENT_SELECT_WITH_PROFILE,
+            plainSelect: COMMENT_SELECT_PLAIN,
+          },
+        ),
+        supabase
+          .from('posts')
+          .select('user_id')
+          .eq('id', postId)
+          .maybeSingle(),
+      ]);
 
+      const { data: rows, error } = commentsResult;
       if (error) throw error;
+      if (postResult.error) throw postResult.error;
 
+      setPostOwnerId(postResult.data?.user_id ?? null);
       const data = (rows ?? []) as unknown as Comment[];
       let likedIds = new Set<string>();
 
@@ -259,12 +290,44 @@ export function useComments(postId: string | null) {
     }
   }, []);
 
+  const togglePinComment = useCallback(async (commentId: string, pinned: boolean) => {
+    if (!user || !postId || postOwnerId !== user.id) return false;
+
+    try {
+      const rpc = supabase.rpc as unknown as (
+        fn: string,
+        args: Record<string, unknown>,
+      ) => Promise<{ error: { message?: string } | null }>;
+
+      const { error } = await rpc('toggle_comment_pin', {
+        p_comment_id: commentId,
+        p_pinned: pinned,
+      });
+
+      if (error) throw error;
+      toast.success(pinned ? 'Izoh mahkamlandi' : 'Izoh mahkamlashdan olindi');
+      await fetchComments();
+      return true;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '';
+      console.error('Error toggling comment pin:', error);
+      toast.error(
+        message.includes('at most 3')
+          ? 'Bitta postga ko‘pi bilan 3 ta izohni mahkamlash mumkin'
+          : 'Izohni mahkamlab bo‘lmadi',
+      );
+      return false;
+    }
+  }, [fetchComments, postId, postOwnerId, user]);
+
   return {
     comments,
     isLoading,
     addComment,
     likeComment,
     deleteComment,
+    togglePinComment,
+    canPinComments: Boolean(user && postOwnerId === user.id),
     refresh: fetchComments,
   };
 }
