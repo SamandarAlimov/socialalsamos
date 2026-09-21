@@ -241,7 +241,7 @@ export function AppLayout() {
           hasMobileTopChrome
             ? 'pt-[calc(3.5rem+env(safe-area-inset-top,0px))]'
             : 'pt-0',
-          showBottomNavbar ? 'pb-20' : 'pb-0',
+          showBottomNavbar && !isVideosPage ? 'pb-20' : 'pb-0',
         )}
       >
         <Outlet />

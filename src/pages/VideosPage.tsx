@@ -47,6 +47,7 @@ import { useVideoRecommendations } from '@/hooks/useVideoRecommendations';
 import { useVideoSurfaceTap } from '@/hooks/useVideoSurfaceTap';
 import { useVideoWatchTracker } from '@/hooks/useVideoWatchTracker';
 import { cn } from '@/lib/utils';
+import { MOBILE_OVER_BOTTOM_NAV_CSS } from '@/lib/mobileBottomNavGeometry';
 import {
   getBrowserNavigationType,
   shouldShowVideoDeepLinkBack,
@@ -693,7 +694,13 @@ function VideoCard({
           <StoryStickerOverlay postId={video.id} currentTime={currentTime} className="h-full w-full" />
         </div>
 
-        <div className={cn('absolute inset-x-0 z-30 flex flex-col gap-2 px-3', isMobile ? 'bottom-[calc(env(safe-area-inset-bottom,0px)+70px)]' : 'bottom-0 pb-3')}>
+        <div
+          className={cn(
+            'absolute inset-x-0 z-30 flex flex-col gap-2 px-3',
+            !isMobile && 'bottom-0 pb-3',
+          )}
+          style={isMobile ? { bottom: MOBILE_OVER_BOTTOM_NAV_CSS } : undefined}
+        >
           <div className="flex items-end gap-3">
             <div className="min-w-0 flex-1" onPointerDown={stopBubble} onPointerUp={stopBubble} onClick={collapseExpandedFromInfo}>
               <div className="mb-1.5 flex items-center gap-2.5">
@@ -868,6 +875,33 @@ export default function VideosPage() {
   useEffect(() => {
     writeVideosMutedPreference(globalMuted);
   }, [globalMuted]);
+
+  useEffect(() => {
+    if (!isMobile || typeof document === 'undefined') return;
+
+    const html = document.documentElement;
+    const body = document.body;
+    const themeMeta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
+    const previousHtmlBackground = html.style.backgroundColor;
+    const previousBodyBackground = body.style.backgroundColor;
+    const previousThemeColor = themeMeta?.getAttribute('content') ?? null;
+
+    // Mobile browsers/standalone PWAs can expose the home-indicator/navigation
+    // safe area outside the visual viewport. Paint that physical area with the
+    // video surface instead of allowing the light app background to leak in.
+    html.style.backgroundColor = '#000000';
+    body.style.backgroundColor = '#000000';
+    themeMeta?.setAttribute('content', '#000000');
+
+    return () => {
+      html.style.backgroundColor = previousHtmlBackground;
+      body.style.backgroundColor = previousBodyBackground;
+      if (themeMeta) {
+        if (previousThemeColor === null) themeMeta.removeAttribute('content');
+        else themeMeta.setAttribute('content', previousThemeColor);
+      }
+    };
+  }, [isMobile]);
 
   useEffect(() => {
     if (initialPositionedRef.current || !initialVideoIdRef.current || rankedVideos.length === 0) return;

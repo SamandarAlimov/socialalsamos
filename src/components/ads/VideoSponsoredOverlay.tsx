@@ -19,6 +19,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
+import { MOBILE_OVER_BOTTOM_NAV_CSS } from '@/lib/mobileBottomNavGeometry';
 import type { Ad } from '@/hooks/useAds';
 import type { AdFeedbackType } from '@/lib/adDeliveryClient';
 
@@ -207,7 +208,10 @@ export function VideoSponsoredOverlay({
         </DropdownMenu>
       </div>
 
-      <div className="absolute inset-x-0 bottom-[calc(env(safe-area-inset-bottom,0px)+76px)] z-20 px-4 pb-3 sm:px-5">
+      <div
+        className="absolute inset-x-0 z-20 px-4 pb-3 sm:px-5"
+        style={{ bottom: MOBILE_OVER_BOTTOM_NAV_CSS }}
+      >
         {showWhy && (
           <div className="mb-3 rounded-2xl border border-white/15 bg-black/55 p-3 text-[11px] leading-relaxed text-white/75 backdrop-blur-xl">
             <span className="font-semibold text-white">Nega bu reklama?</span>{' '}
