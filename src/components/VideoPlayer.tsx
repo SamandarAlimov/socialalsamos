@@ -65,6 +65,44 @@ const CONTROL_HIDE_MS = 2600;
 const LONG_PRESS_MS = 480;
 const DOUBLE_TAP_MS = 320;
 
+type FullscreenElementCompat = HTMLElement & {
+  webkitRequestFullscreen?: () => void | Promise<void>;
+};
+
+type FullscreenDocumentCompat = Document & {
+  webkitFullscreenElement?: Element | null;
+  webkitExitFullscreen?: () => void | Promise<void>;
+};
+
+function getActiveFullscreenElement(doc: Document = document) {
+  const compat = doc as FullscreenDocumentCompat;
+  return doc.fullscreenElement ?? compat.webkitFullscreenElement ?? null;
+}
+
+function requestElementFullscreen(element: HTMLElement) {
+  const compat = element as FullscreenElementCompat;
+  const request = element.requestFullscreen ?? compat.webkitRequestFullscreen;
+  if (!request) return null;
+
+  try {
+    return Promise.resolve(request.call(element));
+  } catch (error) {
+    return Promise.reject(error);
+  }
+}
+
+function exitActiveFullscreen(doc: Document = document) {
+  const compat = doc as FullscreenDocumentCompat;
+  const exit = doc.exitFullscreen ?? compat.webkitExitFullscreen;
+  if (!exit) return null;
+
+  try {
+    return Promise.resolve(exit.call(doc));
+  } catch (error) {
+    return Promise.reject(error);
+  }
+}
+
 function formatTime(seconds: number) {
   if (!Number.isFinite(seconds) || seconds < 0) return '0:00';
   const total = Math.floor(seconds);
@@ -220,15 +258,24 @@ export function VideoPlayer({
 
   useEffect(() => {
     const onFullscreenChange = () => {
-      const active = document.fullscreenElement === containerRef.current;
+      const active = getActiveFullscreenElement() === containerRef.current;
       setIsNativeFullscreen(active);
       if (active) {
         setShowControls(true);
         requestAnimationFrame(() => containerRef.current?.focus());
       }
     };
+
+    // Standard Fullscreen API covers current Chromium/Firefox/Safari/Edge.
+    // webkitfullscreenchange keeps older Safari/WebKit-based browsers working
+    // without branching on OS or user-agent strings.
     document.addEventListener('fullscreenchange', onFullscreenChange);
-    return () => document.removeEventListener('fullscreenchange', onFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', onFullscreenChange as EventListener);
+
+    return () => {
+      document.removeEventListener('fullscreenchange', onFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', onFullscreenChange as EventListener);
+    };
   }, []);
 
   useEffect(() => {
@@ -318,31 +365,45 @@ export function VideoPlayer({
     const container = containerRef.current;
     if (!container) return;
 
+    const enterPseudoFullscreen = () => {
+      // Capability-based fallback for browsers/webviews that do not expose
+      // usable element fullscreen. This is intentionally platform-agnostic.
+      setIsPseudoFullscreen(true);
+      setShowControls(true);
+      requestAnimationFrame(() => container.focus());
+    };
+
     if (isPseudoFullscreen) {
       setIsPseudoFullscreen(false);
       setShowControls(true);
       return;
     }
 
-    if (document.fullscreenElement === container) {
-      document.exitFullscreen().catch(() => {});
+    const activeFullscreenElement = getActiveFullscreenElement();
+
+    if (activeFullscreenElement === container) {
+      const exitPromise = exitActiveFullscreen();
+      if (exitPromise) {
+        void exitPromise.catch(() => {
+          setIsNativeFullscreen(false);
+          setShowControls(true);
+        });
+      }
       return;
     }
 
-    if (document.fullscreenElement) return;
+    // Do not steal fullscreen from another surface (call, media viewer, etc).
+    if (activeFullscreenElement) return;
 
-    if (typeof container.requestFullscreen === 'function') {
-      container.requestFullscreen().catch(() => {
-        // iPhone/iOS yoki cheklangan webview: custom controlsni saqlaydigan fallback.
-        setIsPseudoFullscreen(true);
-        setShowControls(true);
-        requestAnimationFrame(() => container.focus());
-      });
-    } else {
-      setIsPseudoFullscreen(true);
-      setShowControls(true);
-      requestAnimationFrame(() => container.focus());
+    const requestPromise = requestElementFullscreen(container);
+    if (!requestPromise) {
+      enterPseudoFullscreen();
+      return;
     }
+
+    void requestPromise.catch(() => {
+      enterPseudoFullscreen();
+    });
   }, [isPseudoFullscreen]);
 
   const togglePictureInPicture = useCallback(async () => {
@@ -523,7 +584,7 @@ export function VideoPlayer({
 
       const focused = document.activeElement as HTMLElement | null;
       const isActive =
-        document.fullscreenElement === container ||
+        getActiveFullscreenElement() === container ||
         isPseudoFullscreen ||
         focused === container ||
         Boolean(focused && container.contains(focused));
@@ -623,9 +684,9 @@ export function VideoPlayer({
   const isFullscreen = isNativeFullscreen || isPseudoFullscreen;
 
   // Keep the outer application shell synchronized with both native fullscreen
-  // and the iOS/webview CSS fallback. In pseudo fullscreen the player remains
-  // inside the Home feed DOM tree, so without this signal the fixed mobile
-  // header/bottom navbar can still paint above it.
+  // and the capability-based CSS fallback. In fallback fullscreen the player
+  // remains inside the page DOM tree, so fixed shell chrome must be hidden
+  // explicitly on mobile, tablet, desktop and embedded webviews alike.
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
