@@ -97,7 +97,7 @@ export function PostLikesViewsDialog({
   const [loadingLikes, setLoadingLikes] = useState(false);
   const [loadingViews, setLoadingViews] = useState(false);
   const [followLoading, setFollowLoading] = useState<string | null>(null);
-  const [activeSnapPoint, setActiveSnapPoint] = useState<number | string | null>(MOBILE_AUDIENCE_SNAP_COMPACT);
+  const [activeSnapPoint, setActiveSnapPoint] = useState<number | string | null>(MOBILE_AUDIENCE_SNAP_EXPANDED);
   const mobileDrawerGestureRef = useRef<{
     startX: number;
     startY: number;
@@ -190,7 +190,7 @@ export function PostLikesViewsDialog({
     if (!open || !postId) return;
     setTab(defaultTab);
     setQuery('');
-    setActiveSnapPoint(MOBILE_AUDIENCE_SNAP_COMPACT);
+    setActiveSnapPoint(MOBILE_AUDIENCE_SNAP_EXPANDED);
     void loadExactLikesCount();
   }, [open, defaultTab, postId, loadExactLikesCount]);
 
@@ -285,7 +285,7 @@ export function PostLikesViewsDialog({
       >
         <DrawerContent
           className={cn(
-            'h-[100dvh] max-h-[100dvh] overflow-hidden border-x-0 border-b-0 bg-background p-0 shadow-[0_-16px_52px_rgba(0,0,0,0.18)] transition-[border-radius] duration-200',
+            'mt-0 h-[100dvh] max-h-[100dvh] overflow-hidden border-x-0 border-b-0 bg-background p-0 shadow-[0_-16px_52px_rgba(0,0,0,0.18)] transition-[border-radius] duration-200',
             activeSnapPoint === MOBILE_AUDIENCE_SNAP_EXPANDED
               ? 'rounded-t-none'
               : 'rounded-t-[24px]',
