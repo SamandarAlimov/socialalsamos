@@ -21,6 +21,7 @@ export function AppLayout() {
   const { startSession, trackPageChange } = useActivityTracking();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [messagesChatOpen, setMessagesChatOpen] = useState(false);
+  const [immersiveMediaIds, setImmersiveMediaIds] = useState<Set<string>>(() => new Set());
 
   // Shared Home + Ads relevance graph. This uses only first-party Alsamos
   // behavior and stores a compact interest snapshot rather than raw history.
@@ -130,12 +131,52 @@ export function AppLayout() {
     };
   }, [isMessagesPage]);
 
+  // VideoPlayer uses a CSS fullscreen fallback on iPhone/iOS and restricted
+  // webviews where the browser Fullscreen API is unavailable. That fallback
+  // still lives inside the authenticated shell, so the shell must explicitly
+  // get out of the way (header, bottom nav, sidebar) while media is immersive.
+  // Track player ids instead of a single boolean so multiple mounted feed
+  // players cannot accidentally clear another player's fullscreen state.
+  useEffect(() => {
+    const handleImmersiveChange = (event: Event) => {
+      const detail = (event as CustomEvent<{ id?: string; active?: boolean }>).detail;
+      if (!detail?.id) return;
+
+      setImmersiveMediaIds((current) => {
+        const next = new Set(current);
+        if (detail.active) next.add(detail.id);
+        else next.delete(detail.id);
+
+        if (
+          next.size === current.size &&
+          Array.from(next).every((id) => current.has(id))
+        ) {
+          return current;
+        }
+        return next;
+      });
+    };
+
+    window.addEventListener('alsamos:immersive-change', handleImmersiveChange);
+    return () => window.removeEventListener('alsamos:immersive-change', handleImmersiveChange);
+  }, []);
+
+  const isImmersiveMediaActive = immersiveMediaIds.size > 0;
   const mobileChromeMode = getMobileChromeMode(location.pathname);
   const showPrimaryMobileHeader =
-    !isAdminPage && !isAiWorkspace && mobileChromeMode === 'primary' && !isMessagesPage && !isVideosPage;
+    !isImmersiveMediaActive &&
+    !isAdminPage &&
+    !isAiWorkspace &&
+    mobileChromeMode === 'primary' &&
+    !isMessagesPage &&
+    !isVideosPage;
   const showSecondaryMobileHeader =
-    !isAdminPage && !isAiWorkspace && mobileChromeMode === 'secondary';
+    !isImmersiveMediaActive &&
+    !isAdminPage &&
+    !isAiWorkspace &&
+    mobileChromeMode === 'secondary';
   const showBottomNavbar =
+    !isImmersiveMediaActive &&
     !isAdminPage &&
     !isAiWorkspace &&
     mobileChromeMode === 'primary' &&
@@ -164,11 +205,11 @@ export function AppLayout() {
           '[&_.chat-shell>.pb-safe.mb-16]:!mb-0',
       )}
     >
-      {!isAdminPage && (
+      {!isAdminPage && !isImmersiveMediaActive && (
         <AppSidebar collapsed={sidebarCollapsed} onCollapsedChange={setSidebarCollapsed} />
       )}
 
-      {!isAdminPage && !hasPostPreview && <button
+      {!isAdminPage && !hasPostPreview && !isImmersiveMediaActive && <button
         type="button"
         aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         onClick={() => setSidebarCollapsed((current) => !current)}
@@ -204,7 +245,7 @@ export function AppLayout() {
         <Outlet />
       </main>
 
-      {isVideosPage && <VideoAdsSurface />}
+      {isVideosPage && !isImmersiveMediaActive && <VideoAdsSurface />}
       {showBottomNavbar && <BottomNavbar />}
       {!isAdminPage && <LocationPermissionDialog />}
     </div>
