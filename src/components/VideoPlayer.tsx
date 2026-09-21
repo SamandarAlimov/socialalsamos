@@ -472,6 +472,9 @@ export function VideoPlayer({
     video.volume = globalVolume;
     video.muted = initialMuted ?? globalMuted;
     video.playbackRate = playbackRate;
+    Array.from(video.textTracks).forEach((track, index) => {
+      track.mode = captionsEnabled && index === 0 ? 'showing' : 'disabled';
+    });
 
     if (video.videoWidth && video.videoHeight) {
       const ratio = video.videoWidth / video.videoHeight;
