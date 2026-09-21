@@ -131,10 +131,10 @@ export function AppLayout() {
     };
   }, [isMessagesPage]);
 
-  // VideoPlayer uses a CSS fullscreen fallback on iPhone/iOS and restricted
-  // webviews where the browser Fullscreen API is unavailable. That fallback
-  // still lives inside the authenticated shell, so the shell must explicitly
-  // get out of the way (header, bottom nav, sidebar) while media is immersive.
+  // VideoPlayer uses native fullscreen where the browser supports it and a
+  // capability-based CSS fallback where it does not (including restricted
+  // webviews). The fallback still lives inside the authenticated shell, so the
+  // shell must explicitly get out of the way while media is immersive.
   // Track player ids instead of a single boolean so multiple mounted feed
   // players cannot accidentally clear another player's fullscreen state.
   useEffect(() => {
