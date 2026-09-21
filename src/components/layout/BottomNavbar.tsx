@@ -88,7 +88,7 @@ export function BottomNavbar() {
         aria-label="Asosiy navigatsiya"
       >
         {/* Suzuvchi kapsula panel */}
-        <div className="pointer-events-auto mx-2.5 mb-[max(0.5rem,env(safe-area-inset-bottom))] rounded-[26px] border border-border/40 bg-background/70 shadow-[0_10px_34px_-8px_rgba(0,0,0,0.45)] backdrop-blur-2xl">
+        <div className="pointer-events-auto mx-2.5 mb-2 rounded-[26px] border border-border/40 bg-background/70 shadow-[0_10px_34px_-8px_rgba(0,0,0,0.45)] backdrop-blur-2xl">
           <div className="flex h-[62px] items-stretch justify-around px-1.5">
             {bottomNavItems.map((item) => {
               const isActive = location.pathname === item.path;
