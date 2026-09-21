@@ -84,11 +84,19 @@ export function BottomNavbar() {
   return (
     <>
       <nav
-        className="pointer-events-none fixed bottom-0 left-0 right-0 z-50 md:hidden"
+        className="pointer-events-none fixed left-0 right-0 z-50 md:hidden"
+        style={{
+          // Capability-based safe-area handling: devices without a bottom
+          // system inset resolve env(...) to 0, while gesture-navigation,
+          // display-cutout and standalone/PWA environments contribute their
+          // real inset. Clamp keeps the floating nav visually low instead of
+          // lifting it by the entire system bar height.
+          bottom: 'clamp(8px, calc(env(safe-area-inset-bottom, 0px) - 16px), 12px)',
+        }}
         aria-label="Asosiy navigatsiya"
       >
         {/* Suzuvchi kapsula panel */}
-        <div className="pointer-events-auto mx-2.5 mb-2 rounded-[26px] border border-border/40 bg-background/70 shadow-[0_10px_34px_-8px_rgba(0,0,0,0.45)] backdrop-blur-2xl">
+        <div className="pointer-events-auto mx-2.5 rounded-[26px] border border-border/40 bg-background/70 shadow-[0_10px_34px_-8px_rgba(0,0,0,0.45)] backdrop-blur-2xl">
           <div className="flex h-[62px] items-stretch justify-around px-1.5">
             {bottomNavItems.map((item) => {
               const isActive = location.pathname === item.path;
