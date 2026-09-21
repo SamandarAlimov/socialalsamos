@@ -61,7 +61,7 @@ async function attachProfiles<T extends { user_id: string }>(rows: T[]): Promise
 }
 
 const MOBILE_AUDIENCE_SNAP_COMPACT = 0.64;
-const MOBILE_AUDIENCE_SNAP_EXPANDED = 0.92;
+const MOBILE_AUDIENCE_SNAP_EXPANDED = 1;
 const MOBILE_AUDIENCE_EXPAND_GESTURE_PX = 12;
 
 function formatCount(value: number, locale: string) {
@@ -284,7 +284,12 @@ export function PostLikesViewsDialog({
         snapToSequentialPoint
       >
         <DrawerContent
-          className="h-[92dvh] max-h-[92dvh] overflow-hidden rounded-t-[24px] border-x-0 border-b-0 bg-background p-0 shadow-[0_-16px_52px_rgba(0,0,0,0.18)]"
+          className={cn(
+            'h-[100dvh] max-h-[100dvh] overflow-hidden border-x-0 border-b-0 bg-background p-0 shadow-[0_-16px_52px_rgba(0,0,0,0.18)] transition-[border-radius] duration-200',
+            activeSnapPoint === MOBILE_AUDIENCE_SNAP_EXPANDED
+              ? 'rounded-t-none'
+              : 'rounded-t-[24px]',
+          )}
           handleClassName="mt-2.5 h-1 w-12 bg-muted-foreground/20"
           onTouchStartCapture={(event) => {
             if (
