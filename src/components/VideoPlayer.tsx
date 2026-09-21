@@ -899,7 +899,7 @@ export function VideoPlayer({
         </div>
       )}
 
-      {!isLoading && !playbackError && !isPlaying && (
+      {!isLoading && !playbackError && !showSettings && (showControls || !isPlaying) && (
         <button
           type="button"
           onClick={(event) => {
@@ -907,10 +907,24 @@ export function VideoPlayer({
             togglePlay();
           }}
           onPointerDown={(event) => event.stopPropagation()}
-          className="absolute left-1/2 top-1/2 z-20 flex h-16 w-16 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-white shadow-xl ring-1 ring-white/20 backdrop-blur-md transition hover:scale-105 hover:bg-black/70 active:scale-95"
-          aria-label="Videoni ijro etish"
+          onPointerUp={(event) => event.stopPropagation()}
+          className={cn(
+            'absolute left-1/2 top-1/2 z-20 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-white shadow-xl ring-1 ring-white/20 backdrop-blur-md transition-[opacity,transform,background-color] duration-150 hover:scale-105 hover:bg-black/70 active:scale-95',
+            isFullscreen ? 'h-16 w-16 sm:h-[72px] sm:w-[72px]' : 'h-14 w-14 sm:h-16 sm:w-16',
+          )}
+          aria-label={isPlaying ? 'Videoni pauza qilish' : 'Videoni ijro etish'}
+          title={isPlaying ? 'Pauza' : 'Ijro'}
         >
-          <Play className="h-7 w-7 translate-x-0.5 fill-current" />
+          {isPlaying ? (
+            <Pause className={cn('fill-current', isFullscreen ? 'h-8 w-8' : 'h-7 w-7')} />
+          ) : (
+            <Play
+              className={cn(
+                'translate-x-0.5 fill-current',
+                isFullscreen ? 'h-8 w-8' : 'h-7 w-7',
+              )}
+            />
+          )}
         </button>
       )}
 
