@@ -60,8 +60,8 @@ async function attachProfiles<T extends { user_id: string }>(rows: T[]): Promise
   return rows.map((row) => ({ ...row, profile: profileMap.get(row.user_id) }));
 }
 
-const MOBILE_AUDIENCE_SNAP_COMPACT = 0.64;
-const MOBILE_AUDIENCE_SNAP_EXPANDED = 1;
+const MOBILE_AUDIENCE_SNAP_COMPACT = 0.70;
+const MOBILE_AUDIENCE_SNAP_EXPANDED = 0.96;
 const MOBILE_AUDIENCE_EXPAND_GESTURE_PX = 12;
 
 function formatCount(value: number, locale: string) {
@@ -97,7 +97,7 @@ export function PostLikesViewsDialog({
   const [loadingLikes, setLoadingLikes] = useState(false);
   const [loadingViews, setLoadingViews] = useState(false);
   const [followLoading, setFollowLoading] = useState<string | null>(null);
-  const [activeSnapPoint, setActiveSnapPoint] = useState<number | string | null>(MOBILE_AUDIENCE_SNAP_EXPANDED);
+  const [activeSnapPoint, setActiveSnapPoint] = useState<number | string | null>(MOBILE_AUDIENCE_SNAP_COMPACT);
   const mobileDrawerGestureRef = useRef<{
     startX: number;
     startY: number;
@@ -190,7 +190,7 @@ export function PostLikesViewsDialog({
     if (!open || !postId) return;
     setTab(defaultTab);
     setQuery('');
-    setActiveSnapPoint(MOBILE_AUDIENCE_SNAP_EXPANDED);
+    setActiveSnapPoint(MOBILE_AUDIENCE_SNAP_COMPACT);
     void loadExactLikesCount();
   }, [open, defaultTab, postId, loadExactLikesCount]);
 
@@ -284,13 +284,9 @@ export function PostLikesViewsDialog({
         snapToSequentialPoint
       >
         <DrawerContent
-          className={cn(
-            'mt-0 h-[100dvh] max-h-[100dvh] overflow-hidden border-x-0 border-b-0 bg-background p-0 shadow-[0_-16px_52px_rgba(0,0,0,0.18)] transition-[border-radius] duration-200',
-            activeSnapPoint === MOBILE_AUDIENCE_SNAP_EXPANDED
-              ? 'rounded-t-none'
-              : 'rounded-t-[24px]',
-          )}
-          handleClassName="mt-2.5 h-1 w-12 bg-muted-foreground/20"
+          className="mt-0 h-[100dvh] max-h-[100dvh] overflow-hidden rounded-t-[28px] border-x-0 border-b-0 bg-background p-0 shadow-[0_-16px_52px_rgba(0,0,0,0.18)]"
+          overlayClassName="bg-black/45"
+          handleClassName="mt-2.5 h-1 w-12 bg-muted-foreground/25"
           onTouchStartCapture={(event) => {
             if (
               typeof activeSnapPoint !== 'number' ||
