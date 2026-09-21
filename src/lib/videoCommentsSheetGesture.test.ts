@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  isVideoCommentsListAtPullDismissEdge,
   resolveVideoCommentsSheetDrag,
   settleVideoCommentsSheetDetent,
   shouldDismissVideoCommentsSheet,
@@ -44,10 +45,16 @@ describe('Instagram-style video comments sheet gestures', () => {
     });
   });
 
+  it('detects the comments pull-dismiss edge, including short lists', () => {
+    expect(isVideoCommentsListAtPullDismissEdge(0, 1200, 600)).toBe(true);
+    expect(isVideoCommentsListAtPullDismissEdge(80, 1200, 600)).toBe(false);
+    expect(isVideoCommentsListAtPullDismissEdge(0, 420, 600)).toBe(true);
+  });
+
   it('dismisses after a deliberate compact-state pull or a fast fling', () => {
-    expect(shouldDismissVideoCommentsSheet(110, 0.2, bounds.height)).toBe(true);
-    expect(shouldDismissVideoCommentsSheet(40, 0.9, bounds.height)).toBe(true);
-    expect(shouldDismissVideoCommentsSheet(40, 0.2, bounds.height)).toBe(false);
+    expect(shouldDismissVideoCommentsSheet(80, 0.2, bounds.height)).toBe(true);
+    expect(shouldDismissVideoCommentsSheet(24, 0.8, bounds.height)).toBe(true);
+    expect(shouldDismissVideoCommentsSheet(24, 0.2, bounds.height)).toBe(false);
   });
 
   it('snaps only between expanded and the Instagram compact detent', () => {
