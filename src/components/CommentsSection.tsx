@@ -217,6 +217,18 @@ function CommentItem({
               {formatDistanceToNow(new Date(comment.created_at), { addSuffix: true })}
             </span>
 
+            {comment.is_pinned && depth === 0 && (
+              <span
+                className={cn(
+                  'inline-flex items-center gap-0.5 text-[10px] font-medium',
+                  immersive ? 'text-white/45' : 'text-muted-foreground',
+                )}
+              >
+                <Pin className="h-2.5 w-2.5 fill-current" />
+                Mahkamlangan
+              </span>
+            )}
+
             {(currentUserId === comment.user_id || (canPin && depth === 0)) && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -250,18 +262,6 @@ function CommentItem({
             )}
           </div>
 
-          {comment.is_pinned && depth === 0 && (
-            <div
-              className={cn(
-                'mt-0.5 inline-flex items-center gap-1 text-[10px] font-medium',
-                immersive ? 'text-white/45' : 'text-muted-foreground',
-              )}
-            >
-              <Pin className="h-3 w-3 fill-current" />
-              Mahkamlangan
-            </div>
-          )}
-
           <RichTextContent
             content={comment.content}
             className={cn('mt-0.5 text-[13px] leading-[1.35rem]', immersive && 'text-white/95')}
@@ -289,7 +289,7 @@ function CommentItem({
                 type="button"
                 onClick={() => onReply(comment)}
                 className={cn(
-                  'flex items-center gap-1 text-xs font-medium transition-colors',
+                  'flex items-center gap-1 text-[11px] font-medium transition-colors',
                   replyingToId === comment.id
                     ? immersive
                       ? 'text-white'
