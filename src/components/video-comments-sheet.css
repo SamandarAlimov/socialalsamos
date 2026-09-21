@@ -114,7 +114,8 @@ body:has([data-video-comments-sheet='true'][data-video-comments-dragging='true']
 .video-comments-premium [data-comment-list='true'] {
   min-height: 0;
   -webkit-overflow-scrolling: touch;
-  overscroll-behavior-y: contain;
+  overscroll-behavior-y: none;
+  touch-action: pan-y;
   scroll-padding-top: 10px;
   scroll-padding-bottom: 18px;
   padding-top: 8px;
