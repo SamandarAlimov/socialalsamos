@@ -622,6 +622,29 @@ export function VideoPlayer({
 
   const isFullscreen = isNativeFullscreen || isPseudoFullscreen;
 
+  // Keep the outer application shell synchronized with both native fullscreen
+  // and the iOS/webview CSS fallback. In pseudo fullscreen the player remains
+  // inside the Home feed DOM tree, so without this signal the fixed mobile
+  // header/bottom navbar can still paint above it.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    window.dispatchEvent(
+      new CustomEvent('alsamos:immersive-change', {
+        detail: { id: playerId, active: isFullscreen },
+      }),
+    );
+
+    return () => {
+      if (!isFullscreen) return;
+      window.dispatchEvent(
+        new CustomEvent('alsamos:immersive-change', {
+          detail: { id: playerId, active: false },
+        }),
+      );
+    };
+  }, [isFullscreen, playerId]);
+
   usePlatformScrollLock(isPseudoFullscreen);
 
   const VolumeIcon = globalMuted || globalVolume === 0
@@ -645,7 +668,8 @@ export function VideoPlayer({
         'group/player relative w-full overflow-hidden bg-black text-white outline-none select-none',
         'focus-visible:ring-2 focus-visible:ring-white/70',
         isNativeFullscreen && 'h-screen w-screen max-h-none max-w-none rounded-none',
-        isPseudoFullscreen && 'fixed inset-0 z-[9999] h-[100dvh] w-screen max-h-none max-w-none rounded-none',
+        isPseudoFullscreen &&
+          'fixed inset-0 z-[9999] h-[100dvh] w-[100dvw] max-h-none max-w-none overscroll-none rounded-none',
         className,
       )}
       style={{
