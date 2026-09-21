@@ -288,6 +288,11 @@ export function VideoCommentsSheet({
   const [isDragging, setIsDragging] = useState(false);
   const [hasPreview, setHasPreview] = useState(false);
   const [previewMuted, setPreviewMuted] = useState(true);
+  const [composerFocused, setComposerFocused] = useState(false);
+  const [keyboardViewport, setKeyboardViewport] = useState(() => ({
+    offsetTop: typeof window !== 'undefined' ? Math.max(0, window.visualViewport?.offsetTop ?? 0) : 0,
+    height: getViewportHeight(),
+  }));
 
   const unlockFeed = useCallback(() => {
     const snapshot = scrollLockRef.current;
@@ -591,12 +596,59 @@ export function VideoCommentsSheet({
   }, [isMobile, isOpen, mobileTop]);
 
   useEffect(() => {
+    if (!isOpen || !isMobile || typeof document === 'undefined') return;
+
+    const syncKeyboardViewport = () => {
+      const viewport = window.visualViewport;
+      setKeyboardViewport({
+        offsetTop: Math.max(0, viewport?.offsetTop ?? 0),
+        height: Math.max(1, viewport?.height ?? window.innerHeight),
+      });
+    };
+
+    const isComposerTarget = (target: EventTarget | null) =>
+      target instanceof Element &&
+      Boolean(target.closest('[data-video-comments-sheet="true"] [data-comment-composer="true"]'));
+
+    const handleFocusIn = (event: FocusEvent) => {
+      if (!isComposerTarget(event.target)) return;
+
+      detentRef.current = 'expanded';
+      setSheetDismissOffset(0);
+      setComposerFocused(true);
+      syncKeyboardViewport();
+    };
+
+    const handleFocusOut = () => {
+      requestAnimationFrame(() => {
+        if (isComposerTarget(document.activeElement)) return;
+        setComposerFocused(false);
+      });
+    };
+
+    document.addEventListener('focusin', handleFocusIn, true);
+    document.addEventListener('focusout', handleFocusOut, true);
+    window.visualViewport?.addEventListener('resize', syncKeyboardViewport);
+    window.visualViewport?.addEventListener('scroll', syncKeyboardViewport);
+
+    return () => {
+      document.removeEventListener('focusin', handleFocusIn, true);
+      document.removeEventListener('focusout', handleFocusOut, true);
+      window.visualViewport?.removeEventListener('resize', syncKeyboardViewport);
+      window.visualViewport?.removeEventListener('scroll', syncKeyboardViewport);
+      setComposerFocused(false);
+    };
+  }, [isMobile, isOpen, setSheetDismissOffset]);
+
+  useEffect(() => {
     if (!isOpen || !isMobile) return;
 
     const handleResize = () => {
       const activeElement = document.activeElement;
       const keyboardLikelyOpen =
-        activeElement instanceof HTMLInputElement || activeElement instanceof HTMLTextAreaElement;
+        composerFocused ||
+        activeElement instanceof HTMLInputElement ||
+        activeElement instanceof HTMLTextAreaElement;
       if (keyboardLikelyOpen) return;
 
       const bounds = mobileSheetBounds();
@@ -612,7 +664,7 @@ export function VideoCommentsSheet({
       window.removeEventListener('resize', handleResize);
       window.visualViewport?.removeEventListener('resize', handleResize);
     };
-  }, [isMobile, isOpen, setSheetTopImmediately]);
+  }, [composerFocused, isMobile, isOpen, setSheetTopImmediately]);
 
   /**
    * Nested Instagram-style scroll handoff:
@@ -809,10 +861,23 @@ export function VideoCommentsSheet({
       previewVideoRef.current ? videoAspect(previewVideoRef.current) : VIDEO_COMMENTS_REFERENCE_ASPECT,
       mobileTop,
     );
-    const showPreviewMute = hasPreview && isOpen && previewFit.stageHeight >= 72 && previewFit.mediaHeight >= 72;
+    const showPreviewMute =
+      hasPreview &&
+      isOpen &&
+      !composerFocused &&
+      previewFit.stageHeight >= 72 &&
+      previewFit.mediaHeight >= 72;
     const mobileStyle = {
-      top: `${Math.round(mobileTop)}px`,
-      bottom: 0,
+      top: composerFocused
+        ? `calc(${Math.round(keyboardViewport.offsetTop)}px + env(safe-area-inset-top, 0px))`
+        : `${Math.round(mobileTop)}px`,
+      bottom: composerFocused ? 'auto' : 0,
+      height: composerFocused
+        ? `calc(${Math.round(keyboardViewport.height)}px - env(safe-area-inset-top, 0px))`
+        : undefined,
+      maxHeight: composerFocused
+        ? `calc(${Math.round(keyboardViewport.height)}px - env(safe-area-inset-top, 0px))`
+        : undefined,
       transform: dismissOffset > 0 ? `translate3d(0, ${Math.round(dismissOffset)}px, 0)` : undefined,
       borderTopLeftRadius: `${geometry.sheetCornerRadius}px`,
       borderTopRightRadius: `${geometry.sheetCornerRadius}px`,
@@ -852,6 +917,7 @@ export function VideoCommentsSheet({
             data-video-comments-sheet="true"
             data-video-comments-dragging={isDragging ? 'true' : 'false'}
             data-video-comments-dismiss-phase={dismissOffset > 0 ? 'true' : 'false'}
+            data-video-comments-keyboard-active={composerFocused ? 'true' : 'false'}
             overlayClassName="pointer-events-none bg-transparent"
             aria-describedby="video-comments-mobile-description"
             onOpenAutoFocus={(event) => event.preventDefault()}

@@ -214,6 +214,13 @@ body:has([data-video-comments-sheet='true'][data-video-comments-dragging='true']
   background: rgba(24, 28, 31, 0.985) !important;
 }
 
+/* When the virtual keyboard is visible, VisualViewport already ends exactly
+   at the keyboard edge. Do not add the device bottom safe-area a second time. */
+.video-comments-premium[data-video-comments-sheet='true'][data-video-comments-keyboard-active='true']
+  [data-comment-composer='true'] {
+  padding-bottom: 8px;
+}
+
 .video-comments-premium [data-comment-quick-reactions='true'] {
   margin-bottom: 7px;
   padding-inline: 1px;
@@ -226,16 +233,16 @@ body:has([data-video-comments-sheet='true'][data-video-comments-dragging='true']
   font-size: 23px;
 }
 
-.video-comments-premium [data-comment-composer='true'] input {
+.video-comments-premium [data-comment-composer='true'] :is(input, textarea) {
   font-size: 16px;
   line-height: 22px;
 }
 
-.video-comments-premium[data-video-comments-sheet='true'] [data-comment-composer='true'] input {
+.video-comments-premium[data-video-comments-sheet='true'] [data-comment-composer='true'] :is(input, textarea) {
   caret-color: #fff;
 }
 
-.video-comments-premium[data-video-comments-sheet='true'] [data-comment-composer='true'] input::placeholder {
+.video-comments-premium[data-video-comments-sheet='true'] [data-comment-composer='true'] :is(input, textarea)::placeholder {
   color: rgba(255, 255, 255, 0.54);
 }
 
@@ -247,11 +254,11 @@ body:has([data-video-comments-sheet='true'][data-video-comments-dragging='true']
 
 /* Quick reactions already provide emoji access in this surface. Match the
    supplied Instagram composer by keeping image + GIF as the inline controls. */
-.video-comments-premium [data-comment-composer='true'] input + div > button:first-child {
+.video-comments-premium [data-comment-composer='true'] :is(input, textarea) + div > button:first-child {
   display: none;
 }
 
-.video-comments-premium [data-comment-composer='true'] input + div > button:last-child {
+.video-comments-premium [data-comment-composer='true'] :is(input, textarea) + div > button:last-child {
   width: 30px;
   height: 26px;
   border: 2px solid currentColor;
@@ -259,11 +266,11 @@ body:has([data-video-comments-sheet='true'][data-video-comments-dragging='true']
   padding: 0;
 }
 
-.video-comments-premium [data-comment-composer='true'] input + div > button:last-child svg {
+.video-comments-premium [data-comment-composer='true'] :is(input, textarea) + div > button:last-child svg {
   display: none;
 }
 
-.video-comments-premium [data-comment-composer='true'] input + div > button:last-child::after {
+.video-comments-premium [data-comment-composer='true'] :is(input, textarea) + div > button:last-child::after {
   content: 'GIF';
   font-size: 10px;
   font-weight: 800;
@@ -287,7 +294,7 @@ body:has([data-video-comments-sheet='true'][data-video-comments-dragging='true']
     min-height: 0;
   }
 
-  .video-comments-premium [data-comment-composer='true'] input {
+  .video-comments-premium [data-comment-composer='true'] :is(input, textarea) {
     font-size: 14px;
   }
 
@@ -295,22 +302,22 @@ body:has([data-video-comments-sheet='true'][data-video-comments-dragging='true']
     display: inline-flex;
   }
 
-  .video-comments-premium [data-comment-composer='true'] input + div > button:first-child {
+  .video-comments-premium [data-comment-composer='true'] :is(input, textarea) + div > button:first-child {
     display: inline-flex;
   }
 
-  .video-comments-premium [data-comment-composer='true'] input + div > button:last-child {
+  .video-comments-premium [data-comment-composer='true'] :is(input, textarea) + div > button:last-child {
     width: 28px;
     height: 28px;
     border: 0;
     border-radius: 9999px;
   }
 
-  .video-comments-premium [data-comment-composer='true'] input + div > button:last-child svg {
+  .video-comments-premium [data-comment-composer='true'] :is(input, textarea) + div > button:last-child svg {
     display: block;
   }
 
-  .video-comments-premium [data-comment-composer='true'] input + div > button:last-child::after {
+  .video-comments-premium [data-comment-composer='true'] :is(input, textarea) + div > button:last-child::after {
     content: none;
   }
 
