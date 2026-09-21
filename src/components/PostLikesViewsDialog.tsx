@@ -93,7 +93,7 @@ export function PostLikesViewsDialog({
   const [loadingLikes, setLoadingLikes] = useState(false);
   const [loadingViews, setLoadingViews] = useState(false);
   const [followLoading, setFollowLoading] = useState<string | null>(null);
-  const [activeSnapPoint, setActiveSnapPoint] = useState<number | string | null>(0.82);
+  const [activeSnapPoint, setActiveSnapPoint] = useState<number | string | null>(0.64);
 
   const applyFollowingState = useCallback(async <T extends { user_id: string }>(rows: T[]) => {
     if (!user || !rows.length) return rows.map((row) => ({ ...row, is_following: false }));
@@ -181,7 +181,7 @@ export function PostLikesViewsDialog({
     if (!open || !postId) return;
     setTab(defaultTab);
     setQuery('');
-    setActiveSnapPoint(0.82);
+    setActiveSnapPoint(0.64);
     void loadExactLikesCount();
   }, [open, defaultTab, postId, loadExactLikesCount]);
 
@@ -269,13 +269,13 @@ export function PostLikesViewsDialog({
         open={open}
         onOpenChange={onOpenChange}
         shouldScaleBackground={false}
-        snapPoints={[0.82, 0.96]}
+        snapPoints={[0.64, 0.92]}
         activeSnapPoint={activeSnapPoint}
         setActiveSnapPoint={setActiveSnapPoint}
       >
         <DrawerContent
-          className="h-[96dvh] max-h-[96dvh] overflow-hidden rounded-t-[26px] border-x-0 border-b-0 p-0 shadow-[0_-20px_60px_rgba(0,0,0,0.22)]"
-          handleClassName="mt-3 h-1.5 w-14"
+          className="h-[92dvh] max-h-[92dvh] overflow-hidden rounded-t-[24px] border-x-0 border-b-0 bg-background p-0 shadow-[0_-16px_52px_rgba(0,0,0,0.18)]"
+          handleClassName="mt-2.5 h-1 w-12 bg-muted-foreground/20"
         >
           {content}
         </DrawerContent>
@@ -333,56 +333,58 @@ function AudiencePanel({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-background md:bg-gradient-to-b md:from-background md:via-background md:to-muted/20">
-      <div className="flex-none px-4 pb-2 pt-1 md:px-8 md:pb-5 md:pt-7">
-        <h2 className="text-center text-[18px] font-bold tracking-[-0.02em] md:text-[24px]">
+      <div className="flex-none border-b border-border/50 bg-background/95 px-4 pb-0 pt-1 backdrop-blur-xl md:px-8 md:pt-6">
+        <h2 className="text-center text-[17px] font-bold tracking-[-0.025em] md:text-[22px]">
           {t('post.likesAndViews', 'Likes and views')}
         </h2>
-        <p className="mx-auto mt-1 hidden max-w-md text-center text-[13px] text-muted-foreground md:block">
+        <p className="mx-auto mt-1 hidden max-w-md text-center text-[12px] text-muted-foreground md:block">
           {tab === 'likes'
             ? t('post.likesAudienceHint', 'People who liked this video')
             : t('post.viewsAudienceHint', 'People who viewed this video')}
         </p>
-      </div>
 
-      <div className="flex-none border-y border-border/60 bg-background px-4 py-2.5 md:px-8 md:py-5">
-        <div className="grid grid-cols-2 gap-2 md:gap-4">
-          <MetricButton
+        <div
+          className="mt-2.5 grid grid-cols-2 md:mt-4"
+          role="tablist"
+          aria-label={t('post.likesAndViews', 'Likes and views')}
+        >
+          <CompactAudienceTab
             active={tab === 'likes'}
-            icon={<Heart className={cn('h-[18px] w-[18px] md:h-[22px] md:w-[22px]', tab === 'likes' && 'fill-current')} strokeWidth={2.1} />}
-            value={formatCount(likesCount, locale)}
+            icon={<Heart className={cn('h-[17px] w-[17px]', tab === 'likes' && 'fill-current')} strokeWidth={2.1} />}
             label={t('common.likes', 'Likes')}
+            count={formatCount(likesCount, locale)}
             onClick={() => setTab('likes')}
           />
-          <MetricButton
+          <CompactAudienceTab
             active={tab === 'views'}
-            icon={<Eye className="h-[18px] w-[18px] md:h-[22px] md:w-[22px]" strokeWidth={2.1} />}
-            value={formatCount(viewsCount, locale)}
+            icon={<Eye className="h-[17px] w-[17px]" strokeWidth={2.1} />}
             label={t('post.views', 'Views')}
+            count={formatCount(viewsCount, locale)}
             onClick={() => setTab('views')}
           />
         </div>
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col px-4 md:px-8">
-        <div className="flex-none pb-2.5 pt-3 md:pb-4 md:pt-6">
-          <div className="mb-2 flex items-center justify-between px-1 md:mb-4">
-            <h3 className="text-[16px] font-bold tracking-[-0.02em] md:text-[20px]">
+        <div className="flex-none pb-2 pt-2.5 md:pb-3 md:pt-5">
+          <div className="mb-2 flex items-center justify-between px-0.5 md:mb-3">
+            <h3 className="text-[15px] font-bold tracking-[-0.02em] md:text-[18px]">
               {tab === 'likes' ? t('post.likedBy', 'Liked by') : t('post.viewedBy', 'Viewed by')}
             </h3>
             {!loading && activeCount > 0 && (
-              <span className="rounded-full bg-muted/70 px-2 py-0.5 text-[11px] font-semibold text-muted-foreground md:px-3 md:py-1 md:text-xs">
+              <span className="rounded-full bg-muted/65 px-2 py-0.5 text-[10px] font-semibold tabular-nums text-muted-foreground md:px-2.5 md:py-1 md:text-[11px]">
                 {formatCount(activeCount, locale)}
               </span>
             )}
           </div>
 
           <div className="relative">
-            <Search className="pointer-events-none absolute left-3.5 top-1/2 h-[17px] w-[17px] -translate-y-1/2 text-muted-foreground md:left-4 md:h-5 md:w-5" strokeWidth={2} />
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/80 md:left-3.5 md:h-[18px] md:w-[18px]" strokeWidth={2} />
             <Input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder={t('common.search', 'Search')}
-              className="h-10 rounded-[13px] border-0 bg-muted/70 pl-10 pr-4 text-[14px] shadow-none placeholder:text-muted-foreground/85 focus-visible:ring-1 focus-visible:ring-ring/50 md:h-12 md:rounded-[16px] md:pl-12 md:text-[15px]"
+              className="h-9 rounded-[12px] border-0 bg-muted/60 pl-9 pr-3.5 text-[13px] shadow-none placeholder:text-muted-foreground/75 focus-visible:bg-muted/75 focus-visible:ring-1 focus-visible:ring-ring/40 md:h-11 md:rounded-[14px] md:pl-10 md:text-[14px]"
             />
           </div>
         </div>
@@ -397,7 +399,7 @@ function AudiencePanel({
               hasQuery={Boolean(query.trim())}
             />
           ) : tab === 'likes' ? (
-            <div className="space-y-0.5 md:space-y-1">
+            <div className="space-y-0 md:space-y-0.5">
               {likes.map((row) => (
                 <AudienceRow
                   key={row.user_id}
@@ -432,34 +434,46 @@ function AudiencePanel({
   );
 }
 
-function MetricButton({
+function CompactAudienceTab({
   active,
   icon,
-  value,
   label,
+  count,
   onClick,
 }: {
   active: boolean;
   icon: React.ReactNode;
-  value: string;
   label: string;
+  count: string;
   onClick: () => void;
 }) {
   return (
     <button
       type="button"
+      role="tab"
+      aria-selected={active}
       onClick={onClick}
       className={cn(
-        'relative flex min-h-[52px] items-center justify-center gap-1.5 rounded-[15px] border px-2.5 transition-all duration-200 active:scale-[0.985] md:min-h-[88px] md:gap-2.5 md:rounded-[22px] md:px-5',
-        active
-          ? 'border-primary/20 bg-primary/[0.08] text-foreground shadow-[0_6px_18px_rgba(0,0,0,0.04)] md:shadow-[0_14px_34px_rgba(0,0,0,0.07)]'
-          : 'border-transparent bg-muted/45 text-muted-foreground hover:bg-muted/65 md:bg-muted/55',
+        'relative flex h-10 items-center justify-center gap-1.5 text-[13px] font-semibold transition-colors active:scale-[0.985] md:h-11 md:text-[14px]',
+        active ? 'text-foreground' : 'text-muted-foreground hover:text-foreground',
       )}
     >
       <span className={cn('transition-colors', active && 'text-primary')}>{icon}</span>
-      <span className="text-[16px] font-bold tabular-nums tracking-[-0.02em] md:text-[22px]">{value}</span>
-      <span className="text-[12px] font-medium md:text-[14px]">{label}</span>
-      {active && <span className="absolute bottom-0 left-1/2 h-0.5 w-7 -translate-x-1/2 rounded-full bg-primary md:h-[3px] md:w-10" />}
+      <span>{label}</span>
+      <span
+        className={cn(
+          'text-[11px] font-semibold tabular-nums md:text-[12px]',
+          active ? 'text-foreground/70' : 'text-muted-foreground/70',
+        )}
+      >
+        {count}
+      </span>
+      <span
+        className={cn(
+          'absolute inset-x-5 bottom-0 h-0.5 rounded-full transition-all duration-200 md:inset-x-10',
+          active ? 'scale-x-100 bg-primary opacity-100' : 'scale-x-50 bg-transparent opacity-0',
+        )}
+      />
     </button>
   );
 }
@@ -490,13 +504,13 @@ function AudienceRow({
   const isLoading = followLoading === row.user_id;
 
   return (
-    <div className="group flex min-h-[68px] items-center gap-3 rounded-[16px] px-1.5 py-2 transition-colors hover:bg-muted/35 md:min-h-[78px] md:rounded-[18px] md:px-2.5 md:py-2.5 md:hover:bg-muted/55">
+    <div className="group flex min-h-[58px] items-center gap-2.5 rounded-[14px] px-1 py-1.5 transition-colors hover:bg-muted/35 md:min-h-[66px] md:rounded-[16px] md:px-2 md:py-2 md:hover:bg-muted/55">
       <button
         type="button"
         onClick={() => onProfile(profile?.username, row.user_id)}
-        className="flex min-w-0 flex-1 items-center gap-3 text-left md:gap-3.5"
+        className="flex min-w-0 flex-1 items-center gap-2.5 text-left md:gap-3"
       >
-        <Avatar className="h-[52px] w-[52px] flex-none ring-1 ring-border/50 md:h-[56px] md:w-[56px]">
+        <Avatar className="h-11 w-11 flex-none ring-1 ring-border/50 md:h-12 md:w-12">
           <AvatarImage src={profile?.avatar_url || ''} />
           <AvatarFallback className="bg-muted text-base font-semibold text-muted-foreground">
             {primaryName[0]?.toUpperCase() || 'U'}
@@ -505,16 +519,16 @@ function AudienceRow({
 
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-center gap-1.5">
-            <span className="truncate text-[15px] font-bold leading-5 tracking-[-0.01em] md:text-[16px]">
+            <span className="truncate text-[14px] font-bold leading-5 tracking-[-0.01em] md:text-[15px]">
               {primaryName}
             </span>
             {profile?.is_verified && <VerifiedBadge size="xs" />}
           </div>
           {(secondaryName || meta) && (
-            <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[13px] leading-4 text-muted-foreground md:mt-1 md:text-[13px]">
+            <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[12px] leading-4 text-muted-foreground md:text-[12.5px]">
               {secondaryName && <span className="truncate">{secondaryName}</span>}
               {secondaryName && meta && <span aria-hidden="true">·</span>}
-              {meta && <span className="flex-none whitespace-nowrap text-[12px]">{meta}</span>}
+              {meta && <span className="flex-none whitespace-nowrap text-[11px] md:text-[12px]">{meta}</span>}
             </div>
           )}
         </div>
@@ -528,7 +542,7 @@ function AudienceRow({
           disabled={isLoading}
           onClick={() => void onFollow(row.user_id, Boolean(row.is_following))}
           className={cn(
-            'h-9 min-w-[92px] flex-none rounded-[11px] px-4 text-[13px] font-bold shadow-none transition-transform active:scale-[0.97] md:h-10 md:min-w-[108px] md:rounded-[12px] md:px-5 md:text-[14px]',
+            'h-8 min-w-[82px] flex-none rounded-[10px] px-3.5 text-[12px] font-bold shadow-none transition-transform active:scale-[0.97] md:h-9 md:min-w-[96px] md:rounded-[11px] md:px-4 md:text-[13px]',
             !row.is_following && 'bg-primary text-primary-foreground hover:bg-primary/90',
           )}
         >
@@ -547,15 +561,15 @@ function AudienceRow({
 
 function SkeletonRows() {
   return (
-    <div className="space-y-1 py-1 md:space-y-2">
+    <div className="space-y-0.5 py-1 md:space-y-1">
       {Array.from({ length: 7 }).map((_, index) => (
-        <div key={index} className="flex min-h-[68px] items-center gap-3 px-1.5 py-2 md:min-h-[78px] md:px-2.5 md:py-2.5">
-          <Skeleton className="h-[52px] w-[52px] flex-none rounded-full md:h-[56px] md:w-[56px]" />
-          <div className="flex-1 space-y-2">
-            <Skeleton className="h-4 w-28 rounded-full md:w-36" />
-            <Skeleton className="h-3.5 w-20 rounded-full md:w-28" />
+        <div key={index} className="flex min-h-[58px] items-center gap-2.5 px-1 py-1.5 md:min-h-[66px] md:px-2 md:py-2">
+          <Skeleton className="h-11 w-11 flex-none rounded-full md:h-12 md:w-12" />
+          <div className="flex-1 space-y-1.5">
+            <Skeleton className="h-3.5 w-28 rounded-full md:w-36" />
+            <Skeleton className="h-3 w-20 rounded-full md:w-28" />
           </div>
-          <Skeleton className="h-9 w-[92px] rounded-[11px] md:h-10 md:w-[108px] md:rounded-[12px]" />
+          <Skeleton className="h-8 w-[82px] rounded-[10px] md:h-9 md:w-[96px] md:rounded-[11px]" />
         </div>
       ))}
     </div>
@@ -564,8 +578,8 @@ function SkeletonRows() {
 
 function EmptyState({ icon, label, hasQuery }: { icon: React.ReactNode; label: string; hasQuery: boolean }) {
   return (
-    <div className="flex min-h-[260px] flex-col items-center justify-center px-8 text-center md:min-h-[320px]">
-      <div className="mb-3 flex h-16 w-16 items-center justify-center rounded-full border border-border/70 bg-muted/45 text-muted-foreground md:h-[72px] md:w-[72px]">
+    <div className="flex min-h-[190px] flex-col items-center justify-center px-8 text-center md:min-h-[260px]">
+      <div className="mb-2.5 flex h-12 w-12 items-center justify-center rounded-full border border-border/60 bg-muted/40 text-muted-foreground md:h-14 md:w-14">
         {icon}
       </div>
       <p className="text-[15px] font-semibold md:text-[16px]">
