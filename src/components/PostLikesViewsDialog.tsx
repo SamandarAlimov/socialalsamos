@@ -98,6 +98,11 @@ export function PostLikesViewsDialog({
   const [loadingViews, setLoadingViews] = useState(false);
   const [followLoading, setFollowLoading] = useState<string | null>(null);
   const [activeSnapPoint, setActiveSnapPoint] = useState<number | string | null>(MOBILE_AUDIENCE_SNAP_COMPACT);
+  const mobileDrawerGestureRef = useRef<{
+    startX: number;
+    startY: number;
+    expanded: boolean;
+  } | null>(null);
 
   const applyFollowingState = useCallback(async <T extends { user_id: string }>(rows: T[]) => {
     if (!user || !rows.length) return rows.map((row) => ({ ...row, is_following: false }));
@@ -264,12 +269,6 @@ export function PostLikesViewsDialog({
       onProfile={openProfile}
       locale={i18n.language}
       t={t}
-      mobileSnapPoint={isMobile ? activeSnapPoint : null}
-      onRequestMobileExpand={
-        isMobile
-          ? () => setActiveSnapPoint(MOBILE_AUDIENCE_SNAP_EXPANDED)
-          : undefined
-      }
     />
   );
 
@@ -287,6 +286,44 @@ export function PostLikesViewsDialog({
         <DrawerContent
           className="h-[92dvh] max-h-[92dvh] overflow-hidden rounded-t-[24px] border-x-0 border-b-0 bg-background p-0 shadow-[0_-16px_52px_rgba(0,0,0,0.18)]"
           handleClassName="mt-2.5 h-1 w-12 bg-muted-foreground/20"
+          onTouchStartCapture={(event) => {
+            if (
+              typeof activeSnapPoint !== 'number' ||
+              activeSnapPoint >= MOBILE_AUDIENCE_SNAP_EXPANDED - 0.01 ||
+              event.touches.length !== 1
+            ) {
+              mobileDrawerGestureRef.current = null;
+              return;
+            }
+            const touch = event.touches.item(0);
+            if (!touch) return;
+            mobileDrawerGestureRef.current = {
+              startX: touch.clientX,
+              startY: touch.clientY,
+              expanded: false,
+            };
+          }}
+          onTouchMoveCapture={(event) => {
+            const gesture = mobileDrawerGestureRef.current;
+            const touch = event.touches.item(0);
+            if (!gesture || !touch || gesture.expanded) return;
+
+            const dx = touch.clientX - gesture.startX;
+            const dy = touch.clientY - gesture.startY;
+            if (
+              Math.abs(dy) > Math.abs(dx) &&
+              dy <= -MOBILE_AUDIENCE_EXPAND_GESTURE_PX
+            ) {
+              gesture.expanded = true;
+              setActiveSnapPoint(MOBILE_AUDIENCE_SNAP_EXPANDED);
+            }
+          }}
+          onTouchEndCapture={() => {
+            mobileDrawerGestureRef.current = null;
+          }}
+          onTouchCancelCapture={() => {
+            mobileDrawerGestureRef.current = null;
+          }}
         >
           {content}
         </DrawerContent>
@@ -320,8 +357,6 @@ interface AudiencePanelProps {
   onProfile: (username?: string | null, userId?: string) => void;
   locale: string;
   t: ReturnType<typeof useTranslation>['t'];
-  mobileSnapPoint?: number | string | null;
-  onRequestMobileExpand?: () => void;
 }
 
 function AudiencePanel({
@@ -340,72 +375,8 @@ function AudiencePanel({
   onProfile,
   locale,
   t,
-  mobileSnapPoint,
-  onRequestMobileExpand,
 }: AudiencePanelProps) {
   const activeRows = tab === 'likes' ? likes : views;
-  const audienceScrollRef = useRef<HTMLDivElement>(null);
-  const expandGestureRef = useRef<{
-    startX: number;
-    startY: number;
-    eligible: boolean;
-    consumed: boolean;
-  } | null>(null);
-
-  const isCompactMobileSnap =
-    typeof mobileSnapPoint === 'number' &&
-    mobileSnapPoint < MOBILE_AUDIENCE_SNAP_EXPANDED - 0.01;
-
-  const handleAudienceTouchStart = useCallback((event: React.TouchEvent<HTMLDivElement>) => {
-    if (!onRequestMobileExpand || !isCompactMobileSnap || event.touches.length !== 1) {
-      expandGestureRef.current = null;
-      return;
-    }
-
-    const touch = event.touches.item(0);
-    const list = audienceScrollRef.current;
-    if (!touch || !list) {
-      expandGestureRef.current = null;
-      return;
-    }
-
-    expandGestureRef.current = {
-      startX: touch.clientX,
-      startY: touch.clientY,
-      eligible: list.scrollTop <= 1,
-      consumed: false,
-    };
-  }, [isCompactMobileSnap, onRequestMobileExpand]);
-
-  const handleAudienceTouchMove = useCallback((event: React.TouchEvent<HTMLDivElement>) => {
-    const gesture = expandGestureRef.current;
-    const touch = event.touches.item(0);
-    const list = audienceScrollRef.current;
-    if (!gesture || !touch || !list || gesture.consumed || !gesture.eligible) return;
-
-    const dx = touch.clientX - gesture.startX;
-    const dy = touch.clientY - gesture.startY;
-    const verticalIntent = Math.abs(dy) > Math.abs(dx);
-
-    // At the compact detent the first upward swipe should grow the sheet before
-    // the inner audience list starts scrolling. Otherwise overflow-y-auto owns
-    // the gesture and Vaul never receives enough movement to reach 92%.
-    if (
-      verticalIntent &&
-      dy <= -MOBILE_AUDIENCE_EXPAND_GESTURE_PX &&
-      list.scrollTop <= 1
-    ) {
-      gesture.consumed = true;
-      if (event.cancelable) event.preventDefault();
-      list.scrollTop = 0;
-      onRequestMobileExpand();
-    }
-  }, [onRequestMobileExpand]);
-
-  const clearAudienceTouch = useCallback(() => {
-    expandGestureRef.current = null;
-  }, []);
-
   const activeCount = tab === 'likes' && !query.trim() ? likesCount : activeRows.length;
 
   return (
@@ -466,14 +437,7 @@ function AudiencePanel({
           </div>
         </div>
 
-        <div
-          ref={audienceScrollRef}
-          onTouchStart={handleAudienceTouchStart}
-          onTouchMove={handleAudienceTouchMove}
-          onTouchEnd={clearAudienceTouch}
-          onTouchCancel={clearAudienceTouch}
-          className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-[max(env(safe-area-inset-bottom),0.75rem)] scrollbar-hide md:pb-6"
-        >
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-[max(env(safe-area-inset-bottom),0.75rem)] scrollbar-hide md:pb-6">
           {loading ? (
             <SkeletonRows />
           ) : activeRows.length === 0 ? (
@@ -542,7 +506,7 @@ function CompactAudienceTab({
         active ? 'text-foreground' : 'text-muted-foreground hover:text-foreground',
       )}
     >
-      <span className={cn('transition-colors', active && 'text-primary')}>{icon}</span>
+      <span className={cn('transition-colors', active ? 'text-foreground' : 'text-muted-foreground')}>{icon}</span>
       <span>{label}</span>
       <span
         className={cn(
@@ -555,7 +519,7 @@ function CompactAudienceTab({
       <span
         className={cn(
           'absolute inset-x-5 bottom-0 h-0.5 rounded-full transition-all duration-200 md:inset-x-10',
-          active ? 'scale-x-100 bg-primary opacity-100' : 'scale-x-50 bg-transparent opacity-0',
+          active ? 'scale-x-100 bg-foreground/85 opacity-100' : 'scale-x-50 bg-transparent opacity-0',
         )}
       />
     </button>
