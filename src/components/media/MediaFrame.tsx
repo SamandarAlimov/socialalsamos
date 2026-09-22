@@ -11,18 +11,20 @@ import { cn } from '@/lib/utils';
  *     harsh black pillarboxes for portrait/square content.
  *
  * Variants:
- *   - "feed"    → 4:5 ≤ ratio ≤ 1.91:1 + viewport-height budget
- *   - "reel"    → 9:16 fixed                (Reels / Shorts viewport)
- *   - "preview" → 16:9 fixed                (small shared previews, chat cards)
- *   - "free"    → no clamp, exact natural ratio
+ *   - "feed"       → 4:5 ≤ ratio ≤ 1.91:1 for ordinary feed images/cards
+ *   - "feed-video" → 9:16 ≤ ratio ≤ 1.91:1, preserving common video ratios
+ *   - "reel"       → 9:16 fixed                (Reels / Shorts viewport)
+ *   - "preview"    → 16:9 fixed                (small shared previews, chat cards)
+ *   - "free"       → no clamp, exact natural ratio
  */
 
-const FEED_MIN = 4 / 5;        // 0.8 (tallest portrait allowed in feed)
+const FEED_MIN = 4 / 5;        // 0.8 (ordinary image/card portrait floor)
+const FEED_VIDEO_MIN = 9 / 16; // 0.5625 (full portrait video / reel ratio)
 const FEED_MAX = 1.91;         // widest landscape allowed in feed
 const REEL_RATIO = 9 / 16;     // 0.5625
 const PREVIEW_RATIO = 16 / 9;  // 1.777…
 
-export type MediaFrameVariant = 'feed' | 'reel' | 'preview' | 'free';
+export type MediaFrameVariant = 'feed' | 'feed-video' | 'reel' | 'preview' | 'free';
 
 export interface MediaFrameProps {
   children: ReactNode;
@@ -54,6 +56,13 @@ export function resolveFrameRatio(variant: MediaFrameVariant, naturalRatio?: num
       return PREVIEW_RATIO;
     case 'free':
       return naturalRatio && isFinite(naturalRatio) && naturalRatio > 0 ? naturalRatio : 1;
+    case 'feed-video': {
+      // Home/feed videos should occupy the full card width at their natural
+      // shape. In particular, 9:16 portrait and 16:9 landscape must not be
+      // forced into the old 4:5 frame, which created large black pillarboxes.
+      if (!naturalRatio || !isFinite(naturalRatio) || naturalRatio <= 0) return FEED_MIN;
+      return Math.min(FEED_MAX, Math.max(FEED_VIDEO_MIN, naturalRatio));
+    }
     case 'feed':
     default: {
       if (!naturalRatio || !isFinite(naturalRatio) || naturalRatio <= 0) return 1;
@@ -82,6 +91,7 @@ export function MediaFrame({
 }: MediaFrameProps) {
   const ratio = resolveFrameRatio(variant, naturalRatio);
   const isFeed = variant === 'feed';
+  const isFeedVideo = variant === 'feed-video';
 
   return (
     <div
@@ -90,6 +100,10 @@ export function MediaFrame({
         'relative w-full overflow-hidden bg-neutral-950 flex items-center justify-center',
         isFeed &&
           'max-h-[min(72dvh,720px)] sm:max-h-[min(74dvh,720px)] xl:max-h-[min(76dvh,740px)]',
+        // Do not viewport-clamp Home videos: a definite max-height breaks the
+        // natural aspect ratio and makes 9:16 video narrow inside a wide black
+        // frame. Let the feed scroll naturally instead, as Instagram does.
+        isFeedVideo && 'max-h-none',
         rounded && 'rounded-2xl',
         className,
       )}

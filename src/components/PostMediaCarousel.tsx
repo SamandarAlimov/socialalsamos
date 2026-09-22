@@ -335,7 +335,7 @@ export function PostMediaCarousel({
     <div className="relative group w-full">
       <MediaFrame
         containerRef={mediaFrameRef}
-        variant={isReel ? 'reel' : 'feed'}
+        variant={isReel ? 'reel' : isCurrentVideo ? 'feed-video' : 'feed'}
         naturalRatio={naturalRatio}
         backdropUrl={
           currentFailed
