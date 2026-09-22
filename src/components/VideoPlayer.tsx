@@ -276,9 +276,11 @@ export function VideoPlayer({
         const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
         const viewportCenter = viewportHeight / 2;
         const crossesCenter = rect.top <= viewportCenter && rect.bottom >= viewportCenter;
-        const shouldAutoplay =
-          entry.isIntersecting &&
-          (entry.intersectionRatio >= 0.35 || crossesCenter);
+        // Home/feed can have more than one video partially visible at once.
+        // Choosing the item that owns the viewport center gives us one stable
+        // Instagram-style autoplay target and prevents two players from
+        // repeatedly pausing/restarting each other.
+        const shouldAutoplay = entry.isIntersecting && crossesCenter;
 
         autoplayVisibleRef.current = shouldAutoplay;
 
