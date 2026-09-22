@@ -1,20 +1,22 @@
 /**
  * Shared mobile bottom-navigation geometry.
  *
- * Keep feed overlays and the floating navigation in one coordinate system so
- * safe-area insets never get counted twice across gesture-navigation devices,
- * tablets, PWAs and regular mobile browsers.
+ * Audit note (2026-09-22):
+ * - Before viewport-fit=cover, BottomNavbar used fixed bottom-0 + mb-2 (8px).
+ * - After safe-area became visible, several follow-up commits started deriving
+ *   the whole dock position from env(safe-area-inset-bottom), which first lifted
+ *   the dock and then over-corrected it with a negative bottom offset.
+ * - The stable visual contract is viewport-anchored: the dock itself stays 8px
+ *   from the rendered viewport bottom on every device. Safe-area handling is
+ *   reserved for content that actually needs it, not for moving the whole dock.
  *
- * Some mobile browsers expose the system gesture/home-indicator area below the
- * CSS visual viewport even with viewport-fit=cover. Counter-shifting by the
- * reported safe-area inset lets the translucent dock visually continue into
- * that system area while the icons remain above it. On devices without such an
- * inset env(...) resolves to 0 and the dock simply sits 4px from the bottom.
+ * Video overlays reuse the same geometry so timeline/time/fullscreen controls
+ * remain directly above the navbar without independently re-applying safe-area.
  */
 export const MOBILE_BOTTOM_NAV_HEIGHT_PX = 56;
 
-export const MOBILE_BOTTOM_NAV_BOTTOM_CSS =
-  'clamp(-40px, calc(4px - env(safe-area-inset-bottom, 0px)), 4px)';
+/** Matches the pre-regression BottomNavbar bottom-0 + mb-2 position. */
+export const MOBILE_BOTTOM_NAV_BOTTOM_CSS = '8px';
 
 export const MOBILE_BOTTOM_NAV_OVERLAY_GAP_PX = 4;
 
