@@ -368,8 +368,9 @@ export function PostMediaCarousel({
             src={currentMedia}
             poster={posters?.[currentIndex] ?? undefined}
             aspectMode="auto"
-            autoPlay={false}
-            muted={Boolean(backgroundMusic?.mutedOriginal)}
+            autoPlay
+            loop
+            muted={backgroundMusic ? Boolean(backgroundMusic.mutedOriginal) : undefined}
             className="rounded-none w-full h-full"
             onPlaybackError={advanceCurrentCandidate}
             onAspectRatio={(ratio) => {

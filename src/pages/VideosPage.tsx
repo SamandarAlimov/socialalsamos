@@ -93,6 +93,7 @@ interface VideoCardProps {
   isMobile: boolean;
   globalMuted: boolean;
   onMuteToggle: () => void;
+  onAutoplayMutedFallback: () => void;
   keyboardEnabled: boolean;
 }
 
@@ -113,6 +114,7 @@ function VideoCard({
   isMobile,
   globalMuted,
   onMuteToggle,
+  onAutoplayMutedFallback,
   keyboardEnabled,
 }: VideoCardProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -167,13 +169,27 @@ function VideoCard({
     if (!el || !isActive || userPausedRef.current) return;
     el.muted = globalMuted;
     el.playbackRate = holdIntentRef.current === 'speed' ? 2 : speed;
-    void el.play().catch(() => setIsPlaying(false));
-  }, [globalMuted, isActive, speed]);
+
+    void el.play().catch(() => {
+      // Fresh sessions and embedded browsers can reject audible autoplay.
+      // Never leave the active reel paused: fall back to muted playback and
+      // synchronize the global state so the control icon remains truthful.
+      if (!el.muted) {
+        el.muted = true;
+        onAutoplayMutedFallback();
+        void el.play().catch(() => setIsPlaying(false));
+        return;
+      }
+      setIsPlaying(false);
+    });
+  }, [globalMuted, isActive, onAutoplayMutedFallback, speed]);
 
   const applyResumePlayback = useCallback((el: HTMLVideoElement) => {
     if (resumeAppliedRef.current) return;
     const playback = resumePlaybackRef.current;
-    userPausedRef.current = playback?.paused ?? false;
+    // Feed activation always autoplays. A manual pause is local to the current
+    // visible reel; swiping away and returning starts playback again.
+    userPausedRef.current = false;
 
     if (playback && Number.isFinite(playback.time)) {
       const durationLimit = Number.isFinite(el.duration) && el.duration > 0
@@ -221,15 +237,12 @@ function VideoCard({
     if (!becameActive) return;
 
     resumeAppliedRef.current = false;
-    userPausedRef.current = resumePlaybackRef.current?.paused ?? false;
+    userPausedRef.current = false;
     if (el?.readyState && el.readyState >= 1) applyResumePlayback(el);
     recordView(video.id);
 
-    if (!userPausedRef.current && (!resumePlaybackRef.current || el?.readyState && el.readyState >= 1)) {
+    if (!resumePlaybackRef.current || (el?.readyState && el.readyState >= 1)) {
       attemptPlay();
-    } else if (userPausedRef.current) {
-      el?.pause();
-      setIsPlaying(false);
     }
   }, [applyResumePlayback, attemptPlay, currentTime, finishWatch, isActive, onPlaybackChange, recordView, video.id, zoom]);
 
@@ -622,7 +635,7 @@ function VideoCard({
             onPlaybackChange({ time: 0, paused: false });
             if (isActive) {
               el.currentTime = 0;
-              void el.play().catch(() => setIsPlaying(false));
+              attemptPlay();
             } else {
               setIsPlaying(false);
             }
@@ -632,7 +645,17 @@ function VideoCard({
             setIsPlaying(true);
             if (isActive) onPlaybackChange({ time: event.currentTarget.currentTime, paused: false });
           }}
-          onPause={() => setIsPlaying(false)}
+          onPause={() => {
+            setIsPlaying(false);
+            if (
+              isActive &&
+              !userPausedRef.current &&
+              holdIntentRef.current !== 'pause' &&
+              document.visibilityState === 'visible'
+            ) {
+              requestAnimationFrame(() => attemptPlay());
+            }
+          }}
         />
 
         <div className="absolute right-3 top-[max(12px,env(safe-area-inset-top))] z-[35] flex items-center gap-2" onPointerDown={stopBubble} onPointerUp={stopBubble}>
@@ -1161,6 +1184,7 @@ export default function VideosPage() {
                   isMobile={isMobile}
                   globalMuted={globalMuted}
                   onMuteToggle={handleMuteToggle}
+                  onAutoplayMutedFallback={() => setGlobalMuted(true)}
                   keyboardEnabled={!commentsOpen && !shareDialogOpen && !likesDialogOpen && !watchVideoId}
                 />
               ) : <VideoPlaceholder video={video} isMobile={isMobile} />}

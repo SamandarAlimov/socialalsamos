@@ -156,6 +156,10 @@ export function VideoPlayer({
   const resumeAfterSourceChangeRef = useRef(false);
   const restoreTimeAfterSourceChangeRef = useRef<number | null>(null);
   const inlineRectRef = useRef<{ width: number; height: number } | null>(null);
+  const autoplayVisibleRef = useRef(false);
+  const autoplayWasVisibleRef = useRef(false);
+  const autoplayUserPausedRef = useRef(false);
+  const autoplayRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const {
     isMuted: globalMuted,
@@ -220,6 +224,46 @@ export function VideoPlayer({
     scheduleControlsHide();
   }, [scheduleControlsHide]);
 
+  const requestAutoplay = useCallback(async () => {
+    if (!autoPlay || autoplayUserPausedRef.current || !autoplayVisibleRef.current) return false;
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return false;
+
+    const video = videoRef.current;
+    if (!video || playbackError) return false;
+
+    video.volume = globalVolume;
+    video.muted = initialMuted ?? globalMuted;
+
+    try {
+      await video.play();
+      return true;
+    } catch {
+      // Browsers may reject autoplay with sound even after a previous session
+      // preference says "unmuted". Instagram-style feeds must still start, so
+      // retry muted instead of leaving a visible video frozen on its poster.
+      if (!video.muted) {
+        video.muted = true;
+        if (initialMuted === undefined) setGlobalMuted(true);
+        try {
+          await video.play();
+          return true;
+        } catch {
+          // Media/network readiness is handled by canplay/stalled retries below.
+        }
+      }
+      return false;
+    }
+  }, [autoPlay, globalMuted, globalVolume, initialMuted, playbackError, setGlobalMuted]);
+
+  const scheduleAutoplayRetry = useCallback((delay = 420) => {
+    if (!autoPlay || !autoplayVisibleRef.current || autoplayUserPausedRef.current) return;
+    if (autoplayRetryTimerRef.current) clearTimeout(autoplayRetryTimerRef.current);
+    autoplayRetryTimerRef.current = setTimeout(() => {
+      autoplayRetryTimerRef.current = null;
+      void requestAutoplay();
+    }, delay);
+  }, [autoPlay, requestAutoplay]);
+
   useEffect(() => {
     if (!autoPlay) return;
     const video = videoRef.current;
@@ -228,17 +272,61 @@ export function VideoPlayer({
 
     const observer = new IntersectionObserver(
       ([entry]) => {
-        if (entry.isIntersecting && entry.intersectionRatio >= 0.65) {
-          video.play().catch(() => {});
+        const rect = entry.boundingClientRect;
+        const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
+        const viewportCenter = viewportHeight / 2;
+        const crossesCenter = rect.top <= viewportCenter && rect.bottom >= viewportCenter;
+        const shouldAutoplay =
+          entry.isIntersecting &&
+          (entry.intersectionRatio >= 0.35 || crossesCenter);
+
+        autoplayVisibleRef.current = shouldAutoplay;
+
+        if (shouldAutoplay) {
+          if (!autoplayWasVisibleRef.current) {
+            // A manual pause only applies while this media remains the current
+            // visible item. Scroll away/back behaves like Instagram and starts it.
+            autoplayUserPausedRef.current = false;
+          }
+          autoplayWasVisibleRef.current = true;
+          void requestAutoplay();
         } else {
+          autoplayWasVisibleRef.current = false;
+          autoplayUserPausedRef.current = false;
+          if (autoplayRetryTimerRef.current) {
+            clearTimeout(autoplayRetryTimerRef.current);
+            autoplayRetryTimerRef.current = null;
+          }
           video.pause();
         }
       },
-      { threshold: [0, 0.65, 1] },
+      { threshold: [0, 0.1, 0.35, 0.65, 1] },
     );
+
     observer.observe(container);
-    return () => observer.disconnect();
-  }, [autoPlay, activeSource.src, isPseudoFullscreen]);
+    return () => {
+      observer.disconnect();
+      autoplayVisibleRef.current = false;
+      autoplayWasVisibleRef.current = false;
+    };
+  }, [autoPlay, activeSource.src, isPseudoFullscreen, requestAutoplay]);
+
+  useEffect(() => {
+    if (!autoPlay) return;
+
+    const resume = () => {
+      if (document.visibilityState === 'visible' && autoplayVisibleRef.current) {
+        void requestAutoplay();
+      }
+    };
+
+    document.addEventListener('visibilitychange', resume);
+    window.addEventListener('pageshow', resume);
+    return () => {
+      document.removeEventListener('visibilitychange', resume);
+      window.removeEventListener('pageshow', resume);
+    };
+  }, [autoPlay, requestAutoplay]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -295,6 +383,7 @@ export function VideoPlayer({
       if (volumeHideTimerRef.current) clearTimeout(volumeHideTimerRef.current);
       if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
       if (gestureTimerRef.current) clearTimeout(gestureTimerRef.current);
+      if (autoplayRetryTimerRef.current) clearTimeout(autoplayRetryTimerRef.current);
     };
   }, []);
 
@@ -302,13 +391,17 @@ export function VideoPlayer({
     const video = videoRef.current;
     if (!video) return;
     if (video.paused) {
+      autoplayUserPausedRef.current = false;
       window.dispatchEvent(new CustomEvent('alsamos:video-play', { detail: playerId }));
-      video.play().catch(() => {});
+      video.play().catch(() => {
+        if (autoPlay) void requestAutoplay();
+      });
     } else {
+      autoplayUserPausedRef.current = true;
       video.pause();
     }
     showControlsTemporarily();
-  }, [playerId, showControlsTemporarily]);
+  }, [autoPlay, playerId, requestAutoplay, showControlsTemporarily]);
 
   const seekTo = useCallback((time: number) => {
     const video = videoRef.current;
@@ -814,16 +907,21 @@ export function VideoPlayer({
         muted={initialMuted ?? globalMuted}
         loop={loop}
         playsInline
-        preload="metadata"
+        preload={autoPlay ? 'auto' : 'metadata'}
         className="h-full w-full object-contain"
         onLoadedMetadata={handleLoadedMetadata}
         onTimeUpdate={handleTimeUpdate}
         onWaiting={() => {
           if (!playbackError) setIsLoading(true);
+          scheduleAutoplayRetry(500);
+        }}
+        onStalled={() => {
+          scheduleAutoplayRetry(700);
         }}
         onCanPlay={() => {
           setPlaybackError(false);
           setIsLoading(false);
+          if (autoPlay) void requestAutoplay();
         }}
         onError={() => {
           setPlaybackError(true);
@@ -840,6 +938,14 @@ export function VideoPlayer({
         onPause={() => {
           setIsPlaying(false);
           setShowControls(true);
+          if (
+            autoPlay &&
+            autoplayVisibleRef.current &&
+            !autoplayUserPausedRef.current &&
+            document.visibilityState === 'visible'
+          ) {
+            scheduleAutoplayRetry(120);
+          }
         }}
         onEnded={() => {
           setIsPlaying(false);
@@ -885,7 +991,8 @@ export function VideoPlayer({
                 if (video) {
                   video.load();
                   if (autoPlay) {
-                    void video.play().catch(() => undefined);
+                    autoplayUserPausedRef.current = false;
+                    void requestAutoplay();
                   }
                 }
               }}

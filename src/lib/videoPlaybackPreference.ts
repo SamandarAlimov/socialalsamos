@@ -1,11 +1,13 @@
 const MUTED_KEY = 'alsamos:videos-muted';
 
 export function readVideosMutedPreference(): boolean {
-  if (typeof window === 'undefined') return false;
+  if (typeof window === 'undefined') return true;
   try {
-    return window.localStorage.getItem(MUTED_KEY) === '1';
+    const stored = window.localStorage.getItem(MUTED_KEY);
+    if (stored === null) return true;
+    return stored === '1';
   } catch {
-    return false;
+    return true;
   }
 }
 
