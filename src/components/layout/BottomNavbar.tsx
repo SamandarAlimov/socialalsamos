@@ -11,7 +11,7 @@ import { MOBILE_BOTTOM_NAV_BOTTOM_CSS, MOBILE_BOTTOM_NAV_HEIGHT_PX } from '@/lib
 import { useUnreadMessages } from '@/hooks/useUnreadMessages';
 import { useNotificationSound } from '@/hooks/useNotificationSound';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { SwitchAccountDialog } from '@/components/account/SwitchAccountDialog';
 import { useAuth } from '@/contexts/AuthContext';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -47,17 +47,6 @@ export function BottomNavbar() {
   }, [playMessageSound]);
 
   const { unreadCount: messagesUnreadCount } = useUnreadMessages(handleNewMessage);
-
-  useEffect(() => {
-    if (typeof document === 'undefined') return;
-
-    const root = document.documentElement;
-    root.dataset.bottomNavMounted = 'true';
-
-    return () => {
-      delete root.dataset.bottomNavMounted;
-    };
-  }, []);
 
   const getBadgeCount = (badgeKey?: 'messages') => {
     if (badgeKey === 'messages') return messagesUnreadCount;
@@ -207,16 +196,6 @@ export function BottomNavbar() {
           </div>
         </div>
       </nav>
-
-      {/* Bridge the CSS viewport to the system gesture/home-indicator area.
-          The physical safe area itself is painted by the document background
-          below; this 8px bridge removes the visible white seam without moving
-          the interactive navbar into a non-interactive system region. */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none fixed inset-x-0 bottom-0 z-40 h-2 md:hidden"
-        style={{ backgroundColor: 'hsl(var(--mobile-nav-safe-area))' }}
-      />
 
       <SwitchAccountDialog open={switchAccountOpen} onOpenChange={setSwitchAccountOpen} />
     </>

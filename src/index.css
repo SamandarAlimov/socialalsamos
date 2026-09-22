@@ -82,7 +82,6 @@
     --nav-bg: var(--sidebar-background);
     --nav-icon-default: var(--muted-foreground);
     --nav-icon-active: var(--foreground);
-    --mobile-nav-safe-area: 220 8% 86%;
     --text-primary: var(--foreground);
     --text-secondary: var(--muted-foreground);
     --border-neutral: var(--border);
@@ -159,7 +158,6 @@
 
     --link: 213 94% 68%;
     --link-hover: 213 94% 76%;
-    --mobile-nav-safe-area: 222 12% 12%;
 
     /* Chat bubble fonlari (qorong'i): light bilan bir oilada, biroz chuqurroq. */
     --bubble-own-bg: 152 46% 27%;
@@ -261,11 +259,6 @@
 
   html {
     @apply scroll-smooth;
-  }
-
-  html[data-bottom-nav-mounted='true'],
-  html[data-bottom-nav-mounted='true'] body {
-    background-color: hsl(var(--mobile-nav-safe-area));
   }
 
   body {
