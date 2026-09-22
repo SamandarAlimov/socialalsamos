@@ -649,6 +649,19 @@ function PostCard({
         legacyMediaType={post.media_type}
         legacyLocation={markers.legacyLocation}
         legacyLocationLabel={markers.legacyLocationLabel}
+        likesCount={likesCount}
+        commentsCount={commentsCount}
+        viewsCount={realtimeCounts.views_count || post.views_count || 0}
+        authorId={post.user_id}
+        onSocialCommentsClick={() => setShowComments(true)}
+        onSocialLikesClick={() => {
+          setAudienceDefaultTab('likes');
+          setShowAudienceDialog(true);
+        }}
+        onSocialProfileClick={() => {
+          if (post.profile?.username) navigate(`/user/${post.profile.username}`);
+          else navigate(`/user/${post.user_id}`);
+        }}
         className="px-4 pb-4 md:px-5"
       />
 

@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { PostLikesViewsDialog } from '@/components/PostLikesViewsDialog';
+import { VideoCommentsSheet } from '@/components/VideoCommentsSheet';
 import { useVideoSocialContext } from '@/components/video/VideoSocialContext';
 import { db } from '@/lib/db';
 import { cn } from '@/lib/utils';
@@ -10,8 +12,14 @@ import { formatCompactNumber } from '@/lib/videoFormat';
 interface PostLikedByFollowingProps {
   postId: string;
   likesCount?: number;
+  commentsCount?: number;
   viewsCount?: number;
+  authorId?: string | null;
+  /** Legacy likes-row click handler. Prefer onLikesClick. */
   onClick?: () => void;
+  onLikesClick?: () => void;
+  onCommentsClick?: () => void;
+  onProfileClick?: () => void;
   className?: string;
   visibleWrapperClassName?: string;
 }
@@ -26,32 +34,49 @@ function label(profile: {
 /**
  * Instagram-style social proof for normal posts.
  *
- * It waits until the row approaches the viewport, then intersects the current
- * user's following list with the post's likers. If counts are not supplied by
- * the parent, they are fetched lazily. Clicking the row opens the existing
- * premium likes/views sheet.
+ * It waits until the row approaches the viewport, then builds Instagram-style
+ * social proof from accounts the current user follows. Precedence is strict:
+ * commented -> liked -> followed. Only the highest-priority applicable row is
+ * rendered, and its action opens the matching premium surface.
  */
 export function PostLikedByFollowing({
   postId,
   likesCount,
+  commentsCount,
   viewsCount,
+  authorId,
   onClick,
+  onLikesClick,
+  onCommentsClick,
+  onProfileClick,
   className,
   visibleWrapperClassName,
 }: PostLikedByFollowingProps) {
+  const navigate = useNavigate();
   const sentinelRef = useRef<HTMLDivElement>(null);
   const [enabled, setEnabled] = useState(false);
   const [resolvedLikes, setResolvedLikes] = useState(Math.max(0, likesCount ?? 0));
+  const [resolvedComments, setResolvedComments] = useState(Math.max(0, commentsCount ?? 0));
   const [resolvedViews, setResolvedViews] = useState(Math.max(0, viewsCount ?? 0));
+  const [resolvedAuthorId, setResolvedAuthorId] = useState<string | null>(authorId ?? null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [commentsOpen, setCommentsOpen] = useState(false);
 
   useEffect(() => {
     if (typeof likesCount === 'number') setResolvedLikes(Math.max(0, likesCount));
   }, [likesCount]);
 
   useEffect(() => {
+    if (typeof commentsCount === 'number') setResolvedComments(Math.max(0, commentsCount));
+  }, [commentsCount]);
+
+  useEffect(() => {
     if (typeof viewsCount === 'number') setResolvedViews(Math.max(0, viewsCount));
   }, [viewsCount]);
+
+  useEffect(() => {
+    if (authorId !== undefined) setResolvedAuthorId(authorId ?? null);
+  }, [authorId]);
 
   useEffect(() => {
     if (enabled) return;
@@ -78,12 +103,19 @@ export function PostLikedByFollowing({
 
   useEffect(() => {
     if (!enabled || !postId) return;
-    if (typeof likesCount === 'number' && typeof viewsCount === 'number') return;
+    if (
+      typeof likesCount === 'number' &&
+      typeof commentsCount === 'number' &&
+      typeof viewsCount === 'number' &&
+      authorId !== undefined
+    ) {
+      return;
+    }
 
     let cancelled = false;
     void db
       .from('posts')
-      .select('likes_count, views_count')
+      .select('likes_count, comments_count, views_count, user_id')
       .eq('id', postId)
       .maybeSingle()
       .then(({ data, error }) => {
@@ -91,28 +123,74 @@ export function PostLikedByFollowing({
         if (typeof likesCount !== 'number') {
           setResolvedLikes(Math.max(0, Number(data.likes_count || 0)));
         }
+        if (typeof commentsCount !== 'number') {
+          setResolvedComments(Math.max(0, Number(data.comments_count || 0)));
+        }
         if (typeof viewsCount !== 'number') {
           setResolvedViews(Math.max(0, Number(data.views_count || 0)));
+        }
+        if (authorId === undefined) {
+          setResolvedAuthorId(data.user_id ? String(data.user_id) : null);
         }
       });
 
     return () => {
       cancelled = true;
     };
-  }, [enabled, likesCount, postId, viewsCount]);
+  }, [authorId, commentsCount, enabled, likesCount, postId, viewsCount]);
 
-  const { likedByFollowing } = useVideoSocialContext(
+  const { socialProof } = useVideoSocialContext(
     postId,
     enabled,
     resolvedLikes,
+    resolvedComments,
+    resolvedAuthorId,
   );
 
   const openLikes = () => {
-    if (onClick) onClick();
+    if (onLikesClick) onLikesClick();
+    else if (onClick) onClick();
     else setDialogOpen(true);
   };
 
-  const hasSocialProof = likedByFollowing.length > 0 && resolvedLikes > 0;
+  const openComments = () => {
+    if (onCommentsClick) onCommentsClick();
+    else setCommentsOpen(true);
+  };
+
+  const openProfile = () => {
+    if (onProfileClick) {
+      onProfileClick();
+      return;
+    }
+    if (resolvedAuthorId) navigate(`/user/${resolvedAuthorId}`);
+  };
+
+  const hasSocialProof = Boolean(
+    socialProof &&
+      socialProof.profiles.length > 0 &&
+      socialProof.totalCount > 0,
+  );
+
+  const firstProfile = socialProof?.profiles[0] ?? null;
+  const othersCount = socialProof
+    ? Math.max(0, socialProof.totalCount - 1)
+    : 0;
+  const othersLabel =
+    othersCount === 1 ? '1 other' : `${formatCompactNumber(othersCount)} others`;
+
+  const handleSocialProofClick = () => {
+    if (!socialProof) return;
+    if (socialProof.kind === 'commented') {
+      openComments();
+      return;
+    }
+    if (socialProof.kind === 'liked') {
+      openLikes();
+      return;
+    }
+    openProfile();
+  };
 
   return (
     <>
@@ -122,18 +200,24 @@ export function PostLikedByFollowing({
           hasSocialProof ? visibleWrapperClassName : 'h-px w-full',
         )}
       >
-        {hasSocialProof && (
+        {hasSocialProof && socialProof && firstProfile && (
           <button
             type="button"
-            onClick={openLikes}
+            onClick={handleSocialProofClick}
             className={cn(
               'flex max-w-full items-center gap-2 text-left text-xs leading-none text-muted-foreground transition hover:text-foreground active:opacity-75',
               className,
             )}
-            aria-label="Yoqtirganlarni ko‘rish"
+            aria-label={
+              socialProof.kind === 'commented'
+                ? 'Izohlarni ko‘rish'
+                : socialProof.kind === 'liked'
+                  ? 'Yoqtirganlarni ko‘rish'
+                  : 'Post muallifi profilini ko‘rish'
+            }
           >
             <span className="flex shrink-0 -space-x-1.5">
-              {likedByFollowing.slice(0, 2).map((profile) => (
+              {socialProof.profiles.slice(0, 2).map((profile) => (
                 <Avatar
                   key={profile.id}
                   className="h-5 w-5 border border-background bg-muted shadow-sm"
@@ -145,21 +229,46 @@ export function PostLikedByFollowing({
                 </Avatar>
               ))}
             </span>
+
             <span className="min-w-0 truncate">
-              Liked by <span className="font-semibold text-foreground">{label(likedByFollowing[0])}</span>
-              {resolvedLikes > 1 ? (
+              {socialProof.kind === 'commented' ? (
                 <>
-                  {' '}and{' '}
-                  <span className="font-semibold text-foreground">
-                    {formatCompactNumber(Math.max(0, resolvedLikes - 1))} others
-                  </span>
+                  <span className="font-semibold text-foreground">{label(firstProfile)}</span>
+                  {othersCount > 0 ? (
+                    <> and <span className="font-semibold text-foreground">{othersLabel}</span></>
+                  ) : null}
+                  {' '}commented
                 </>
-              ) : null}
+              ) : socialProof.kind === 'liked' ? (
+                <>
+                  Liked by <span className="font-semibold text-foreground">{label(firstProfile)}</span>
+                  {othersCount > 0 ? (
+                    <> and <span className="font-semibold text-foreground">{othersLabel}</span></>
+                  ) : null}
+                </>
+              ) : (
+                <>
+                  Followed by <span className="font-semibold text-foreground">{label(firstProfile)}</span>
+                  {othersCount > 0 ? (
+                    <> and <span className="font-semibold text-foreground">{othersLabel}</span></>
+                  ) : null}
+                </>
+              )}
             </span>
           </button>
         )}
       </div>
-      {!onClick && (
+      {!onCommentsClick && (
+        <VideoCommentsSheet
+          isOpen={commentsOpen}
+          onClose={() => setCommentsOpen(false)}
+          postId={postId}
+          commentsCount={resolvedComments}
+          previewVideo={false}
+        />
+      )}
+
+      {!onLikesClick && !onClick && (
         <PostLikesViewsDialog
           postId={postId}
           open={dialogOpen}

@@ -42,6 +42,13 @@ interface PostExtrasProps {
   legacyLocationLabel?: string | null;
   /** `[MUSIC]{...}` markeridan olingan musiqa — `post_music` bo‘lmasa ishlatiladi. */
   legacyMusic?: PostMusic | null;
+  likesCount?: number;
+  commentsCount?: number;
+  viewsCount?: number;
+  authorId?: string | null;
+  onSocialLikesClick?: () => void;
+  onSocialCommentsClick?: () => void;
+  onSocialProfileClick?: () => void;
   className?: string;
 }
 
@@ -132,6 +139,13 @@ export function PostExtras({
   legacyLocation,
   legacyLocationLabel,
   legacyMusic,
+  likesCount,
+  commentsCount,
+  viewsCount,
+  authorId,
+  onSocialLikesClick,
+  onSocialCommentsClick,
+  onSocialProfileClick,
   className,
 }: PostExtrasProps) {
   const { media, refresh } = usePostMedia(postId);
@@ -302,6 +316,13 @@ export function PostExtras({
     return (
       <PostLikedByFollowing
         postId={postId}
+        likesCount={likesCount}
+        commentsCount={commentsCount}
+        viewsCount={viewsCount}
+        authorId={authorId}
+        onLikesClick={onSocialLikesClick}
+        onCommentsClick={onSocialCommentsClick}
+        onProfileClick={onSocialProfileClick}
         visibleWrapperClassName={className}
       />
     );
@@ -398,7 +419,16 @@ export function PostExtras({
 
       {labelOnlyLocation && <PlaceLabelCard label={labelOnlyLocation} />}
 
-      <PostLikedByFollowing postId={postId} />
+      <PostLikedByFollowing
+        postId={postId}
+        likesCount={likesCount}
+        commentsCount={commentsCount}
+        viewsCount={viewsCount}
+        authorId={authorId}
+        onLikesClick={onSocialLikesClick}
+        onCommentsClick={onSocialCommentsClick}
+        onProfileClick={onSocialProfileClick}
+      />
     </div>
   );
 }
