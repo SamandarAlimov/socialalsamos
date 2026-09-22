@@ -12,9 +12,9 @@ import { useLiveStreams } from '@/hooks/useLiveStream';
 import { cn } from '@/lib/utils';
 import { format, formatDistanceToNow } from 'date-fns';
 import { CreatePostForm } from '@/components/CreatePostForm';
-import { CommentsSection } from '@/components/CommentsSection';
+import { VideoCommentsSheet } from '@/components/VideoCommentsSheet';
 import { PostActionsMenu } from '@/components/PostActionsMenu';
-import { PostLikesDialog } from '@/components/PostLikesDialog';
+import { PostLikesViewsDialog } from '@/components/PostLikesViewsDialog';
 import { SharePostDialog } from '@/components/SharePostDialog';
 import { PostViewModal } from '@/components/PostViewModal';
 import { PollDisplay, parsePollFromContent } from '@/components/PollDisplay';
@@ -35,7 +35,6 @@ import { db } from '@/lib/db';
 import { RepostButton } from '@/components/RepostButton';
 import { useActiveAds } from '@/hooks/useAds';
 import { FeedAd } from '@/components/ads/FeedAd';
-import { PostViewsDialog } from '@/components/PostViewsDialog';
 import { usePostViews } from '@/hooks/usePostViews';
 import { useHomeRecommendations } from '@/hooks/useHomeRecommendations';
 import { parseLocationFromContent, parseMusicFromContent, resolvePostMusic } from '@/lib/postMarkers';
@@ -462,7 +461,8 @@ function PostCard({
   const navigate = useNavigate();
   const articleRef = useRef<HTMLElement | null>(null);
   const [showComments, setShowComments] = useState(false);
-  const [showLikesDialog, setShowLikesDialog] = useState(false);
+  const [showAudienceDialog, setShowAudienceDialog] = useState(false);
+  const [audienceDefaultTab, setAudienceDefaultTab] = useState<'likes' | 'views'>('likes');
   const [showShareDialog, setShowShareDialog] = useState(false);
   const { recordView } = usePostViews();
 
@@ -666,7 +666,10 @@ function PostCard({
               <Heart className={cn("h-5 w-5 md:h-5 md:w-5", isLiked && 'fill-current')} />
             </button>
             <button
-              onClick={() => setShowLikesDialog(true)}
+              onClick={() => {
+                setAudienceDefaultTab('likes');
+                setShowAudienceDialog(true);
+              }}
               className={cn(
                 "text-xs md:text-sm font-medium hover:underline",
                 isLiked ? 'text-red-500' : 'text-muted-foreground'
@@ -676,7 +679,7 @@ function PostCard({
             </button>
           </div>
           <button
-            onClick={() => setShowComments(!showComments)}
+            onClick={() => setShowComments(true)}
             className={cn(
               "flex items-center gap-1.5 md:gap-2 transition-colors touch-feedback",
               showComments ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
@@ -700,12 +703,20 @@ function PostCard({
           />
         </div>
         <div className="flex items-center gap-3">
-          <PostViewsDialog
-            postId={post.id}
-            viewsCount={realtimeCounts.views_count || post.views_count || 0}
-            iconClassName="h-5 w-5 md:h-5 md:w-5"
-            textClassName="text-xs md:text-sm"
-          />
+          <button
+            type="button"
+            onClick={() => {
+              setAudienceDefaultTab('views');
+              setShowAudienceDialog(true);
+            }}
+            className="flex items-center gap-1.5 text-muted-foreground transition-colors hover:text-foreground touch-feedback"
+            aria-label="Ko‘rishlar va yoqtirishlarni ochish"
+          >
+            <Eye className="h-5 w-5" />
+            <span className="text-xs font-medium tabular-nums md:text-sm">
+              {realtimeCounts.views_count || post.views_count || 0}
+            </span>
+          </button>
           <button
             onClick={() => void onBookmark?.()}
             aria-pressed={Boolean(post.is_bookmarked)}
@@ -720,17 +731,23 @@ function PostCard({
         </div>
       </div>
 
-      {/* Comments Section */}
-      {showComments && (
-        <CommentsSection postId={post.id} />
-      )}
-
-      {/* Likes Dialog */}
-      <PostLikesDialog
+      {/* Home and Videos share the same premium comments experience. */}
+      <VideoCommentsSheet
+        isOpen={showComments}
+        onClose={() => setShowComments(false)}
         postId={post.id}
-        open={showLikesDialog}
-        onOpenChange={setShowLikesDialog}
+        commentsCount={commentsCount}
+        previewVideo={false}
+      />
+
+      {/* Likes + views are one premium audience sheet, matching Videos/Reels. */}
+      <PostLikesViewsDialog
+        postId={post.id}
+        open={showAudienceDialog}
+        onOpenChange={setShowAudienceDialog}
         likesCount={likesCount}
+        viewsCount={realtimeCounts.views_count || post.views_count || 0}
+        defaultTab={audienceDefaultTab}
       />
 
       {/* Share Dialog */}

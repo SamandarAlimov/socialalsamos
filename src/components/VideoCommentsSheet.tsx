@@ -31,6 +31,12 @@ interface VideoCommentsSheetProps {
   onClose: () => void;
   postId: string;
   commentsCount: number;
+  /**
+   * Reels/Videos keeps the currently playing video mounted in the compact
+   * preview above the sheet. Feed/Home uses the exact same comments sheet
+   * without re-parenting or resizing the post media underneath.
+   */
+  previewVideo?: boolean;
 }
 
 type MobileDragSource = 'handle' | 'comments';
@@ -267,6 +273,7 @@ export function VideoCommentsSheet({
   onClose,
   postId,
   commentsCount,
+  previewVideo = true,
 }: VideoCommentsSheetProps) {
   const isMobile = useIsMobile();
   const dragRef = useRef<MobileDragState | null>(null);
@@ -469,7 +476,7 @@ export function VideoCommentsSheet({
   }, [animateDismissAndClose, setSheetDismissOffset, setSheetTopImmediately]);
 
   useEffect(() => {
-    if (!isOpen || typeof document === 'undefined') return;
+    if (!isOpen || !previewVideo || typeof document === 'undefined') return;
 
     const themeMeta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
     const previousThemeColor = themeMeta?.getAttribute('content') ?? null;
@@ -488,7 +495,7 @@ export function VideoCommentsSheet({
       document.body.style.backgroundColor = previousBodyBackground;
       document.documentElement.style.backgroundColor = previousHtmlBackground;
     };
-  }, [isOpen]);
+  }, [isOpen, previewVideo]);
 
   useEffect(() => {
     if (!isOpen || !isMobile) return;
@@ -506,6 +513,11 @@ export function VideoCommentsSheet({
 
   useEffect(() => {
     if (!isMobile || typeof document === 'undefined') return;
+
+    if (!previewVideo) {
+      cleanupPreviewNow();
+      return;
+    }
 
     if (!isOpen) {
       const frame = previewFrameRef.current;
@@ -584,6 +596,7 @@ export function VideoCommentsSheet({
     isOpen,
     lockFeed,
     postId,
+    previewVideo,
     unlockFeed,
   ]);
 
@@ -909,7 +922,7 @@ export function VideoCommentsSheet({
           document.body,
         )}
 
-        <Sheet modal={false} open={isOpen} onOpenChange={(open) => !open && onClose()}>
+        <Sheet modal={!previewVideo} open={isOpen} onOpenChange={(open) => !open && onClose()}>
           <SheetContent
             ref={sheetContentRef}
             side="bottom"
@@ -918,7 +931,7 @@ export function VideoCommentsSheet({
             data-video-comments-dragging={isDragging ? 'true' : 'false'}
             data-video-comments-dismiss-phase={dismissOffset > 0 ? 'true' : 'false'}
             data-video-comments-keyboard-active={composerFocused ? 'true' : 'false'}
-            overlayClassName="pointer-events-none bg-transparent"
+            overlayClassName={previewVideo ? 'pointer-events-none bg-transparent' : 'bg-black/30 backdrop-blur-[0.5px]'}
             aria-describedby="video-comments-mobile-description"
             onOpenAutoFocus={(event) => event.preventDefault()}
             onInteractOutside={(event) => event.preventDefault()}
@@ -937,7 +950,7 @@ export function VideoCommentsSheet({
               <SheetHeader className="sr-only">
                 <SheetTitle>{commentsCount > 0 ? `Izohlar · ${commentsCount}` : 'Izohlar'}</SheetTitle>
                 <SheetDescription id="video-comments-mobile-description">
-                  Video izohlari. Panelni tutqichdan yoki izohlar ro‘yxati yuqorisiga yetgach pastga tortish mumkin.
+                  Izohlar. Panelni tutqichdan yoki izohlar ro‘yxati yuqorisiga yetgach pastga tortish mumkin.
                 </SheetDescription>
               </SheetHeader>
             </div>
@@ -968,7 +981,7 @@ export function VideoCommentsSheet({
         <SheetHeader className="shrink-0 border-b border-border/60 px-4 py-3 text-left">
           <DesktopHeader commentsCount={commentsCount} />
           <SheetDescription id="video-comments-desktop-description" className="sr-only">
-            Video izohlari paneli.
+            Izohlar paneli.
           </SheetDescription>
         </SheetHeader>
         <div className="min-h-0 flex-1 overflow-hidden">
