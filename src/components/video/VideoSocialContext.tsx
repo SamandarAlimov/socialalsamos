@@ -24,7 +24,8 @@ export interface VideoSocialProfile {
 }
 
 const FOLLOW_CHUNK_SIZE = 150;
-const MAX_VISIBLE_SOCIAL_LIKERS = 3;
+const MAX_VISIBLE_SOCIAL_PROFILES = 3;
+const SOCIAL_MATCH_LIMIT_PER_CHUNK = 24;
 const FOLLOW_CACHE_TTL_MS = 5 * 60 * 1000;
 
 let followingCache:
@@ -67,14 +68,129 @@ function profileLabel(profile: VideoSocialProfile): string {
   return profile.username || profile.display_name || 'user';
 }
 
+export type VideoSocialProofKind = 'commented' | 'liked' | 'followed';
+
+export interface VideoSocialProof {
+  kind: VideoSocialProofKind;
+  profiles: VideoSocialProfile[];
+  totalCount: number;
+}
+
+type TimedActorRow = {
+  user_id: string | null;
+  created_at: string | null;
+};
+
+async function findRecentFollowingActors(
+  table: 'comments' | 'post_likes',
+  postId: string,
+  followingIds: string[],
+): Promise<string[]> {
+  const candidates: Array<{ id: string; createdAt: number }> = [];
+
+  for (let index = 0; index < followingIds.length; index += FOLLOW_CHUNK_SIZE) {
+    const chunk = followingIds.slice(index, index + FOLLOW_CHUNK_SIZE);
+    if (!chunk.length) continue;
+
+    const { data, error } = await supabase
+      .from(table)
+      .select('user_id, created_at')
+      .eq('post_id', postId)
+      .in('user_id', chunk)
+      .order('created_at', { ascending: false })
+      .limit(SOCIAL_MATCH_LIMIT_PER_CHUNK);
+
+    if (error) throw error;
+
+    for (const row of (data ?? []) as TimedActorRow[]) {
+      const id = String(row.user_id || '');
+      if (!id) continue;
+      const timestamp = row.created_at ? new Date(row.created_at).getTime() : 0;
+      candidates.push({ id, createdAt: Number.isFinite(timestamp) ? timestamp : 0 });
+    }
+  }
+
+  candidates.sort((a, b) => b.createdAt - a.createdAt);
+
+  const ordered: string[] = [];
+  const seen = new Set<string>();
+  for (const candidate of candidates) {
+    if (seen.has(candidate.id)) continue;
+    seen.add(candidate.id);
+    ordered.push(candidate.id);
+    if (ordered.length >= MAX_VISIBLE_SOCIAL_PROFILES) break;
+  }
+  return ordered;
+}
+
+async function findMutualFollowerIds(
+  authorId: string,
+  followingIds: string[],
+): Promise<string[]> {
+  const matched: string[] = [];
+  const seen = new Set<string>();
+
+  for (let index = 0; index < followingIds.length; index += FOLLOW_CHUNK_SIZE) {
+    const chunk = followingIds.slice(index, index + FOLLOW_CHUNK_SIZE);
+    if (!chunk.length) continue;
+
+    const { data, error } = await supabase
+      .from('follows')
+      .select('follower_id')
+      .eq('following_id', authorId)
+      .in('follower_id', chunk)
+      .limit(chunk.length);
+
+    if (error) throw error;
+
+    for (const row of data ?? []) {
+      const id = String(row.follower_id || '');
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      matched.push(id);
+    }
+  }
+
+  return matched;
+}
+
+async function loadProfiles(ids: string[]): Promise<Map<string, VideoSocialProfile>> {
+  const uniqueIds = Array.from(new Set(ids.filter(Boolean)));
+  if (!uniqueIds.length) return new Map();
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, username, display_name, avatar_url, is_verified')
+    .in('id', uniqueIds);
+
+  if (error) throw error;
+  return new Map(
+    ((data ?? []) as VideoSocialProfile[]).map((profile) => [profile.id, profile]),
+  );
+}
+
+function orderProfiles(
+  ids: string[],
+  byId: Map<string, VideoSocialProfile>,
+): VideoSocialProfile[] {
+  return ids
+    .map((id) => byId.get(id))
+    .filter((profile): profile is VideoSocialProfile => Boolean(profile));
+}
+
 export function useVideoSocialContext(
   postId: string,
   enabled: boolean,
   likesCount: number,
+  commentsCount = 0,
+  authorId?: string | null,
 ) {
   const { user } = useAuth();
   const { collaborators } = usePostCollaborators(enabled ? postId : null);
+  const [commentedByFollowing, setCommentedByFollowing] = useState<VideoSocialProfile[]>([]);
   const [likedByFollowing, setLikedByFollowing] = useState<VideoSocialProfile[]>([]);
+  const [followedByFollowing, setFollowedByFollowing] = useState<VideoSocialProfile[]>([]);
+  const [followedByFollowingCount, setFollowedByFollowingCount] = useState(0);
 
   const acceptedCollaborators = useMemo<VideoSocialProfile[]>(
     () =>
@@ -93,73 +209,71 @@ export function useVideoSocialContext(
   useEffect(() => {
     let cancelled = false;
 
+    const reset = () => {
+      if (cancelled) return;
+      setCommentedByFollowing([]);
+      setLikedByFollowing([]);
+      setFollowedByFollowing([]);
+      setFollowedByFollowingCount(0);
+    };
+
     const load = async () => {
-      if (!enabled || !user?.id || !postId || likesCount <= 0) {
-        if (!cancelled) setLikedByFollowing([]);
+      if (!enabled || !user?.id || !postId) {
+        reset();
         return;
       }
 
       try {
         const followingIds = await getFollowingIds(user.id);
+        if (cancelled) return;
 
         if (followingIds.length === 0) {
-          if (!cancelled) setLikedByFollowing([]);
+          reset();
           return;
         }
 
-        const matchedIds: string[] = [];
-        const seen = new Set<string>();
+        // Comments and likes are both loaded so the shared hook remains useful
+        // to normal feed cards. Reels then applies Instagram-style precedence:
+        // commented -> liked -> followed.
+        const [commenterIds, likerIds] = await Promise.all([
+          commentsCount > 0
+            ? findRecentFollowingActors('comments', postId, followingIds)
+            : Promise.resolve([] as string[]),
+          likesCount > 0
+            ? findRecentFollowingActors('post_likes', postId, followingIds)
+            : Promise.resolve([] as string[]),
+        ]);
 
-        for (
-          let index = 0;
-          index < followingIds.length && matchedIds.length < MAX_VISIBLE_SOCIAL_LIKERS;
-          index += FOLLOW_CHUNK_SIZE
+        let mutualFollowerIds: string[] = [];
+        if (
+          commenterIds.length === 0 &&
+          likerIds.length === 0 &&
+          authorId &&
+          authorId !== user.id
         ) {
-          const chunk = followingIds.slice(index, index + FOLLOW_CHUNK_SIZE);
-          const { data: likeRows, error: likeError } = await supabase
-            .from('post_likes')
-            .select('user_id')
-            .eq('post_id', postId)
-            .in('user_id', chunk)
-            .limit(MAX_VISIBLE_SOCIAL_LIKERS - matchedIds.length);
-
-          if (likeError) throw likeError;
-
-          for (const row of likeRows ?? []) {
-            const id = String(row.user_id || '');
-            if (!id || seen.has(id)) continue;
-            seen.add(id);
-            matchedIds.push(id);
-            if (matchedIds.length >= MAX_VISIBLE_SOCIAL_LIKERS) break;
-          }
+          mutualFollowerIds = await findMutualFollowerIds(authorId, followingIds);
         }
 
-        if (matchedIds.length === 0) {
-          if (!cancelled) setLikedByFollowing([]);
-          return;
-        }
+        const profileIds = [
+          ...commenterIds,
+          ...likerIds,
+          ...mutualFollowerIds.slice(0, MAX_VISIBLE_SOCIAL_PROFILES),
+        ];
+        const profileMap = await loadProfiles(profileIds);
+        if (cancelled) return;
 
-        const { data: profileRows, error: profileError } = await supabase
-          .from('profiles')
-          .select('id, username, display_name, avatar_url, is_verified')
-          .in('id', matchedIds);
-
-        if (profileError) throw profileError;
-
-        const byId = new Map(
-          ((profileRows ?? []) as VideoSocialProfile[]).map((profile) => [
-            profile.id,
-            profile,
-          ]),
+        setCommentedByFollowing(orderProfiles(commenterIds, profileMap));
+        setLikedByFollowing(orderProfiles(likerIds, profileMap));
+        setFollowedByFollowing(
+          orderProfiles(
+            mutualFollowerIds.slice(0, MAX_VISIBLE_SOCIAL_PROFILES),
+            profileMap,
+          ),
         );
-        const ordered = matchedIds
-          .map((id) => byId.get(id))
-          .filter((profile): profile is VideoSocialProfile => Boolean(profile));
-
-        if (!cancelled) setLikedByFollowing(ordered);
+        setFollowedByFollowingCount(mutualFollowerIds.length);
       } catch (error) {
-        console.warn('Video social like kontekstini yuklab bo‘lmadi:', error);
-        if (!cancelled) setLikedByFollowing([]);
+        console.warn('Video social kontekstini yuklab bo‘lmadi:', error);
+        reset();
       }
     };
 
@@ -167,11 +281,50 @@ export function useVideoSocialContext(
     return () => {
       cancelled = true;
     };
-  }, [enabled, likesCount, postId, user?.id]);
+  }, [authorId, commentsCount, enabled, likesCount, postId, user?.id]);
+
+  const socialProof = useMemo<VideoSocialProof | null>(() => {
+    if (commentedByFollowing.length > 0 && commentsCount > 0) {
+      return {
+        kind: 'commented',
+        profiles: commentedByFollowing,
+        totalCount: Math.max(commentsCount, commentedByFollowing.length),
+      };
+    }
+
+    if (likedByFollowing.length > 0 && likesCount > 0) {
+      return {
+        kind: 'liked',
+        profiles: likedByFollowing,
+        totalCount: Math.max(likesCount, likedByFollowing.length),
+      };
+    }
+
+    if (followedByFollowing.length > 0 && followedByFollowingCount > 0) {
+      return {
+        kind: 'followed',
+        profiles: followedByFollowing,
+        totalCount: followedByFollowingCount,
+      };
+    }
+
+    return null;
+  }, [
+    commentedByFollowing,
+    commentsCount,
+    followedByFollowing,
+    followedByFollowingCount,
+    likedByFollowing,
+    likesCount,
+  ]);
 
   return {
     acceptedCollaborators,
+    commentedByFollowing,
     likedByFollowing,
+    followedByFollowing,
+    followedByFollowingCount,
+    socialProof,
   };
 }
 
@@ -259,6 +412,98 @@ export function VideoCollaboratorByline({
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+export function VideoSocialProofRow({
+  proof,
+  onLikesClick,
+  onCommentsClick,
+  onProfileClick,
+  className,
+}: {
+  proof: VideoSocialProof | null;
+  onLikesClick: () => void;
+  onCommentsClick: () => void;
+  onProfileClick: () => void;
+  className?: string;
+}) {
+  if (!proof || proof.profiles.length === 0 || proof.totalCount <= 0) return null;
+
+  const first = proof.profiles[0];
+  const others = Math.max(0, proof.totalCount - 1);
+  const othersLabel =
+    others === 1 ? '1 other' : `${formatCompactNumber(others)} others`;
+
+  const handleClick =
+    proof.kind === 'commented'
+      ? onCommentsClick
+      : proof.kind === 'liked'
+        ? onLikesClick
+        : onProfileClick;
+
+  const ariaLabel =
+    proof.kind === 'commented'
+      ? 'Izohlarni ko‘rish'
+      : proof.kind === 'liked'
+        ? 'Yoqtirganlarni ko‘rish'
+        : 'Profilni ko‘rish';
+
+  return (
+    <button
+      type="button"
+      onPointerDown={(event) => event.stopPropagation()}
+      onPointerUp={(event) => event.stopPropagation()}
+      onClick={(event) => {
+        event.stopPropagation();
+        handleClick();
+      }}
+      className={cn(
+        'flex max-w-full items-center gap-2 text-left text-[12px] leading-none text-white/90 transition active:opacity-75',
+        className,
+      )}
+      aria-label={ariaLabel}
+    >
+      <span className="flex shrink-0 -space-x-1.5">
+        {proof.profiles.slice(0, 2).map((profile) => (
+          <Avatar
+            key={profile.id}
+            className="h-5 w-5 border border-white/85 bg-neutral-900 shadow-sm"
+          >
+            <AvatarImage src={profile.avatar_url || ''} />
+            <AvatarFallback className="bg-neutral-800 text-[8px] font-semibold text-white">
+              {profileLabel(profile).charAt(0).toUpperCase()}
+            </AvatarFallback>
+          </Avatar>
+        ))}
+      </span>
+
+      <span className="min-w-0 truncate drop-shadow-sm">
+        {proof.kind === 'commented' ? (
+          <>
+            <span className="font-semibold text-white">{profileLabel(first)}</span>
+            {others > 0 ? (
+              <> and <span className="font-semibold text-white">{othersLabel}</span></>
+            ) : null}
+            {' '}commented
+          </>
+        ) : proof.kind === 'liked' ? (
+          <>
+            Liked by <span className="font-semibold text-white">{profileLabel(first)}</span>
+            {others > 0 ? (
+              <> and <span className="font-semibold text-white">{othersLabel}</span></>
+            ) : null}
+          </>
+        ) : (
+          <>
+            Followed by <span className="font-semibold text-white">{profileLabel(first)}</span>
+            {others > 0 ? (
+              <> and <span className="font-semibold text-white">{othersLabel}</span></>
+            ) : null}
+          </>
+        )}
+      </span>
+    </button>
   );
 }
 

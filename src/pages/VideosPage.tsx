@@ -32,7 +32,7 @@ import { VerifiedBadge } from '@/components/VerifiedBadge';
 import { VideoScrubBar } from '@/components/video/VideoScrubBar';
 import {
   VideoCollaboratorByline,
-  VideoLikedByFollowing,
+  VideoSocialProofRow,
   useVideoSocialContext,
 } from '@/components/video/VideoSocialContext';
 import { VideoWatchPanel, type VideoPlaybackSnapshot } from '@/components/video/VideoWatchPanel';
@@ -148,10 +148,12 @@ function VideoCard({
   const { recordView } = usePostViews();
   const { trackProgress, markCompleted, markSeek, finishWatch } = useVideoWatchTracker();
   const heatmap = useVideoHeatmap(video.id, 48, { enabled: isActive });
-  const { acceptedCollaborators, likedByFollowing } = useVideoSocialContext(
+  const { acceptedCollaborators, socialProof } = useVideoSocialContext(
     video.id,
     isActive,
     video.likes_count || 0,
+    video.comments_count || 0,
+    video.user_id,
   );
 
   const videoUrl = video.media_urls?.[0] || '';
@@ -743,10 +745,11 @@ function VideoCard({
               </div>
 
               {isActive && (
-                <VideoLikedByFollowing
-                  profiles={likedByFollowing}
-                  likesCount={video.likes_count || 0}
-                  onClick={onLikesClick}
+                <VideoSocialProofRow
+                  proof={socialProof}
+                  onLikesClick={onLikesClick}
+                  onCommentsClick={onCommentClick}
+                  onProfileClick={onProfileClick}
                   className="mt-2"
                 />
               )}
