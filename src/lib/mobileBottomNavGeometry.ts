@@ -13,10 +13,11 @@
  * Video overlays reuse the same geometry so timeline/time/fullscreen controls
  * remain directly above the navbar without independently re-applying safe-area.
  */
-export const MOBILE_BOTTOM_NAV_HEIGHT_PX = 56;
+export const MOBILE_BOTTOM_NAV_HEIGHT_PX = 62;
 
-/** Matches the pre-regression BottomNavbar bottom-0 + mb-2 position. */
-export const MOBILE_BOTTOM_NAV_BOTTOM_CSS = '8px';
+/** Mirrors the restored pre-regression BottomNavbar bottom margin. */
+export const MOBILE_BOTTOM_NAV_BOTTOM_CSS =
+  'max(8px, env(safe-area-inset-bottom, 0px))';
 
 export const MOBILE_BOTTOM_NAV_OVERLAY_GAP_PX = 4;
 

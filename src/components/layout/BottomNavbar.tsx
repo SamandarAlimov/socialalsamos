@@ -7,7 +7,6 @@ import {
   User,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { MOBILE_BOTTOM_NAV_BOTTOM_CSS, MOBILE_BOTTOM_NAV_HEIGHT_PX } from '@/lib/mobileBottomNavGeometry';
 import { useUnreadMessages } from '@/hooks/useUnreadMessages';
 import { useNotificationSound } from '@/hooks/useNotificationSound';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -85,21 +84,12 @@ export function BottomNavbar() {
   return (
     <>
       <nav
-        className="pointer-events-none fixed left-0 right-0 z-50 md:hidden"
-        style={{
-          // Keep the capsule close to the system gesture area without placing
-          // controls on top of it. The shared geometry is reused by video
-          // overlays so the safe area is counted exactly once.
-          bottom: MOBILE_BOTTOM_NAV_BOTTOM_CSS,
-        }}
+        className="pointer-events-none fixed bottom-0 left-0 right-0 z-50 md:hidden"
         aria-label="Asosiy navigatsiya"
       >
         {/* Suzuvchi kapsula panel */}
-        <div className="pointer-events-auto mx-2.5 rounded-[24px] border border-border/40 bg-background/70 shadow-[0_10px_34px_-8px_rgba(0,0,0,0.45)] backdrop-blur-2xl">
-          <div
-            className="flex items-stretch justify-around px-1.5"
-            style={{ height: `${MOBILE_BOTTOM_NAV_HEIGHT_PX}px` }}
-          >
+        <div className="pointer-events-auto mx-2.5 mb-[max(0.5rem,env(safe-area-inset-bottom))] rounded-[26px] border border-border/40 bg-background/70 shadow-[0_10px_34px_-8px_rgba(0,0,0,0.45)] backdrop-blur-2xl">
+          <div className="flex h-[62px] items-stretch justify-around px-1.5">
             {bottomNavItems.map((item) => {
               const isActive = location.pathname === item.path;
               const isCreate = item.path === '/create';
@@ -120,7 +110,7 @@ export function BottomNavbar() {
                   onTouchEnd={isProfile ? handleProfilePressEnd : undefined}
                   onContextMenu={isProfile ? (e) => e.preventDefault() : undefined}
                   className={cn(
-                    'group relative flex min-w-[54px] flex-1 select-none flex-col items-center justify-center gap-0.5 rounded-[18px]',
+                    'group relative flex min-w-[58px] flex-1 select-none flex-col items-center justify-center gap-0.5 rounded-2xl',
                     'transition-transform duration-150 active:scale-[0.92]',
                     isActive ? 'text-foreground' : 'text-muted-foreground'
                   )}
@@ -129,21 +119,21 @@ export function BottomNavbar() {
                     <motion.div
                       whileTap={{ scale: 0.9 }}
                       className={cn(
-                        'flex h-10 w-10 items-center justify-center rounded-[15px] transition-all duration-200',
+                        'flex h-11 w-11 items-center justify-center rounded-2xl transition-all duration-200',
                         isActive
                           ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/30'
                           : 'bg-gradient-to-br from-primary to-primary/80 text-primary-foreground shadow-md shadow-primary/20'
                       )}
                     >
-                      <Plus className="h-[22px] w-[22px]" strokeWidth={2.6} />
+                      <Plus className="h-6 w-6" strokeWidth={2.6} />
                     </motion.div>
                   ) : (
                     <>
-                      <div className="relative flex h-6 items-center justify-center">
+                      <div className="relative flex h-[26px] items-center justify-center">
                         {isProfile && profile?.avatar_url ? (
                           <Avatar
                             className={cn(
-                              'h-[22px] w-[22px] transition-all duration-200',
+                              'h-[24px] w-[24px] transition-all duration-200',
                               isActive && 'ring-2 ring-foreground/20 ring-offset-1 ring-offset-background'
                             )}
                           >
@@ -159,7 +149,7 @@ export function BottomNavbar() {
                             className="flex items-center justify-center"
                           >
                             <item.icon
-                              className="h-[21px] w-[21px]"
+                              className="h-[23px] w-[23px]"
                               strokeWidth={isActive ? 2.5 : 1.9}
                             />
                           </motion.span>
@@ -182,7 +172,7 @@ export function BottomNavbar() {
 
                       <span
                         className={cn(
-                          'text-[9.5px] leading-none transition-all duration-200',
+                          'text-[10px] leading-none transition-all duration-200',
                           isActive ? 'font-semibold opacity-100' : 'font-medium opacity-80'
                         )}
                       >
@@ -196,7 +186,6 @@ export function BottomNavbar() {
           </div>
         </div>
       </nav>
-
       <SwitchAccountDialog open={switchAccountOpen} onOpenChange={setSwitchAccountOpen} />
     </>
   );
