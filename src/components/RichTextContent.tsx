@@ -4,6 +4,7 @@ import { MapPin, Music2 } from 'lucide-react';
 import { EmojiText } from '@/components/emoji/EmojiText';
 import { getEmojiOnlyInfo } from '@/lib/emojiOnly';
 import { AnimatedEmoji } from '@/components/emoji/AnimatedEmoji';
+import { tokenizeRichTextLinks } from '@/lib/richTextLinks';
 
 interface RichTextContentProps {
   content: string;
@@ -90,43 +91,10 @@ export function RichTextContent({ content, className, emojiSize = 19 }: RichText
   // Faqat emojidan iborat post/izoh - Telegramdek kattalashtiriladi
   const emojiOnly = useMemo(() => getEmojiOnlyInfo(textContent), [textContent]);
 
-  const parsedContent = useMemo(() => {
-    if (!textContent) return [];
-
-    const parts: {
-      type: 'text' | 'mention' | 'hashtag' | 'link';
-      value: string;
-      display?: string;
-    }[] = [];
-
-    // Mention, hashtag va URL uchun umumiy regex
-    const pattern = /(@[a-zA-Z0-9_]+)|(#[a-zA-Z0-9_]+)|(https?:\/\/[^\s<]+[^<.,:;"')\]\s])/g;
-
-    let lastIndex = 0;
-    let match;
-
-    while ((match = pattern.exec(textContent)) !== null) {
-      if (match.index > lastIndex) {
-        parts.push({ type: 'text', value: textContent.slice(lastIndex, match.index) });
-      }
-
-      if (match[1]) {
-        parts.push({ type: 'mention', value: match[1].slice(1), display: match[1] });
-      } else if (match[2]) {
-        parts.push({ type: 'hashtag', value: match[2].slice(1), display: match[2] });
-      } else if (match[3]) {
-        parts.push({ type: 'link', value: match[3], display: match[3] });
-      }
-
-      lastIndex = pattern.lastIndex;
-    }
-
-    if (lastIndex < textContent.length) {
-      parts.push({ type: 'text', value: textContent.slice(lastIndex) });
-    }
-
-    return parts;
-  }, [textContent]);
+  const parsedContent = useMemo(
+    () => tokenizeRichTextLinks(textContent),
+    [textContent],
+  );
 
   return (
     <div className={className}>
@@ -176,19 +144,37 @@ export function RichTextContent({ content, className, emojiSize = 19 }: RichText
                       #{part.value}
                     </Link>
                   );
-                case 'link':
+                case 'link': {
+                  const label = part.label || formatLinkDisplay(part.href);
+                  const linkClassName =
+                    'break-words text-link underline decoration-current/45 underline-offset-2 transition-colors hover:text-link-hover';
+
+                  if (part.internalPath) {
+                    return (
+                      <Link
+                        key={index}
+                        to={part.internalPath}
+                        className={linkClassName}
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        {label}
+                      </Link>
+                    );
+                  }
+
                   return (
                     <a
                       key={index}
-                      href={part.value}
+                      href={part.href}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="break-all text-link underline underline-offset-2 transition-colors hover:text-link-hover"
-                      onClick={(e) => e.stopPropagation()}
+                      className={linkClassName}
+                      onClick={(event) => event.stopPropagation()}
                     >
-                      {formatLinkDisplay(part.value)}
+                      {label}
                     </a>
                   );
+                }
                 default:
                   // Matn ichidagi emojilar Telegram uslubida rasmga aylantiriladi
                   return <EmojiText key={index} text={part.value} size={emojiSize} />;
