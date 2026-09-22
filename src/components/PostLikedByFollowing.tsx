@@ -197,7 +197,9 @@ export function PostLikedByFollowing({
       <div
         ref={sentinelRef}
         className={cn(
-          hasSocialProof ? visibleWrapperClassName : 'h-px w-full',
+          // Keep the lazy-load sentinel measurable without letting a parent's
+          // space-y utility create a visible blank strip below media.
+          hasSocialProof ? visibleWrapperClassName : '!mt-0 h-px w-full',
         )}
       >
         {hasSocialProof && socialProof && firstProfile && (
