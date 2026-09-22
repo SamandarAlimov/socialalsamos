@@ -459,11 +459,14 @@ function PostCard({
   isOwner?: boolean;
 }) {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const articleRef = useRef<HTMLElement | null>(null);
   const [showComments, setShowComments] = useState(false);
   const [showAudienceDialog, setShowAudienceDialog] = useState(false);
   const [audienceDefaultTab, setAudienceDefaultTab] = useState<'likes' | 'views'>('likes');
   const [showShareDialog, setShowShareDialog] = useState(false);
+  const [isFollowingAuthor, setIsFollowingAuthor] = useState(false);
+  const [followLoading, setFollowLoading] = useState(false);
   const legacyLooksLikeVideo = Boolean(
     post.media_type === 'video' ||
     post.media_type === 'reel' ||
@@ -555,6 +558,73 @@ function PostCard({
     };
   }, [post.content, post.formatted_content, post.media_urls, post.media_type]);
 
+  // Only media-first posts use Instagram-style author chrome on top of video.
+  // If a post starts with text/music/poll, the author row must stay above that
+  // leading content; moving it into the later video breaks the post hierarchy.
+  const hasLeadingContent = Boolean(
+    markers.textContent?.trim() ||
+    markers.legacyMusic ||
+    markers.pollData ||
+    hasStructuredPoll
+  );
+  const shouldOverlayVideoAuthor = hasActiveVideo && !hasLeadingContent;
+
+  useEffect(() => {
+    if (!shouldOverlayVideoAuthor || !user?.id || user.id === post.user_id) {
+      setIsFollowingAuthor(false);
+      return;
+    }
+
+    let cancelled = false;
+    void supabase
+      .from('follows')
+      .select('following_id')
+      .eq('follower_id', user.id)
+      .eq('following_id', post.user_id)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        if (error) {
+          console.warn('Home follow holatini yuklab bo‘lmadi:', error);
+          return;
+        }
+        setIsFollowingAuthor(Boolean(data));
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [post.user_id, shouldOverlayVideoAuthor, user?.id]);
+
+  const toggleAuthorFollow = async (event: React.MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!user?.id || user.id === post.user_id || followLoading) return;
+
+    const next = !isFollowingAuthor;
+    setIsFollowingAuthor(next);
+    setFollowLoading(true);
+    try {
+      const result = next
+        ? await supabase.from('follows').insert({
+            follower_id: user.id,
+            following_id: post.user_id,
+          })
+        : await supabase
+            .from('follows')
+            .delete()
+            .eq('follower_id', user.id)
+            .eq('following_id', post.user_id);
+
+      if (result.error) throw result.error;
+    } catch (error) {
+      setIsFollowingAuthor(!next);
+      console.error('Home follow holatini o‘zgartirib bo‘lmadi:', error);
+    } finally {
+      setFollowLoading(false);
+    }
+  };
+
   const handleUserClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (post.profile?.username) {
@@ -570,7 +640,7 @@ function PostCard({
       className="overflow-hidden border-y border-border/70 bg-card/95 shadow-none transition-[box-shadow,border-color] duration-200 md:rounded-3xl md:border md:shadow-sm md:hover:border-border md:hover:shadow-md animate-fade-in"
     >
       {/* Image/text posts keep the classic card header. Video posts move it on-media like Instagram. */}
-      {!hasActiveVideo && (
+      {!shouldOverlayVideoAuthor && (
         <div className="flex items-center justify-between p-4 md:p-5">
           <div className="flex min-w-0 items-center gap-2.5 md:gap-3">
             <PostAuthorAvatars
@@ -670,7 +740,7 @@ function PostCard({
           else navigate(`/user/${post.user_id}`);
         }}
         onActiveVisualKindChange={setActiveVisualKind}
-        videoOverlay={
+        videoOverlay={shouldOverlayVideoAuthor ? (
           <div className="pointer-events-none absolute inset-x-0 top-0 z-[8] bg-gradient-to-b from-black/70 via-black/28 to-transparent px-3 pb-10 pt-3 text-white md:px-4 md:pt-4">
             <div className="pointer-events-auto flex min-w-0 items-center justify-between gap-3">
               <div className="flex min-w-0 items-center gap-2.5">
@@ -695,13 +765,37 @@ function PostCard({
                       {post.profile?.username || post.profile?.display_name || 'user'}
                     </button>
                     {post.profile?.is_verified && <VerifiedBadge size="xs" />}
+                    <PostCollaboratorByline
+                      postId={post.id}
+                      isOwner={isOwner}
+                      className="[&_button]:!text-white [&_span]:!text-white"
+                    />
                   </div>
                   <div className="truncate text-[11px] font-medium text-white/88 drop-shadow-sm md:text-xs">
                     {formatTime(post.created_at)}
                   </div>
                 </div>
               </div>
-              <div className="shrink-0 rounded-full bg-black/20 backdrop-blur-sm [&_button]:!text-white [&_button:hover]:!bg-white/10">
+              <div className="flex shrink-0 items-center gap-1.5">
+                {user?.id && user.id !== post.user_id && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={followLoading}
+                    onClick={toggleAuthorFollow}
+                    className="h-7 rounded-full border-white/55 bg-black/20 px-3 text-xs font-semibold text-white backdrop-blur-md hover:bg-white/10 hover:text-white disabled:opacity-60"
+                  >
+                    {followLoading ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : isFollowingAuthor ? (
+                      'Following'
+                    ) : (
+                      'Follow'
+                    )}
+                  </Button>
+                )}
+                <div className="rounded-full bg-black/20 backdrop-blur-sm [&_button]:!text-white [&_button:hover]:!bg-white/10">
                 <PostActionsMenu
                   postId={post.id}
                   postUserId={post.user_id}
@@ -712,10 +806,11 @@ function PostCard({
                   onHide={onHide}
                   onDelete={onDelete}
                 />
+                </div>
               </div>
             </div>
           </div>
-        }
+        ) : undefined}
         className="px-4 md:px-5"
       />
 
