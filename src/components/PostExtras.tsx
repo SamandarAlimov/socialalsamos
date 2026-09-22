@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { MapPin } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
@@ -49,6 +49,8 @@ interface PostExtrasProps {
   onSocialLikesClick?: () => void;
   onSocialCommentsClick?: () => void;
   onSocialProfileClick?: () => void;
+  videoOverlay?: ReactNode;
+  onActiveVisualKindChange?: (kind: 'video' | 'image') => void;
   className?: string;
 }
 
@@ -146,6 +148,8 @@ export function PostExtras({
   onSocialLikesClick,
   onSocialCommentsClick,
   onSocialProfileClick,
+  videoOverlay,
+  onActiveVisualKindChange,
   className,
 }: PostExtrasProps) {
   const { media, refresh } = usePostMedia(postId);
@@ -374,6 +378,8 @@ export function PostExtras({
               ) : null;
             })}
             backgroundMusic={backgroundMusic}
+            videoOverlay={videoOverlay}
+            onActiveKindChange={onActiveVisualKindChange}
           />
         </div>
       )}

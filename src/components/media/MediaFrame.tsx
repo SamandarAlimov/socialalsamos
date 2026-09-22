@@ -105,7 +105,7 @@ export function MediaFrame({
         // visible in the same screen. The video itself uses object-cover here;
         // fullscreen still switches back to object-contain.
         isFeedVideo &&
-          'max-h-[min(60dvh,560px)] sm:max-h-[min(66dvh,640px)] lg:max-h-[min(70dvh,700px)]',
+          'max-h-[min(68dvh,620px)] sm:max-h-[min(70dvh,660px)] lg:max-h-[min(72dvh,720px)]',
         rounded && 'rounded-2xl',
         className,
       )}

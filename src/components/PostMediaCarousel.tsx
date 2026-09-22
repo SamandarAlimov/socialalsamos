@@ -20,6 +20,10 @@ interface PostMediaCarouselProps {
   posters?: Array<string | null | undefined>;
   altTexts?: Array<string | null | undefined>;
   overlays?: Array<ReactNode>;
+  /** Feed-only chrome rendered on top of the active video (author/menu row). */
+  videoOverlay?: ReactNode;
+  /** Lets the parent move feed chrome in/out when an album switches media kind. */
+  onActiveKindChange?: (kind: 'video' | 'image') => void;
   /** Instagram-style soundtrack applied to visual post media. */
   backgroundMusic?: PostMusicInput | null;
   onRetry?: () => void;
@@ -33,6 +37,8 @@ export function PostMediaCarousel({
   posters,
   altTexts,
   overlays,
+  videoOverlay,
+  onActiveKindChange,
   backgroundMusic,
   onRetry,
 }: PostMediaCarouselProps) {
@@ -139,6 +145,11 @@ export function PostMediaCarousel({
   const isCurrentVideo = currentMedia ? isVideoAt(currentIndex) : false;
   const naturalRatio = ratios[currentIndex] ?? (isReel ? 9 / 16 : undefined);
   const currentFailed = failedIndexes.has(currentIndex);
+
+  useEffect(() => {
+    if (!currentMedia) return;
+    onActiveKindChange?.(isCurrentVideo ? 'video' : 'image');
+  }, [currentMedia, isCurrentVideo, onActiveKindChange]);
 
   const advanceCurrentCandidate = useCallback(() => {
     const candidates = candidateSets[currentIndex] ?? [];
@@ -416,6 +427,7 @@ export function PostMediaCarousel({
         )}
 
         {overlays?.[currentIndex]}
+        {isCurrentVideo ? videoOverlay : null}
 
         {hasBackgroundMusic && !currentFailed && (
           <CreateMusicPreview

@@ -464,7 +464,21 @@ function PostCard({
   const [showAudienceDialog, setShowAudienceDialog] = useState(false);
   const [audienceDefaultTab, setAudienceDefaultTab] = useState<'likes' | 'views'>('likes');
   const [showShareDialog, setShowShareDialog] = useState(false);
+  const legacyLooksLikeVideo = Boolean(
+    post.media_type === 'video' ||
+    post.media_type === 'reel' ||
+    post.media_type === 'short' ||
+    post.media_urls?.some((url) => /\.(mp4|webm|mov|m4v|ogv|mkv|avi|3gp|hevc)(?:[?#].*)?$/i.test(url || '')),
+  );
+  const [activeVisualKind, setActiveVisualKind] = useState<'video' | 'image' | null>(
+    legacyLooksLikeVideo ? 'video' : null,
+  );
+  const hasActiveVideo = activeVisualKind === 'video';
   const { recordView } = usePostViews();
+
+  useEffect(() => {
+    setActiveVisualKind(legacyLooksLikeVideo ? 'video' : null);
+  }, [legacyLooksLikeVideo, post.id]);
 
   // Recommendation quality depends on true impressions. A mounted card is not
   // automatically a view: it must be at least 55% visible for 900ms.
@@ -555,57 +569,50 @@ function PostCard({
       ref={articleRef}
       className="overflow-hidden border-y border-border/70 bg-card/95 shadow-none transition-[box-shadow,border-color] duration-200 md:rounded-3xl md:border md:shadow-sm md:hover:border-border md:hover:shadow-md animate-fade-in"
     >
-      {/* Post Header */}
-      <div className="flex items-center justify-between p-4 md:p-5">
-        <div className="flex min-w-0 items-center gap-2.5 md:gap-3">
-          {/* Hammuallif bo'lsa ikkita profil rasmi qavatlanib chiqadi */}
-          <PostAuthorAvatars
-            postId={post.id}
-            userId={post.user_id}
-            username={post.profile?.username}
-            displayName={post.profile?.display_name}
-            avatarUrl={post.profile?.avatar_url}
-            isVerified={!!post.profile?.is_verified}
-            onOwnerClick={handleUserClick}
-          />
-          <div className="min-w-0">
-            <div className="flex min-w-0 flex-wrap items-center gap-1">
-              <span 
-                className="font-semibold text-sm cursor-pointer hover:underline"
-                onClick={handleUserClick}
-              >
-                {post.profile?.display_name || post.profile?.username || 'Anonymous'}
-              </span>
-              {post.profile?.is_verified && (
-                <VerifiedBadge size="xs" />
-              )}
-              <PostCollaboratorByline
-                postId={post.id}
-                isOwner={isOwner}
-              />
+      {/* Image/text posts keep the classic card header. Video posts move it on-media like Instagram. */}
+      {!hasActiveVideo && (
+        <div className="flex items-center justify-between p-4 md:p-5">
+          <div className="flex min-w-0 items-center gap-2.5 md:gap-3">
+            <PostAuthorAvatars
+              postId={post.id}
+              userId={post.user_id}
+              username={post.profile?.username}
+              displayName={post.profile?.display_name}
+              avatarUrl={post.profile?.avatar_url}
+              isVerified={!!post.profile?.is_verified}
+              onOwnerClick={handleUserClick}
+            />
+            <div className="min-w-0">
+              <div className="flex min-w-0 flex-wrap items-center gap-1">
+                <span
+                  className="cursor-pointer text-sm font-semibold hover:underline"
+                  onClick={handleUserClick}
+                >
+                  {post.profile?.display_name || post.profile?.username || 'Anonymous'}
+                </span>
+                {post.profile?.is_verified && <VerifiedBadge size="xs" />}
+                <PostCollaboratorByline postId={post.id} isOwner={isOwner} />
+              </div>
+              <p className="text-[11px] text-muted-foreground md:text-xs">
+                <span className="cursor-pointer hover:underline" onClick={handleUserClick}>
+                  @{post.profile?.username || 'user'}
+                </span>
+                {' '}· {formatTime(post.created_at)}
+              </p>
             </div>
-            <p className="text-[11px] md:text-xs text-muted-foreground">
-              <span 
-                className="cursor-pointer hover:underline"
-                onClick={handleUserClick}
-              >
-                @{post.profile?.username || 'user'}
-              </span>
-              {' '}· {formatTime(post.created_at)}
-            </p>
           </div>
+          <PostActionsMenu
+            postId={post.id}
+            postUserId={post.user_id}
+            postContent={post.content ?? undefined}
+            isPinned={post.is_pinned}
+            isBookmarked={Boolean(post.is_bookmarked)}
+            onToggleBookmark={onBookmark}
+            onHide={onHide}
+            onDelete={onDelete}
+          />
         </div>
-        <PostActionsMenu
-          postId={post.id}
-          postUserId={post.user_id}
-          postContent={post.content ?? undefined}
-          isPinned={post.is_pinned}
-          isBookmarked={Boolean(post.is_bookmarked)}
-          onToggleBookmark={onBookmark}
-          onHide={onHide}
-          onDelete={onDelete}
-        />
-      </div>
+      )}
 
       {/* Post matni: formatlash bilan (qalin, qiya, chizilgan, rangli, sarlavha) */}
       {markers.textContent && (
@@ -662,7 +669,54 @@ function PostCard({
           if (post.profile?.username) navigate(`/user/${post.profile.username}`);
           else navigate(`/user/${post.user_id}`);
         }}
-        className="px-4 pb-4 md:px-5"
+        onActiveVisualKindChange={setActiveVisualKind}
+        videoOverlay={
+          <div className="pointer-events-none absolute inset-x-0 top-0 z-[8] bg-gradient-to-b from-black/70 via-black/28 to-transparent px-3 pb-10 pt-3 text-white md:px-4 md:pt-4">
+            <div className="pointer-events-auto flex min-w-0 items-center justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-2.5">
+                <div className="[&_.bg-card]:!bg-black/25 [&_.border-background]:!border-white/70">
+                  <PostAuthorAvatars
+                    postId={post.id}
+                    userId={post.user_id}
+                    username={post.profile?.username}
+                    displayName={post.profile?.display_name}
+                    avatarUrl={post.profile?.avatar_url}
+                    isVerified={!!post.profile?.is_verified}
+                    onOwnerClick={handleUserClick}
+                  />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex min-w-0 items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={handleUserClick}
+                      className="max-w-[52vw] truncate text-sm font-semibold text-white drop-shadow-sm hover:underline md:max-w-sm"
+                    >
+                      {post.profile?.username || post.profile?.display_name || 'user'}
+                    </button>
+                    {post.profile?.is_verified && <VerifiedBadge size="xs" />}
+                  </div>
+                  <div className="truncate text-[11px] font-medium text-white/88 drop-shadow-sm md:text-xs">
+                    {formatTime(post.created_at)}
+                  </div>
+                </div>
+              </div>
+              <div className="shrink-0 rounded-full bg-black/20 backdrop-blur-sm [&_button]:!text-white [&_button:hover]:!bg-white/10">
+                <PostActionsMenu
+                  postId={post.id}
+                  postUserId={post.user_id}
+                  postContent={post.content ?? undefined}
+                  isPinned={post.is_pinned}
+                  isBookmarked={Boolean(post.is_bookmarked)}
+                  onToggleBookmark={onBookmark}
+                  onHide={onHide}
+                  onDelete={onDelete}
+                />
+              </div>
+            </div>
+          </div>
+        }
+        className="px-4 md:px-5"
       />
 
       {/* Post Actions - Mobile optimized */}
