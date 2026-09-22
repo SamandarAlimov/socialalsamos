@@ -61,7 +61,9 @@ async function attachProfiles<T extends { user_id: string }>(rows: T[]): Promise
 }
 
 const MOBILE_AUDIENCE_SNAP_COMPACT = 0.70;
-const MOBILE_AUDIENCE_SNAP_EXPANDED = 0.96;
+// Match VideoCommentsSheet's expanded detent: top edge reaches the app
+// viewport boundary while the initial state remains a compact bottom sheet.
+const MOBILE_AUDIENCE_SNAP_EXPANDED = 1;
 const MOBILE_AUDIENCE_EXPAND_GESTURE_PX = 12;
 
 function formatCount(value: number, locale: string) {
