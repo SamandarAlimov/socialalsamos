@@ -437,6 +437,93 @@ interface RealtimePostCounts {
   is_liked?: boolean;
 }
 
+function ExpandablePostText({
+  content,
+  formattedContent,
+}: {
+  content: string;
+  formattedContent?: unknown;
+}) {
+  const previewRef = useRef<HTMLDivElement | null>(null);
+  const [expanded, setExpanded] = useState(false);
+  const [canExpand, setCanExpand] = useState(false);
+
+  useEffect(() => {
+    setExpanded(false);
+  }, [content, formattedContent]);
+
+  useEffect(() => {
+    if (expanded) return;
+    const node = previewRef.current;
+    if (!node) return;
+
+    let frame = 0;
+    const measure = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const next = node.scrollHeight > node.clientHeight + 2;
+        setCanExpand((current) => (current === next ? current : next));
+      });
+    };
+
+    measure();
+
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', measure);
+      return () => {
+        cancelAnimationFrame(frame);
+        window.removeEventListener('resize', measure);
+      };
+    }
+
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
+  }, [content, formattedContent, expanded]);
+
+  return (
+    <div>
+      <div
+        ref={previewRef}
+        className={cn(
+          'relative transition-[max-height] duration-200',
+          !expanded && 'max-h-[5.75rem] overflow-hidden',
+        )}
+      >
+        <RichText
+          content={content}
+          formattedContent={formattedContent}
+          className="text-sm leading-relaxed"
+        />
+        {!expanded && canExpand && (
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-x-0 bottom-0 h-7 bg-gradient-to-t from-card via-card/90 to-transparent"
+          />
+        )}
+      </div>
+
+      {!expanded && canExpand && (
+        <button
+          type="button"
+          aria-expanded={false}
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            setExpanded(true);
+          }}
+          className="mt-1 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+        >
+          more
+        </button>
+      )}
+    </div>
+  );
+}
+
 function PostCard({ 
   post, 
   onLike, 
@@ -687,10 +774,9 @@ function PostCard({
       {/* Post matni: formatlash bilan (qalin, qiya, chizilgan, rangli, sarlavha) */}
       {markers.textContent && (
         <div className="px-4 pb-3 md:px-5 md:pb-4">
-          <RichText
+          <ExpandablePostText
             content={markers.textContent}
             formattedContent={post.formatted_content}
-            className="text-sm leading-relaxed"
           />
         </div>
       )}
