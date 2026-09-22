@@ -224,7 +224,7 @@ export default function HomePage() {
   const pageContent = (
     <div 
       className={cn(
-        "w-full max-w-[640px] xl:max-w-[620px] mx-auto py-4 md:py-6 px-3 md:px-4",
+        "w-full max-w-[640px] xl:max-w-[620px] mx-auto py-4 md:py-6 px-0 md:px-4",
         isMobile && swipeOffset !== 0 && "transition-transform duration-100"
       )}
       style={
@@ -269,7 +269,7 @@ export default function HomePage() {
       )}
 
       {/* Stories Section - Mobile optimized */}
-      <div className="mb-4 md:mb-6 -mx-3 md:mx-0 px-3 md:px-0">
+      <div className="mb-4 px-3 md:mb-6 md:px-0">
         <div className="flex gap-3 md:gap-4 overflow-x-auto pb-3 md:pb-4 scrollbar-hidden">
           {/* Your Story Button */}
           <button 
@@ -350,7 +350,7 @@ export default function HomePage() {
       </div>
 
       {/* Create Post - Mobile optimized */}
-      <div className="mb-4 md:mb-6">
+      <div className="mb-4 px-3 md:mb-6 md:px-0">
         <div 
           onClick={() => navigate('/compose')}
           className="cursor-pointer"
@@ -553,7 +553,7 @@ function PostCard({
   return (
     <article
       ref={articleRef}
-      className="overflow-hidden rounded-2xl border border-border/70 bg-card/95 shadow-sm transition-[box-shadow,border-color] duration-200 hover:border-border hover:shadow-md md:rounded-3xl animate-fade-in"
+      className="overflow-hidden border-y border-border/70 bg-card/95 shadow-none transition-[box-shadow,border-color] duration-200 md:rounded-3xl md:border md:shadow-sm md:hover:border-border md:hover:shadow-md animate-fade-in"
     >
       {/* Post Header */}
       <div className="flex items-center justify-between p-4 md:p-5">
