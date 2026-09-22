@@ -100,10 +100,12 @@ export function MediaFrame({
         'relative w-full overflow-hidden bg-neutral-950 flex items-center justify-center',
         isFeed &&
           'max-h-[min(72dvh,720px)] sm:max-h-[min(74dvh,720px)] xl:max-h-[min(76dvh,740px)]',
-        // Do not viewport-clamp Home videos: a definite max-height breaks the
-        // natural aspect ratio and makes 9:16 video narrow inside a wide black
-        // frame. Let the feed scroll naturally instead, as Instagram does.
-        isFeedVideo && 'max-h-none',
+        // Home is not the Reels surface. Very tall 9:16 clips are cropped into
+        // a viewport-aware feed frame so the author/action/social rows stay
+        // visible in the same screen. The video itself uses object-cover here;
+        // fullscreen still switches back to object-contain.
+        isFeedVideo &&
+          'max-h-[min(60dvh,560px)] sm:max-h-[min(66dvh,640px)] lg:max-h-[min(70dvh,700px)]',
         rounded && 'rounded-2xl',
         className,
       )}

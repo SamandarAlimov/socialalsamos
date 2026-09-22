@@ -335,7 +335,7 @@ export function PostMediaCarousel({
     <div className="relative group w-full">
       <MediaFrame
         containerRef={mediaFrameRef}
-        variant={isReel ? 'reel' : isCurrentVideo ? 'feed-video' : 'feed'}
+        variant={isCurrentVideo ? 'feed-video' : 'feed'}
         naturalRatio={naturalRatio}
         backdropUrl={
           currentFailed
@@ -368,6 +368,7 @@ export function PostMediaCarousel({
             src={currentMedia}
             poster={posters?.[currentIndex] ?? undefined}
             aspectMode="auto"
+            fitMode="cover"
             autoPlay
             loop
             muted={backgroundMusic ? Boolean(backgroundMusic.mutedOriginal) : undefined}

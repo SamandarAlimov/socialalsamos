@@ -9,12 +9,14 @@ vi.mock('@/components/VideoPlayer', () => ({
     muted,
     autoPlay,
     loop,
+    fitMode,
     onPlaybackError,
   }: {
     src: string;
     muted?: boolean;
     autoPlay?: boolean;
     loop?: boolean;
+    fitMode?: 'contain' | 'cover';
     onPlaybackError: () => void;
   }) => (
     <video
@@ -22,6 +24,7 @@ vi.mock('@/components/VideoPlayer', () => ({
       data-muted={muted === undefined ? 'global' : String(muted)}
       data-autoplay={String(Boolean(autoPlay))}
       data-loop={String(Boolean(loop))}
+      data-fit={fitMode || 'contain'}
       src={src}
       onError={onPlaybackError}
     />
@@ -46,6 +49,7 @@ describe('post media recovery', () => {
     expect(screen.getByTestId('video')).toHaveAttribute('data-muted', 'global');
     expect(screen.getByTestId('video')).toHaveAttribute('data-autoplay', 'true');
     expect(screen.getByTestId('video')).toHaveAttribute('data-loop', 'true');
+    expect(screen.getByTestId('video')).toHaveAttribute('data-fit', 'cover');
   });
 
   it('tries the saved alternative without removing or mutating either reference', () => {

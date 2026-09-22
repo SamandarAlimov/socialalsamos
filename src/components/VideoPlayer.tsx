@@ -53,6 +53,7 @@ interface VideoPlayerProps {
   loop?: boolean;
   poster?: string;
   aspectMode?: 'portrait' | 'landscape' | 'square' | 'auto';
+  fitMode?: 'contain' | 'cover';
   sources?: VideoPlayerSource[];
   tracks?: VideoPlayerTrack[];
   title?: string;
@@ -132,6 +133,7 @@ export function VideoPlayer({
   loop = false,
   poster,
   aspectMode = 'auto',
+  fitMode = 'contain',
   sources,
   tracks = [],
   title,
@@ -910,7 +912,10 @@ export function VideoPlayer({
         loop={loop}
         playsInline
         preload={autoPlay ? 'auto' : 'metadata'}
-        className="h-full w-full object-contain"
+        className={cn(
+          'h-full w-full',
+          isFullscreen || fitMode === 'contain' ? 'object-contain' : 'object-cover',
+        )}
         onLoadedMetadata={handleLoadedMetadata}
         onTimeUpdate={handleTimeUpdate}
         onWaiting={() => {
