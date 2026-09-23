@@ -37,6 +37,7 @@ export interface FeedPostCardPost {
   is_pinned?: boolean;
   is_liked?: boolean;
   is_bookmarked?: boolean;
+  profile_hidden_at?: string | null;
   post_kind?: string | null;
   has_poll?: boolean | null;
   created_at: string;
@@ -67,6 +68,8 @@ interface FeedPostCardProps {
   onPin?: () => void;
   onBookmark?: () => void | Promise<void>;
   onHide?: () => void | Promise<void>;
+  isProfileHidden?: boolean;
+  onToggleProfileVisibility?: () => void | Promise<void>;
   isOwner?: boolean;
 }
 
@@ -86,6 +89,8 @@ export function FeedPostCard({
   onPin,
   onBookmark,
   onHide,
+  isProfileHidden = false,
+  onToggleProfileVisibility,
   isOwner,
 }: FeedPostCardProps) {
   const navigate = useNavigate();
@@ -214,6 +219,8 @@ export function FeedPostCard({
           onHide={onHide}
           onDelete={onDelete}
           onPin={onPin}
+          isProfileHidden={isProfileHidden}
+          onToggleProfileVisibility={onToggleProfileVisibility}
         />
       </div>
 
