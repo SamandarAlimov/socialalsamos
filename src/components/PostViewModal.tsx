@@ -1,23 +1,25 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogTitle,
 } from '@/components/ui/dialog';
 import {
   ArrowLeft,
-  Heart,
-  MessageCircle,
-  Share2,
   Bookmark,
-  MoreHorizontal,
   ChevronLeft,
   ChevronRight,
+  Eye,
+  Heart,
+  MessageCircle,
+  MoreHorizontal,
   Pin,
+  Share2,
+  X,
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { CommentsSection } from '@/components/CommentsSection';
 import { UserName } from '@/components/UserName';
 import { useRealtimeCounts } from '@/hooks/useRealtimeCounts';
 import { cn } from '@/lib/utils';
@@ -25,7 +27,8 @@ import { format } from 'date-fns';
 import { useTranslation } from 'react-i18next';
 import { PollDisplay, parsePollFromContent } from '@/components/PollDisplay';
 import { RichText } from '@/components/RichText';
-import { PostViewsDialog } from '@/components/PostViewsDialog';
+import { PostLikesViewsDialog } from '@/components/PostLikesViewsDialog';
+import { VideoCommentsSheet } from '@/components/VideoCommentsSheet';
 import { PostMusicCard } from '@/components/PostMusicCard';
 import { PostLocationCard } from '@/components/PostLocationCard';
 import { usePostViews } from '@/hooks/usePostViews';
@@ -63,10 +66,6 @@ interface PostViewModalProps {
     username: string | null;
     avatar_url: string | null;
     display_name: string | null;
-    /**
-     * Tasdiqlangan foydalanuvchi nishoni uchun. Ixtiyoriy - berilmasa
-     * nishon chizilmaydi, shuning uchun eski chaqiruvlar buzilmaydi.
-     */
     is_verified?: boolean | null;
   };
   open: boolean;
@@ -75,6 +74,23 @@ interface PostViewModalProps {
   isOwnProfile?: boolean;
   focusCommentId?: string | null;
   onBack?: () => void;
+}
+
+type AudienceTab = 'likes' | 'views';
+
+function useDesktopPostPreview() {
+  const getMatches = () => typeof window !== 'undefined' && window.matchMedia('(min-width: 1280px)').matches;
+  const [matches, setMatches] = useState(getMatches);
+
+  useEffect(() => {
+    const media = window.matchMedia('(min-width: 1280px)');
+    const sync = () => setMatches(media.matches);
+    media.addEventListener('change', sync);
+    sync();
+    return () => media.removeEventListener('change', sync);
+  }, []);
+
+  return matches;
 }
 
 export function PostViewModal({
@@ -89,30 +105,27 @@ export function PostViewModal({
 }: PostViewModalProps) {
   const { t } = useTranslation();
   const { toast } = useToast();
+  const { recordView } = usePostViews();
+  const isDesktopPreview = useDesktopPostPreview();
+
   const [currentMediaIndex, setCurrentMediaIndex] = useState(0);
   const [isBookmarked, setIsBookmarked] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
-  const [commentFocusRequest, setCommentFocusRequest] = useState(0);
-  const { recordView } = usePostViews();
+  const [showComments, setShowComments] = useState(false);
+  const [showAudience, setShowAudience] = useState(false);
+  const [audienceTab, setAudienceTab] = useState<AudienceTab>('likes');
 
-  // Only the post preview freezes the feed behind it. Keeping this lock local
-  // avoids affecting normal Home/Discover/Search/Notifications scrolling.
   usePlatformScrollLock(open);
 
   const counts = useRealtimeCounts(post.id);
-
-  // Modal Search/Notifications/Home bilan bir xil media source ishlatadi.
-  // Structured post_media ustun, legacy media_urls esa fallback.
   const { media } = usePostMedia(open ? post.id : undefined);
-  const [resolvedLegacyMedia, setResolvedLegacyMedia] = useState<string[]>(
-    post.media_urls ?? [],
-  );
+  const [resolvedLegacyMedia, setResolvedLegacyMedia] = useState<string[]>(post.media_urls ?? []);
 
   useEffect(() => {
     let cancelled = false;
     const source = (post.media_urls ?? []).filter(Boolean);
 
-    if (source.length === 0) {
+    if (!source.length) {
       setResolvedLegacyMedia([]);
       return;
     }
@@ -122,7 +135,7 @@ export function PostViewModal({
         try {
           return await resolveStorageUrl(url);
         } catch (error) {
-          console.warn('Post modal legacy media URL resolve failed:', error);
+          console.warn('Post preview media URL resolve failed:', error);
           return url;
         }
       }),
@@ -141,7 +154,7 @@ export function PostViewModal({
   );
 
   const mediaEntries = useMemo(() => {
-    if (structuredVisuals.length > 0) {
+    if (structuredVisuals.length) {
       return structuredVisuals.map((item) => ({
         url: item.storage_url,
         kind: item.kind as 'image' | 'video',
@@ -166,32 +179,24 @@ export function PostViewModal({
     });
   }, [post.media_type, resolvedLegacyMedia, structuredVisuals]);
 
-  const mediaUrls = useMemo(
-    () => mediaEntries.map((item) => item.url),
-    [mediaEntries],
-  );
+  const mediaUrls = useMemo(() => mediaEntries.map((item) => item.url), [mediaEntries]);
   const hasMedia = mediaEntries.length > 0;
   const hasMultipleMedia = mediaEntries.length > 1;
   const currentEntry = mediaEntries[currentMediaIndex];
-  const currentUrl = currentEntry?.url;
-  const currentKind = currentEntry?.kind;
-  const currentPoster = currentEntry?.poster ?? undefined;
-  const currentEditState = currentEntry?.editState ?? null;
 
   useEffect(() => {
     setCurrentMediaIndex((index) =>
-      mediaEntries.length === 0
-        ? 0
-        : Math.min(index, mediaEntries.length - 1),
+      mediaEntries.length === 0 ? 0 : Math.min(index, mediaEntries.length - 1),
     );
   }, [mediaEntries.length]);
 
   useEffect(() => {
-    if (open) {
-      setCurrentMediaIndex(0);
-      recordView(post.id);
-    }
-  }, [open, post.id, recordView]);
+    if (!open) return;
+    setCurrentMediaIndex(0);
+    setShowComments(Boolean(focusCommentId));
+    setShowAudience(false);
+    recordView(post.id);
+  }, [focusCommentId, open, post.id, recordView]);
 
   const nextMedia = useCallback(() => {
     setCurrentMediaIndex((prev) => (mediaUrls.length ? (prev + 1) % mediaUrls.length : 0));
@@ -203,26 +208,18 @@ export function PostViewModal({
     );
   }, [mediaUrls.length]);
 
-  // Klaviatura bilan boshqarish - premium galereya tajribasi
   useEffect(() => {
     if (!open || !hasMultipleMedia) return;
-
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'ArrowRight') nextMedia();
       if (event.key === 'ArrowLeft') prevMedia();
     };
-
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [open, hasMultipleMedia, nextMedia, prevMedia]);
-
-  const focusCommentComposer = useCallback(() => {
-    setCommentFocusRequest((request) => request + 1);
-  }, []);
+  }, [hasMultipleMedia, nextMedia, open, prevMedia]);
 
   const handleShare = async () => {
     const url = `${window.location.origin}/user/${profile.username ?? ''}?post=${post.id}`;
-
     try {
       if (navigator.share) {
         await navigator.share({
@@ -232,301 +229,367 @@ export function PostViewModal({
         return;
       }
       await navigator.clipboard.writeText(url);
-      toast({
-        title: t('post.share.copied', { defaultValue: 'Havola nusxalandi' }),
-      });
+      toast({ title: t('post.share.copied', { defaultValue: 'Havola nusxalandi' }) });
     } catch {
-      // foydalanuvchi bekor qildi - xabar kerak emas
+      // Native share cancellation is not an error for the user.
     }
   };
+
+  const openAudience = useCallback((tab: AudienceTab) => {
+    setAudienceTab(tab);
+    setShowAudience(true);
+  }, []);
+
+  const dismissPreview = useCallback(() => onOpenChange(false), [onOpenChange]);
+  const goBack = useCallback(() => {
+    if (onBack) onBack();
+    else dismissPreview();
+  }, [dismissPreview, onBack]);
 
   const likes = counts.likes_count ?? post.likes_count ?? 0;
   const comments = counts.comments_count ?? post.comments_count ?? 0;
   const views = counts.views_count ?? post.views_count ?? 0;
 
   const { pollData, cleanContent } = parsePollFromContent(post.content || '');
-  const { location: legacyLocation, cleanContent: locationCleanContent } =
-    parseLocationFromContent(cleanContent);
+  const { location: legacyLocation, cleanContent: locationCleanContent } = parseLocationFromContent(cleanContent);
   const { music, cleanContent: textContent } = parseMusicFromContent(locationCleanContent);
+
+  const authorHeader = (
+    <div className="flex min-w-0 items-center gap-2.5">
+      <Avatar className="h-10 w-10 shrink-0 ring-1 ring-border/70">
+        <AvatarImage src={profile.avatar_url || ''} />
+        <AvatarFallback>{profile.username?.[0]?.toUpperCase() || 'U'}</AvatarFallback>
+      </Avatar>
+      <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 items-center gap-1">
+          <UserName
+            displayName={profile.display_name}
+            username={profile.username}
+            isVerified={profile.is_verified}
+            badgeSize="xs"
+            className="truncate text-[15px] font-semibold leading-tight"
+          />
+          <PostCollaboratorByline postId={post.id} isOwner={isOwnProfile} className="text-sm" />
+        </div>
+        <p className="truncate text-xs text-muted-foreground">
+          {profile.username ? `@${profile.username} · ` : ''}
+          {format(new Date(post.created_at), 'd MMM yyyy, HH:mm')}
+        </p>
+      </div>
+    </div>
+  );
+
+  const contentBlock = (textContent || post.formatted_content || music || pollData || legacyLocation) ? (
+    <div className="space-y-3 px-4 py-3">
+      {(textContent || post.formatted_content) && (
+        <RichText
+          content={textContent}
+          formattedContent={post.formatted_content}
+          className="text-[15px] leading-relaxed"
+        />
+      )}
+      {music && <PostMusicCard music={music} />}
+      {pollData && <PollDisplay postId={post.id} pollData={pollData} />}
+      {legacyLocation && (
+        <PostLocationCard
+          location={legacyLocationToPostLocation(post.id, legacyLocation)}
+          isOwner={false}
+        />
+      )}
+    </div>
+  ) : null;
+
+  const mediaSurface = hasMedia ? (
+    <div className="group relative flex min-h-0 w-full flex-1 items-center justify-center overflow-hidden bg-black">
+      <div className="relative flex h-full max-h-full w-full items-center justify-center">
+        {currentEntry?.kind === 'video' ? (
+          <VideoPlayer
+            key={currentEntry.url}
+            src={currentEntry.url || ''}
+            poster={currentEntry.poster || undefined}
+            autoPlay={open}
+            aspectMode="auto"
+            className="max-h-full max-w-full"
+          />
+        ) : (
+          <img
+            key={currentEntry?.url}
+            src={currentEntry?.url}
+            alt=""
+            className="max-h-full max-w-full animate-in object-contain fade-in duration-200"
+          />
+        )}
+
+        <MediaStickerOverlay
+          editState={currentEntry?.editState ?? null}
+          idPrefix={`${post.id}-${currentMediaIndex}`}
+        />
+      </div>
+
+      {post.is_pinned && (
+        <span className="absolute left-3 top-3 z-20 flex items-center gap-1 rounded-full bg-black/55 px-2.5 py-1 text-xs font-medium text-white backdrop-blur">
+          <Pin className="h-3 w-3" />
+          {t('post.pinned', { defaultValue: 'Mahkamlangan' })}
+        </span>
+      )}
+
+      {hasMultipleMedia && (
+        <>
+          <span className="absolute right-3 top-3 z-20 rounded-full bg-black/55 px-2.5 py-1 text-xs font-medium text-white backdrop-blur">
+            {currentMediaIndex + 1} / {mediaUrls.length}
+          </span>
+          <button
+            type="button"
+            onClick={prevMedia}
+            aria-label={t('common.previous', { defaultValue: 'Oldingi' })}
+            className="absolute left-3 top-1/2 z-20 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur transition hover:bg-black/70 active:scale-95"
+          >
+            <ChevronLeft className="h-5 w-5" />
+          </button>
+          <button
+            type="button"
+            onClick={nextMedia}
+            aria-label={t('common.next', { defaultValue: 'Keyingi' })}
+            className="absolute right-3 top-1/2 z-20 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur transition hover:bg-black/70 active:scale-95"
+          >
+            <ChevronRight className="h-5 w-5" />
+          </button>
+          <div className="absolute bottom-3 left-1/2 z-20 flex -translate-x-1/2 gap-1.5">
+            {mediaUrls.map((url, index) => (
+              <button
+                key={url}
+                type="button"
+                onClick={() => setCurrentMediaIndex(index)}
+                aria-label={`${index + 1}`}
+                className={cn(
+                  'h-1.5 rounded-full transition-all',
+                  index === currentMediaIndex ? 'w-6 bg-white' : 'w-1.5 bg-white/45',
+                )}
+              />
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  ) : null;
+
+  const actions = (
+    <div className="border-t border-border/60 bg-background px-3 py-2.5">
+      <div className="flex items-center gap-1">
+        <button
+          type="button"
+          onClick={onLike}
+          aria-label={t('post.like', { defaultValue: 'Yoqtirish' })}
+          className={cn(
+            'flex h-10 w-10 items-center justify-center rounded-full transition active:scale-90',
+            post.is_liked ? 'text-red-500' : 'text-muted-foreground hover:text-foreground',
+          )}
+        >
+          <Heart className={cn('h-[23px] w-[23px]', post.is_liked && 'fill-current')} />
+        </button>
+        <button
+          type="button"
+          onClick={() => openAudience('likes')}
+          className="-ml-1 mr-1 rounded-full px-1.5 py-2 text-sm font-semibold tabular-nums hover:bg-muted"
+          aria-label={t('post.likes', { defaultValue: 'Likes' })}
+        >
+          {formatCompactCount(likes)}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setShowComments(true)}
+          aria-label={t('post.comment', { defaultValue: 'Izohlar' })}
+          className="flex h-10 items-center gap-1.5 rounded-full px-2 text-muted-foreground transition hover:bg-muted hover:text-foreground active:scale-[0.97]"
+        >
+          <MessageCircle className="h-[23px] w-[23px]" />
+          <span className="text-sm font-semibold tabular-nums">{formatCompactCount(comments)}</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={handleShare}
+          aria-label={t('post.share.action', { defaultValue: 'Ulashish' })}
+          className="flex h-10 w-10 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted hover:text-foreground active:scale-90"
+        >
+          <Share2 className="h-[22px] w-[22px]" />
+        </button>
+
+        <button
+          type="button"
+          onClick={() => openAudience('views')}
+          className="ml-auto flex h-10 items-center gap-1.5 rounded-full px-2 text-muted-foreground transition hover:bg-muted hover:text-foreground"
+          aria-label={t('post.views', { defaultValue: 'Views' })}
+        >
+          <Eye className="h-[22px] w-[22px]" />
+          <span className="text-sm font-semibold tabular-nums">{formatCompactCount(views)}</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setIsBookmarked((value) => !value)}
+          aria-label={t('post.save', { defaultValue: 'Saqlash' })}
+          className={cn(
+            'flex h-10 w-10 items-center justify-center rounded-full transition active:scale-90',
+            isBookmarked ? 'text-foreground' : 'text-muted-foreground hover:text-foreground',
+          )}
+        >
+          <Bookmark className={cn('h-[22px] w-[22px]', isBookmarked && 'fill-current')} />
+        </button>
+      </div>
+
+      {comments > 0 && (
+        <button
+          type="button"
+          onClick={() => setShowComments(true)}
+          className="mt-0.5 rounded-md px-2 py-1 text-sm font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
+        >
+          {t('post.viewComments', {
+            count: comments,
+            defaultValue: `View all ${comments} comments`,
+          })}
+        </button>
+      )}
+    </div>
+  );
 
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent
+          hideDefaultClose
           onOpenAutoFocus={(event) => event.preventDefault()}
           onCloseAutoFocus={(event) => event.preventDefault()}
           className={cn(
-            'w-[calc(100vw-24px)] overflow-hidden border-border/60 bg-background p-0 shadow-[0_28px_90px_rgba(15,23,42,0.28)]',
-            'rounded-[22px] sm:rounded-[24px]',
-            hasMedia
-              ? 'max-w-6xl md:max-h-[92dvh]'
-              : 'max-w-3xl md:max-h-[88dvh]',
+            'left-0 top-0 block h-[100dvh] w-screen max-w-none translate-x-0 translate-y-0 gap-0 overflow-hidden rounded-none border-0 bg-background p-0 shadow-none sm:rounded-none',
+            'xl:left-1/2 xl:top-1/2 xl:h-[min(860px,92dvh)] xl:w-[min(1180px,calc(100vw-48px))] xl:-translate-x-1/2 xl:-translate-y-1/2 xl:rounded-[28px] xl:border xl:border-border/60 xl:shadow-[0_28px_90px_rgba(15,23,42,0.28)]',
           )}
         >
+          <DialogTitle className="sr-only">{t('post.preview', { defaultValue: 'Post preview' })}</DialogTitle>
           <DialogDescription className="sr-only">
-            Post tafsilotlari, media, amallar va izohlar.
+            {t('post.previewDescription', { defaultValue: 'Post details, media and engagement actions.' })}
           </DialogDescription>
-          <div
-            className={cn(
-              'flex min-h-0 flex-col',
-              hasMedia ? 'max-h-[92dvh] md:flex-row' : 'max-h-[88dvh]',
-            )}
-          >
-            {/* Media */}
-            {hasMedia && (
-              <div className="group relative flex flex-1 items-center justify-center bg-gradient-to-b from-neutral-950 to-black min-h-[46dvh] md:min-h-[560px]">
-                {/*
-                  Stiker qatlami media bilan bir xil o'lchamda bo'lishi shart.
-                  `object-contain` konteynerni to'liq egallamaydi, shuning uchun
-                  media'ni o'z o'lchamiga moslashuvchi `relative` o'ramga olamiz.
-                */}
-                <div className="relative inline-block max-h-[92dvh]">
-                  {currentKind === 'video' ? (
-                    <VideoPlayer
-                      key={currentUrl}
-                      src={currentUrl || ''}
-                      poster={currentPoster}
-                      autoPlay
-                      aspectMode="auto"
-                      className="max-h-[92dvh] max-w-full"
-                    />
-                  ) : (
-                    <img
-                      key={currentUrl}
-                      src={currentUrl}
-                      alt=""
-                      className="max-h-[92dvh] max-w-full animate-in fade-in duration-200 object-contain"
-                    />
-                  )}
 
-                  <MediaStickerOverlay
-                    editState={currentEditState}
-                    idPrefix={`${post.id}-${currentMediaIndex}`}
-                  />
-                </div>
-
-                {onBack && (
+          {!isDesktopPreview ? (
+            <div className="flex h-full min-h-0 flex-col bg-background">
+              <div className="sticky top-0 z-40 flex h-14 shrink-0 items-center justify-between border-b border-border/60 bg-background/95 px-2 backdrop-blur-xl">
+                <button
+                  type="button"
+                  onClick={goBack}
+                  aria-label={onBack ? t('common.back', { defaultValue: 'Orqaga' }) : t('common.close', { defaultValue: 'Yopish' })}
+                  className="flex h-10 w-10 items-center justify-center rounded-full text-foreground transition hover:bg-muted active:scale-95"
+                >
+                  {onBack ? <ArrowLeft className="h-5 w-5" /> : <X className="h-5 w-5" />}
+                </button>
+                <span className="text-[16px] font-semibold">{t('post.post', { defaultValue: 'Post' })}</span>
+                {isOwnProfile ? (
                   <button
                     type="button"
-                    onClick={onBack}
-                    aria-label={t('common.back', { defaultValue: 'Orqaga' })}
-                    className="absolute left-3 top-3 z-30 flex h-9 w-9 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur transition hover:bg-black/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+                    onClick={() => setShowEdit(true)}
+                    aria-label={t('post.edit', { defaultValue: 'Postni tahrirlash' })}
+                    className="flex h-10 w-10 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted hover:text-foreground"
                   >
-                    <ArrowLeft className="h-5 w-5" />
+                    <MoreHorizontal className="h-5 w-5" />
                   </button>
-                )}
-
-                {post.is_pinned && (
-                  <span
-                    className={cn(
-                      'absolute top-3 flex items-center gap-1 rounded-full bg-black/60 px-2.5 py-1 text-xs font-medium text-white backdrop-blur',
-                      onBack ? 'left-14' : 'left-3',
-                    )}
-                  >
-                    <Pin className="h-3 w-3" />
-                    {t('post.pinned', { defaultValue: 'Mahkamlangan' })}
-                  </span>
-                )}
-
-                {hasMultipleMedia && (
-                  <>
-                    <span className="absolute right-14 top-3 rounded-full bg-black/60 px-2.5 py-1 text-xs font-medium text-white backdrop-blur">
-                      {currentMediaIndex + 1} / {mediaUrls.length}
-                    </span>
-
-                    <button
-                      type="button"
-                      onClick={prevMedia}
-                      aria-label={t('common.previous', { defaultValue: 'Oldingi' })}
-                      className="absolute left-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white opacity-0 backdrop-blur transition hover:bg-black/70 focus-visible:opacity-100 group-hover:opacity-100 md:opacity-0"
-                    >
-                      <ChevronLeft className="h-5 w-5" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={nextMedia}
-                      aria-label={t('common.next', { defaultValue: 'Keyingi' })}
-                      className="absolute right-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white opacity-0 backdrop-blur transition hover:bg-black/70 focus-visible:opacity-100 group-hover:opacity-100 md:opacity-0"
-                    >
-                      <ChevronRight className="h-5 w-5" />
-                    </button>
-
-                    <div className="absolute bottom-4 left-1/2 flex -translate-x-1/2 gap-1.5">
-                      {mediaUrls.map((url, idx) => (
-                        <button
-                          key={url}
-                          type="button"
-                          onClick={() => setCurrentMediaIndex(idx)}
-                          aria-label={`${idx + 1}`}
-                          className={cn(
-                            'h-1.5 rounded-full transition-all',
-                            idx === currentMediaIndex ? 'w-6 bg-white' : 'w-1.5 bg-white/50 hover:bg-white/80',
-                          )}
-                        />
-                      ))}
-                    </div>
-                  </>
-                )}
+                ) : <span className="h-10 w-10" />}
               </div>
-            )}
 
-            {/* Tafsilotlar */}
-            <div
-              className={cn(
-                'flex min-h-0 flex-col bg-background',
-                hasMedia ? 'md:w-[400px] md:border-l md:border-border/60' : 'w-full',
-              )}
-            >
-              <div className="flex items-center justify-between gap-3 border-b border-border/60 bg-background/95 px-4 py-3 backdrop-blur-xl">
-                <div className="flex min-w-0 items-center gap-2.5">
-                  {onBack && !hasMedia && (
+              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+                <div className="flex items-center justify-between gap-3 px-4 py-3">
+                  {authorHeader}
+                  {isOwnProfile && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="hidden rounded-full sm:flex"
+                      onClick={() => setShowEdit(true)}
+                    >
+                      <MoreHorizontal className="h-5 w-5" />
+                    </Button>
+                  )}
+                </div>
+
+                {contentBlock}
+
+                {hasMedia && (
+                  <div className="flex h-[min(70dvh,760px)] min-h-[320px] w-full items-center justify-center bg-black sm:h-[min(74dvh,820px)]">
+                    {mediaSurface}
+                  </div>
+                )}
+
+                {actions}
+              </div>
+            </div>
+          ) : (
+            <div className="flex h-full min-h-0">
+              {hasMedia && (
+                <div className="relative flex min-w-0 flex-1 bg-black">
+                  {mediaSurface}
+                  {onBack && (
                     <button
                       type="button"
                       onClick={onBack}
                       aria-label={t('common.back', { defaultValue: 'Orqaga' })}
-                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+                      className="absolute left-3 top-3 z-30 flex h-10 w-10 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur transition hover:bg-black/70"
                     >
                       <ArrowLeft className="h-5 w-5" />
                     </button>
                   )}
-                  <Avatar className="h-10 w-10 ring-2 ring-primary/25">
-                    <AvatarImage src={profile.avatar_url || ''} />
-                    <AvatarFallback>{profile.username?.[0]?.toUpperCase() || 'U'}</AvatarFallback>
-                  </Avatar>
-                  <div className="min-w-0">
-                    {/* Markazlashtirilgan: ism + tasdiq nishoni (UserName) */}
-                    <div className="flex min-w-0 items-center gap-1">
-                      <UserName
-                        displayName={profile.display_name}
-                        username={profile.username}
-                        isVerified={profile.is_verified}
-                        badgeSize="xs"
-                        className="text-sm font-semibold leading-tight"
-                      />
-                      <PostCollaboratorByline
-                        postId={post.id}
-                        isOwner={isOwnProfile}
-                        className="text-sm"
-                      />
-                    </div>
-                    <p className="truncate text-xs text-muted-foreground">
-                      {profile.username ? `@${profile.username} \u00b7 ` : ''}
-                      {format(new Date(post.created_at), 'd MMM yyyy, HH:mm')}
-                    </p>
+                </div>
+              )}
+
+              <div className={cn('flex min-h-0 flex-col bg-background', hasMedia ? 'w-[420px] border-l border-border/60' : 'w-full')}>
+                <div className="flex items-center justify-between gap-3 border-b border-border/60 px-4 py-3">
+                  {authorHeader}
+                  <div className="flex items-center gap-1">
+                    {isOwnProfile && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="rounded-full"
+                        onClick={() => setShowEdit(true)}
+                      >
+                        <MoreHorizontal className="h-5 w-5" />
+                      </Button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={dismissPreview}
+                      aria-label={t('common.close', { defaultValue: 'Yopish' })}
+                      className="flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                    >
+                      <X className="h-5 w-5" />
+                    </button>
                   </div>
                 </div>
 
-                {isOwnProfile && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="shrink-0 rounded-full"
-                    onClick={() => setShowEdit(true)}
-                    aria-label={t('post.edit', { defaultValue: 'Postni tahrirlash' })}
-                  >
-                    <MoreHorizontal className="h-5 w-5" />
-                  </Button>
-                )}
-              </div>
-
-              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-                {(textContent || post.formatted_content || music || pollData || legacyLocation) && (
-                  <div className="space-y-3 border-b border-border/60 px-4 py-3">
-                    {(textContent || post.formatted_content) && (
-                      <RichText
-                        content={textContent}
-                        formattedContent={post.formatted_content}
-                        className="text-sm leading-relaxed"
-                      />
-                    )}
-                    {music && <PostMusicCard music={music} />}
-                    {pollData && <PollDisplay postId={post.id} pollData={pollData} />}
-                    {legacyLocation && (
-                      <PostLocationCard
-                        location={legacyLocationToPostLocation(post.id, legacyLocation)}
-                        isOwner={false}
-                      />
-                    )}
-                  </div>
-                )}
-
-                <div className="px-4 py-3">
-                  <CommentsSection
-                    postId={post.id}
-                    focusCommentId={focusCommentId}
-                    focusComposerRequest={commentFocusRequest}
-                  />
+                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+                  {contentBlock}
+                  {!hasMedia && <div className="min-h-[140px]" />}
                 </div>
-              </div>
-
-              {/* Amallar paneli */}
-              <div className="border-t border-border/60 bg-background/95 px-4 py-3 backdrop-blur">
-                <div className="mb-2 flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={onLike}
-                    aria-label={t('post.like', { defaultValue: 'Yoqtirish' })}
-                    className={cn(
-                      'flex h-10 w-10 items-center justify-center rounded-full transition-all active:scale-90',
-                      post.is_liked
-                        ? 'text-red-500 hover:bg-red-500/10'
-                        : 'text-muted-foreground hover:bg-muted hover:text-red-500',
-                    )}
-                  >
-                    <Heart className={cn('h-[22px] w-[22px]', post.is_liked && 'fill-current')} />
-                  </button>
-
-                  <span className="mr-2 text-sm font-semibold tabular-nums">
-                    {formatCompactCount(likes)}
-                  </span>
-
-                  <button
-                    type="button"
-                    onClick={focusCommentComposer}
-                    aria-label={t('post.comment', { defaultValue: 'Izoh yozish' })}
-                    className="flex h-10 items-center gap-1.5 rounded-full px-2 text-muted-foreground transition-all hover:bg-muted hover:text-foreground active:scale-[0.97]"
-                  >
-                    <MessageCircle className="h-[22px] w-[22px]" />
-                    <span className="text-sm font-semibold tabular-nums">
-                      {formatCompactCount(comments)}
-                    </span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={handleShare}
-                    aria-label={t('post.share.action', { defaultValue: 'Ulashish' })}
-                    className="flex h-10 w-10 items-center justify-center rounded-full text-muted-foreground transition-all hover:bg-muted hover:text-foreground active:scale-90"
-                  >
-                    <Share2 className="h-[22px] w-[22px]" />
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setIsBookmarked((prev) => !prev)}
-                    aria-label={t('post.save', { defaultValue: 'Saqlash' })}
-                    className={cn(
-                      'ml-auto flex h-10 w-10 items-center justify-center rounded-full transition-all active:scale-90',
-                      isBookmarked
-                        ? 'text-primary hover:bg-primary/10'
-                        : 'text-muted-foreground hover:bg-muted hover:text-foreground',
-                    )}
-                  >
-                    <Bookmark className={cn('h-[22px] w-[22px]', isBookmarked && 'fill-current')} />
-                  </button>
-                </div>
-
-                <PostViewsDialog
-                  postId={post.id}
-                  viewsCount={views}
-                  iconClassName="h-3.5 w-3.5"
-                  textClassName="text-xs"
-                />
+                {actions}
               </div>
             </div>
-          </div>
+          )}
         </DialogContent>
       </Dialog>
+
+      <VideoCommentsSheet
+        isOpen={showComments}
+        onClose={() => setShowComments(false)}
+        postId={post.id}
+        commentsCount={comments}
+        previewVideo={false}
+      />
+
+      <PostLikesViewsDialog
+        postId={post.id}
+        open={showAudience}
+        onOpenChange={setShowAudience}
+        likesCount={likes}
+        viewsCount={views}
+        defaultTab={audienceTab}
+      />
 
       <EditPostDialog
         postId={post.id}
