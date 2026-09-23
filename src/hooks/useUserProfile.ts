@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { PROFILE_PUBLIC_COLUMNS } from '@/lib/profileFields';
+import { db } from '@/lib/db';
 
 export interface UserProfile {
   id: string;
@@ -24,6 +25,7 @@ export interface UserProfile {
 
 export interface UserPost {
   id: string;
+  user_id?: string | null;
   content: string | null;
   media_urls: string[];
   media_type: string;
@@ -33,6 +35,7 @@ export interface UserPost {
   bookmarks_count: number;
   is_pinned: boolean;
   visibility: string;
+  profile_hidden_at?: string | null;
   created_at: string;
   is_liked?: boolean;
 }
@@ -49,6 +52,7 @@ export function useUserProfile(userId?: string) {
   const { toast } = useToast();
 
   const targetUserId = userId || user?.id;
+  const isOwnTarget = Boolean(user?.id && targetUserId === user.id);
 
   const fetchProfile = useCallback(async () => {
     if (!targetUserId) {
@@ -104,9 +108,17 @@ export function useUserProfile(userId?: string) {
 
       if (error) throw error;
 
+      // Owners keep hidden rows in memory so the profile can expose the
+      // reversible "Yashirilgan" manager. Other viewers never receive those
+      // rows in the rendered profile list even though the post itself still
+      // exists elsewhere on the platform.
+      const profileRows = (data ?? []).filter((post: any) =>
+        isOwnTarget || !post.profile_hidden_at,
+      );
+
       // Check like status for current user
-      if (user && data) {
-        const postIds = data.map(p => p.id);
+      if (user && profileRows.length > 0) {
+        const postIds = profileRows.map((p: any) => p.id);
         const { data: likes } = await supabase
           .from('post_likes')
           .select('post_id')
@@ -114,19 +126,19 @@ export function useUserProfile(userId?: string) {
           .in('post_id', postIds);
 
         const likedIds = new Set(likes?.map(l => l.post_id) || []);
-        const postsWithLikes = data.map(post => ({
+        const postsWithLikes = profileRows.map((post: any) => ({
           ...post,
           media_urls: post.media_urls || [],
           is_liked: likedIds.has(post.id),
         }));
-        setPosts(postsWithLikes);
+        setPosts(postsWithLikes as UserPost[]);
       } else {
-        setPosts(data?.map(p => ({ ...p, media_urls: p.media_urls || [] })) || []);
+        setPosts(profileRows.map((p: any) => ({ ...p, media_urls: p.media_urls || [] })) as UserPost[]);
       }
     } catch (error) {
       console.error('Error fetching posts:', error);
     }
-  }, [targetUserId, user]);
+  }, [isOwnTarget, targetUserId, user]);
 
   const fetchCounts = useCallback(async () => {
     if (!targetUserId) return;
@@ -144,15 +156,17 @@ export function useUserProfile(userId?: string) {
         .select('*', { count: 'exact', head: true })
         .eq('follower_id', targetUserId);
 
-      // Get real posts count
-      const { count: postsCount } = await supabase
+      // Profile post count intentionally excludes profile-hidden rows. They are
+      // preserved for restore, but should not inflate the public profile stat.
+      const { count: visiblePostsCount } = await db
         .from('posts')
         .select('*', { count: 'exact', head: true })
-        .eq('user_id', targetUserId);
+        .eq('user_id', targetUserId)
+        .is('profile_hidden_at', null);
 
       setFollowersCount(followers || 0);
       setFollowingCount(following || 0);
-      setPostsCount(postsCount || 0);
+      setPostsCount(visiblePostsCount || 0);
 
       // Update profile counts in database
       await supabase
@@ -160,7 +174,7 @@ export function useUserProfile(userId?: string) {
         .update({
           followers_count: followers || 0,
           following_count: following || 0,
-          posts_count: postsCount || 0,
+          posts_count: visiblePostsCount || 0,
         })
         .eq('id', targetUserId);
     } catch (error) {
@@ -310,17 +324,25 @@ export function useUserProfile(userId?: string) {
           // Handle post count updates in real-time
           if (payload.eventType === 'UPDATE') {
             const newData = payload.new as any;
-            setPosts(prev => prev.map(p => 
-              p.id === newData.id 
-                ? { 
-                    ...p, 
-                    likes_count: newData.likes_count ?? p.likes_count,
-                    comments_count: newData.comments_count ?? p.comments_count,
-                    shares_count: newData.shares_count ?? p.shares_count,
-                    bookmarks_count: newData.bookmarks_count ?? p.bookmarks_count,
-                  }
-                : p
-            ));
+            const hasProfileVisibility = Object.prototype.hasOwnProperty.call(newData, 'profile_hidden_at');
+            setPosts(prev => prev
+              .map(p =>
+                p.id === newData.id
+                  ? {
+                      ...p,
+                      likes_count: newData.likes_count ?? p.likes_count,
+                      comments_count: newData.comments_count ?? p.comments_count,
+                      shares_count: newData.shares_count ?? p.shares_count,
+                      bookmarks_count: newData.bookmarks_count ?? p.bookmarks_count,
+                      profile_hidden_at: hasProfileVisibility
+                        ? newData.profile_hidden_at
+                        : p.profile_hidden_at,
+                    }
+                  : p
+              )
+              .filter(p => isOwnTarget || !p.profile_hidden_at)
+            );
+            if (hasProfileVisibility) void fetchCounts();
           } else {
             fetchPosts();
             fetchCounts();
@@ -341,9 +363,9 @@ export function useUserProfile(userId?: string) {
             if (p.id !== postId) return p;
             const delta = payload.eventType === 'INSERT' ? 1 : payload.eventType === 'DELETE' ? -1 : 0;
             const isLiked = payload.eventType === 'INSERT' && (payload.new as any)?.user_id === user?.id
-              ? true 
+              ? true
               : payload.eventType === 'DELETE' && (payload.old as any)?.user_id === user?.id
-              ? false 
+              ? false
               : p.is_liked;
             return { ...p, likes_count: Math.max(0, p.likes_count + delta), is_liked: isLiked };
           }));
@@ -382,7 +404,7 @@ export function useUserProfile(userId?: string) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [targetUserId, fetchPosts, fetchCounts, user?.id]);
+  }, [targetUserId, fetchPosts, fetchCounts, isOwnTarget, user?.id]);
 
   // Real-time subscription for profile updates
   useEffect(() => {
