@@ -14,7 +14,6 @@ import {
   LinkIcon,
   Calendar,
   ArrowLeft,
-  Heart,
   Repeat2,
   QrCode,
   Images,
@@ -35,12 +34,10 @@ import { OnlineIndicator } from '@/components/OnlineIndicator';
 import { RichTextContent } from '@/components/RichTextContent';
 import { EmojiText } from '@/components/emoji/EmojiText';
 import { useUserPosts, UserPost } from '@/hooks/useUserPosts';
-import { useUserReposts, Repost } from '@/hooks/useReposts';
+import { useUserReposts } from '@/hooks/useReposts';
 import { cn } from '@/lib/utils';
 import { toExternalUrl, stripProtocol } from '@/lib/urls';
 import { formatLocation } from '@/lib/locations';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { PostViewModal } from '@/components/PostViewModal';
 import { WalletTransferDialog } from '@/components/payment/WalletTransferDialog';
 import { PROFILE_PUBLIC_COLUMNS } from '@/lib/profileFields';
 
@@ -76,7 +73,6 @@ export default function UserProfilePage() {
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [paymentConversationId, setPaymentConversationId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'posts' | 'videos' | 'reposts'>('posts');
-  const [selectedRepostPost, setSelectedRepostPost] = useState<Repost['post'] | null>(null);
   const [showQrDialog, setShowQrDialog] = useState(false);
   const [showPhotos, setShowPhotos] = useState(false);
   const [followDialog, setFollowDialog] = useState<{ open: boolean; type: 'followers' | 'following' }>({
@@ -252,6 +248,7 @@ export default function UserProfilePage() {
 
   const videoPosts = posts.filter(p => p.media_type === 'video');
   const regularPosts = activeTab === 'videos' ? videoPosts : posts;
+  const repostPosts = reposts.flatMap((repost) => (repost.post ? [repost.post] : []));
 
   const tabs = [
     { id: 'posts' as const, icon: Grid3x3, label: t('profile.tabs.posts'), count: posts.length },
@@ -531,7 +528,7 @@ export default function UserProfilePage() {
                   <Skeleton key={i} className="h-40 rounded-2xl" />
                 ))}
               </div>
-            ) : reposts.length === 0 ? (
+            ) : repostPosts.length === 0 ? (
               <div className="text-center py-12">
                 <div className="h-16 w-16 rounded-full bg-muted/50 flex items-center justify-center mx-auto mb-4">
                   <Repeat2 className="h-8 w-8 text-muted-foreground" />
@@ -539,75 +536,17 @@ export default function UserProfilePage() {
                 <p className="text-muted-foreground font-medium">{t('profile.empty.noReposts')}</p>
               </div>
             ) : (
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                {reposts.map((repost) => (
-                  repost.post && (
-                    <button
-                      key={repost.id}
-                      onClick={() => setSelectedRepostPost(repost.post!)}
-                      className="group relative aspect-square overflow-hidden rounded-2xl border border-border/60 bg-muted"
-                    >
-                      <div className="absolute left-2 top-2 z-10 flex items-center gap-1 rounded-full bg-black/60 px-2 py-1 backdrop-blur">
-                        <Repeat2 className="h-3 w-3 text-white" />
-                      </div>
-
-                      {repost.post.profile && (
-                        <div className="absolute right-2 top-2 z-10">
-                          <Avatar className="h-6 w-6 border-2 border-white">
-                            <AvatarImage src={repost.post.profile.avatar_url || ''} />
-                            <AvatarFallback className="text-xs">
-                              {repost.post.profile.display_name?.[0] || 'U'}
-                            </AvatarFallback>
-                          </Avatar>
-                        </div>
-                      )}
-
-                      {repost.post.media_urls && repost.post.media_urls.length > 0 ? (
-                        <>
-                          <div
-                            className="absolute inset-0 scale-110 bg-cover bg-center opacity-60 blur-xl"
-                            style={{ backgroundImage: 'url(' + repost.post.media_urls[0] + ')' }}
-                            aria-hidden="true"
-                          />
-                          {repost.post.media_type === 'video' ? (
-                            <video
-                              src={repost.post.media_urls[0]}
-                              className="relative h-full w-full object-contain"
-                              muted
-                              playsInline
-                              preload="metadata"
-                            />
-                          ) : (
-                            <img
-                              src={repost.post.media_urls[0]}
-                              alt={t('post.repost')}
-                              loading="lazy"
-                              className="relative h-full w-full object-contain"
-                            />
-                          )}
-                        </>
-                      ) : (
-                        <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-primary/10 to-primary/5 p-3">
-                          <p className="line-clamp-5 text-center text-xs">
-                            {repost.post.content || t('profile.noContent')}
-                          </p>
-                        </div>
-                      )}
-
-                      <div className="absolute inset-x-0 bottom-0 flex items-center gap-4 bg-gradient-to-t from-black/70 to-transparent px-3 pb-2 pt-6 text-xs font-medium text-white opacity-0 transition-opacity group-hover:opacity-100">
-                        <span className="flex items-center gap-1">
-                          <Heart className="h-4 w-4" />
-                          {formatCount(repost.post.likes_count || 0)}
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <MessageCircle className="h-4 w-4" />
-                          {formatCount(repost.post.comments_count || 0)}
-                        </span>
-                      </div>
-                    </button>
-                  )
-                ))}
-              </div>
+              <ProfilePostsGrid
+                posts={repostPosts}
+                isOwnProfile={isOwnProfile}
+                profile={{
+                  username: profile.username,
+                  avatar_url: profile.avatar_url,
+                  display_name: profile.display_name,
+                  is_verified: profile.is_verified,
+                }}
+                layout="feed"
+              />
             )
           ) : postsLoading ? (
             <div className="space-y-3">
@@ -636,36 +575,15 @@ export default function UserProfilePage() {
                 username: profile.username,
                 avatar_url: profile.avatar_url,
                 display_name: profile.display_name,
+                is_verified: profile.is_verified,
               }}
               onLike={likePost}
               onDelete={deletePost}
               onPin={pinPost}
+              layout={activeTab === 'videos' ? 'reels-grid' : 'feed'}
             />
           )}
         </div>
-
-        {/* Repost Post View Modal */}
-        {selectedRepostPost && selectedRepostPost.profile && (
-          <PostViewModal
-            post={{
-              id: selectedRepostPost.id,
-              content: selectedRepostPost.content,
-              media_urls: selectedRepostPost.media_urls || [],
-              media_type: selectedRepostPost.media_type || 'image',
-              likes_count: selectedRepostPost.likes_count,
-              comments_count: selectedRepostPost.comments_count,
-              created_at: selectedRepostPost.created_at,
-            }}
-            profile={{
-              username: selectedRepostPost.profile.username,
-              avatar_url: selectedRepostPost.profile.avatar_url,
-              display_name: selectedRepostPost.profile.display_name,
-            }}
-            open={!!selectedRepostPost}
-            onOpenChange={(open) => !open && setSelectedRepostPost(null)}
-            onLike={() => {}}
-          />
-        )}
       </div>
     </div>
   );
