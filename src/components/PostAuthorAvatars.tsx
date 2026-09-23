@@ -20,9 +20,10 @@ interface PostAuthorAvatarsProps {
 /**
  * Post muallifi avatari.
  *
- * Instagram kabi: postda hammuallif bo'lsa ikki profil rasmi qavatlanib
- * ko'rinadi - muallif oldinda, hammuallif orqada o'ngga surilgan holda.
- * Hammuallif rasmini bosish uning profiliga olib boradi.
+ * Post headeri feedda ko'p vertikal joy egallamasligi uchun avatarlar compact.
+ * Hammuallif bo'lsa ikki profil rasmi qavatlanib ko'rinadi - muallif oldinda,
+ * hammuallif orqada o'ngga surilgan holda. Hammuallif rasmini bosish uning
+ * profiliga olib boradi.
  */
 export function PostAuthorAvatars({
   postId,
@@ -49,7 +50,7 @@ export function PostAuthorAvatars({
       displayName={displayName}
       avatarUrl={avatarUrl}
       isVerified={isVerified}
-      size="md"
+      size="sm"
       showRing
       onClick={onOwnerClick}
     />
@@ -63,7 +64,7 @@ export function PostAuthorAvatars({
     partner.profile?.display_name || partner.profile?.username || 'Hammuallif';
 
   return (
-    <div className={cn('relative h-11 w-[58px] shrink-0', className)}>
+    <div className={cn('relative h-9 w-[50px] shrink-0', className)}>
       {/* Orqadagi hammuallif rasmi */}
       <button
         type="button"
@@ -73,11 +74,11 @@ export function PostAuthorAvatars({
           event.stopPropagation();
           navigate('/user/' + (partner.profile?.username || partner.user_id));
         }}
-        className="absolute right-0 top-1/2 -translate-y-1/2 rounded-full bg-card p-[2px] transition-transform hover:scale-105"
+        className="absolute right-0 top-1/2 -translate-y-1/2 rounded-full bg-card p-[1.5px] transition-transform hover:scale-105"
       >
-        <Avatar className="h-7 w-7">
+        <Avatar className="h-6 w-6">
           <AvatarImage src={partner.profile?.avatar_url || ''} />
-          <AvatarFallback className="text-[10px]">
+          <AvatarFallback className="text-[9px]">
             {partnerLabel.charAt(0).toUpperCase()}
           </AvatarFallback>
         </Avatar>
