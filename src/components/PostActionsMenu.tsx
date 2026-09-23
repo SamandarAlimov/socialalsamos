@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { db } from '@/lib/db';
-import { MoreHorizontal, Edit, Trash2, Pin, PinOff, Flag, Copy, Share2, Bookmark, EyeOff, Link, Sparkles, BarChart3 } from 'lucide-react';
+import { MoreHorizontal, Edit, Trash2, Pin, PinOff, Flag, Share2, Bookmark, EyeOff, Link, Sparkles, BarChart3 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -25,6 +25,10 @@ import {
 import { toast } from 'sonner';
 import { EditPostDialog } from '@/components/EditPostDialog';
 import { cn } from '@/lib/utils';
+import {
+  announceContentHideChange,
+  hideContentPost,
+} from '@/lib/contentHides';
 
 interface PostActionsMenuProps {
   postId: string;
@@ -39,12 +43,12 @@ interface PostActionsMenuProps {
   onHide?: () => void | Promise<void>;
 }
 
-export function PostActionsMenu({ 
-  postId, 
-  postUserId, 
+export function PostActionsMenu({
+  postId,
+  postUserId,
   postContent,
   isPinned = false,
-  onDelete, 
+  onDelete,
   onEdit,
   onPin,
   isBookmarked = false,
@@ -56,12 +60,13 @@ export function PostActionsMenu({
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isPinning, setIsPinning] = useState(false);
+  const [isHiding, setIsHiding] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
 
   const handleForwardToAI = () => {
     navigate('/ai', { state: { forwardedPost: { id: postId, content: postContent } } });
   };
-  
+
   const isOwner = user?.id === postUserId;
 
   const handleCopyLink = async () => {
@@ -90,16 +95,16 @@ export function PostActionsMenu({
   const handleDelete = async () => {
     if (!user) return;
     setIsDeleting(true);
-    
+
     try {
       const { error } = await supabase
         .from('posts')
         .delete()
         .eq('id', postId)
         .eq('user_id', user.id);
-      
+
       if (error) throw error;
-      
+
       toast.success('Post deleted successfully');
       onDelete?.();
     } catch (error) {
@@ -114,16 +119,16 @@ export function PostActionsMenu({
   const handlePin = async () => {
     if (!user) return;
     setIsPinning(true);
-    
+
     try {
       const { error } = await supabase
         .from('posts')
         .update({ is_pinned: !isPinned })
         .eq('id', postId)
         .eq('user_id', user.id);
-      
+
       if (error) throw error;
-      
+
       toast.success(isPinned ? 'Post unpinned' : 'Post pinned to profile');
       onPin?.();
     } catch (error) {
@@ -172,27 +177,36 @@ export function PostActionsMenu({
 
   const handleHidePost = async () => {
     if (!user) {
-      toast.error('Tavsiyalarni sozlash uchun tizimga kiring');
+      toast.error('Postni yashirish uchun tizimga kiring');
       return;
     }
+    if (isOwner || isHiding) return;
 
+    setIsHiding(true);
     try {
       if (onHide) {
+        // Home feed owns the optimistic removal. It also writes the canonical
+        // hide row; announcing here keeps every recommendation surface in sync
+        // during the same SPA session instead of waiting for cache expiry.
         await onHide();
-      } else {
-        const { error } = await db.from('content_hides').insert({
-          post_id: postId,
-          user_id: user.id,
+        announceContentHideChange({
+          postId,
+          userId: user.id,
+          hidden: true,
           reason: 'not_interested',
         });
-        if (error && String((error as any).code ?? '') !== '23505') {
-          throw error;
-        }
+      } else {
+        await hideContentPost(postId, user.id, 'not_interested');
       }
-      toast.success('Bu post tavsiyalardan olib tashlandi');
+
+      toast.success('Post yashirildi', {
+        description: 'Bu post Home va tavsiyalarda qayta ko‘rsatilmaydi.',
+      });
     } catch (error) {
       console.error('Hide post error:', error);
-      toast.error('Tavsiyani yangilab bo‘lmadi');
+      toast.error('Postni yashirib bo‘lmadi');
+    } finally {
+      setIsHiding(false);
     }
   };
 
@@ -200,16 +214,16 @@ export function PostActionsMenu({
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button 
-            variant="ghost" 
-            size="icon" 
+          <Button
+            variant="ghost"
+            size="icon"
             className="h-8 w-8 md:h-9 md:w-9 text-muted-foreground hover:text-foreground"
           >
             <MoreHorizontal className="h-4 w-4 md:h-5 md:w-5" />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent 
-          align="end" 
+        <DropdownMenuContent
+          align="end"
           className="w-56 border border-border bg-popover shadow-lg"
         >
           {isOwner && (
@@ -222,15 +236,15 @@ export function PostActionsMenu({
                 Analitika
               </DropdownMenuItem>
 
-              <DropdownMenuItem 
+              <DropdownMenuItem
                 onClick={() => setShowEditDialog(true)}
                 className="cursor-pointer"
               >
                 <Edit className="h-4 w-4 mr-2" />
                 Postni tahrirlash
               </DropdownMenuItem>
-              
-              <DropdownMenuItem 
+
+              <DropdownMenuItem
                 onClick={handlePin}
                 disabled={isPinning}
                 className="cursor-pointer"
@@ -247,37 +261,37 @@ export function PostActionsMenu({
                   </>
                 )}
               </DropdownMenuItem>
-              
+
               <DropdownMenuSeparator />
-              
-              <DropdownMenuItem 
+
+              <DropdownMenuItem
                 onClick={() => setShowDeleteDialog(true)}
                 className="cursor-pointer text-destructive focus:text-destructive"
               >
                 <Trash2 className="h-4 w-4 mr-2" />
                 Delete post
               </DropdownMenuItem>
-              
+
               <DropdownMenuSeparator />
             </>
           )}
-          
-          <DropdownMenuItem 
+
+          <DropdownMenuItem
             onClick={handleCopyLink}
             className="cursor-pointer"
           >
             <Link className="h-4 w-4 mr-2" />
             Copy link
           </DropdownMenuItem>
-          
-          <DropdownMenuItem 
+
+          <DropdownMenuItem
             onClick={handleShare}
             className="cursor-pointer"
           >
             <Share2 className="h-4 w-4 mr-2" />
             Share post
           </DropdownMenuItem>
-          
+
           <DropdownMenuItem
             onClick={handleSavePost}
             className="cursor-pointer"
@@ -291,27 +305,28 @@ export function PostActionsMenu({
             {isBookmarked ? 'Saqlanganlardan olib tashlash' : 'Saqlash'}
           </DropdownMenuItem>
 
-          <DropdownMenuItem 
+          <DropdownMenuItem
             onClick={handleForwardToAI}
             className="cursor-pointer"
           >
             <Sparkles className="h-4 w-4 mr-2 text-alsamos-orange" />
             AI ga yuborish
           </DropdownMenuItem>
-          
+
           {!isOwner && (
             <>
               <DropdownMenuSeparator />
-              
-              <DropdownMenuItem 
+
+              <DropdownMenuItem
                 onClick={handleHidePost}
+                disabled={isHiding}
                 className="cursor-pointer"
               >
                 <EyeOff className="h-4 w-4 mr-2" />
-                Hide post
+                {isHiding ? 'Yashirilmoqda…' : 'Postni yashirish'}
               </DropdownMenuItem>
-              
-              <DropdownMenuItem 
+
+              <DropdownMenuItem
                 onClick={handleReport}
                 className="cursor-pointer text-destructive focus:text-destructive"
               >
