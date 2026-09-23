@@ -19,7 +19,10 @@ const EMPTY_COUNTS = (postId: string): PostCounts => ({
   comments_count: 0,
   views_count: 0,
   reposts_count: 0,
-  is_liked: false,
+  // `undefined` is intentional. Until canonical state has loaded, callers
+  // should keep their already-hydrated/optimistic local like state instead of
+  // having an artificial `false` override it.
+  is_liked: undefined,
 });
 
 async function exactCount(table: CountTable, postId: string): Promise<number> {
@@ -150,12 +153,50 @@ export function useRealtimePostCounts(postIds: string[], userId: string | null) 
     const existing = refreshTimersRef.current.get(postId);
     if (existing) clearTimeout(existing);
 
+    // The realtime payload is applied immediately below. This delayed exact
+    // reconciliation only corrects races/missed events; it is not responsible
+    // for the visible heart state anymore.
     const timer = setTimeout(() => {
       refreshTimersRef.current.delete(postId);
       void refreshPost(postId);
-    }, 90);
+    }, 120);
     refreshTimersRef.current.set(postId, timer);
   }, [refreshPost, trackedIds]);
+
+  const applyRealtimeLike = useCallback((payload: any) => {
+    const newRow = payload?.new as Record<string, unknown> | null | undefined;
+    const oldRow = payload?.old as Record<string, unknown> | null | undefined;
+    const postId = String(newRow?.post_id ?? oldRow?.post_id ?? '');
+    if (!postId || !trackedIds.has(postId)) return;
+
+    const actorId = String(newRow?.user_id ?? oldRow?.user_id ?? '');
+    const eventType = String(payload?.eventType ?? '').toUpperCase();
+
+    setCounts((current) => {
+      const existing = current.get(postId);
+      if (!existing) return current;
+
+      const next = new Map(current);
+      const delta = eventType === 'INSERT' ? 1 : eventType === 'DELETE' ? -1 : 0;
+      const isCurrentUser = Boolean(userId && actorId && actorId === userId);
+      const nextLiked = isCurrentUser
+        ? eventType === 'INSERT'
+          ? true
+          : eventType === 'DELETE'
+            ? false
+            : existing.is_liked
+        : existing.is_liked;
+
+      next.set(postId, {
+        ...existing,
+        likes_count: Math.max(0, existing.likes_count + delta),
+        is_liked: nextLiked,
+      });
+      return next;
+    });
+
+    scheduleRefresh(postId);
+  }, [scheduleRefresh, trackedIds, userId]);
 
   useEffect(() => {
     void fetchCounts();
@@ -167,8 +208,9 @@ export function useRealtimePostCounts(postIds: string[], userId: string | null) 
     const channel = supabase
       .channel(`canonical-post-counts-${postIdsKey.slice(0, 80)}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'post_likes' }, (payload) => {
-        const postId = String((payload.new as any)?.post_id || (payload.old as any)?.post_id || '');
-        if (postId) scheduleRefresh(postId);
+        // Apply the heart/count change from the realtime row immediately. The
+        // exact-count query remains as a short reconciliation pass only.
+        applyRealtimeLike(payload);
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'comments' }, (payload) => {
         const postId = String((payload.new as any)?.post_id || (payload.old as any)?.post_id || '');
@@ -189,7 +231,7 @@ export function useRealtimePostCounts(postIds: string[], userId: string | null) 
       refreshTimersRef.current.forEach((timer) => clearTimeout(timer));
       refreshTimersRef.current.clear();
     };
-  }, [postIdsKey, scheduleRefresh, stablePostIds.length]);
+  }, [applyRealtimeLike, postIdsKey, scheduleRefresh, stablePostIds.length]);
 
   const getPostCounts = useCallback((postId: string) => {
     return counts.get(postId) || EMPTY_COUNTS(postId);
