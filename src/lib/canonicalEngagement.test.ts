@@ -46,4 +46,22 @@ describe('canonical public engagement counters', () => {
     expect(dialog).toContain('canonicalLikesCount');
     expect(dialog).toContain('setCanonicalLikesCount(Math.max(0, Number(count ?? 0)))');
   });
+
+  it('keeps Home and Videos hearts optimistic until canonical realtime confirms them', () => {
+    const helper = source('lib/postLikes.ts');
+    const realtime = source('hooks/useRealtimePostCounts.ts');
+    const home = source('hooks/usePosts.ts');
+    const videos = source('hooks/useVideoPosts.ts');
+
+    expect(helper).toContain('POST_LIKE_OPTIMISTIC_EVENT');
+    expect(helper).toContain("phase: 'optimistic'");
+    expect(helper).toContain("phase: 'confirmed'");
+    expect(helper).toContain("phase: 'rollback'");
+    expect(helper).toContain("onConflict: 'post_id,user_id'");
+    expect(realtime).toContain('optimisticLikesRef');
+    expect(realtime).toContain('overlayOptimisticLike');
+    expect(realtime).toContain('window.addEventListener(POST_LIKE_OPTIMISTIC_EVENT');
+    expect(home).toContain('await togglePostLike(postId, user.id, wasLiked)');
+    expect(videos).toContain('await togglePostLike(postId, userId, wasLiked)');
+  });
 });
