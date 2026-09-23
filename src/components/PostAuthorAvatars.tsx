@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils';
 import { usePostCollaborators } from '@/hooks/usePostCollaborators';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { StoryAvatar } from '@/components/stories/StoryAvatar';
+import '@/components/posts/feedCompact.css';
 
 interface PostAuthorAvatarsProps {
   postId: string;
@@ -57,14 +58,18 @@ export function PostAuthorAvatars({
   );
 
   if (!partner) {
-    return <div className={cn('shrink-0', className)}>{ownerAvatar}</div>;
+    return (
+      <div className={cn('post-author-avatars shrink-0', className)}>
+        {ownerAvatar}
+      </div>
+    );
   }
 
   const partnerLabel =
     partner.profile?.display_name || partner.profile?.username || 'Hammuallif';
 
   return (
-    <div className={cn('relative h-9 w-[50px] shrink-0', className)}>
+    <div className={cn('post-author-avatars relative h-9 w-[50px] shrink-0', className)}>
       {/* Orqadagi hammuallif rasmi */}
       <button
         type="button"
