@@ -14,6 +14,7 @@ import { ChatWallpaperProvider } from "@/components/chat/ChatWallpaperProvider";
 import { ChatAccentProvider } from "@/components/chat/ChatAccentProvider";
 import { AccountControlGate } from "@/components/auth/AccountControlGate";
 import { MarketplaceDeliveryLocationDock } from "@/components/marketplace/MarketplaceDeliveryLocationDock";
+import { VideoHideMenu } from "@/components/video/VideoHideMenu";
 
 // Pages
 import AuthPage from "./pages/AuthPage";
@@ -254,6 +255,7 @@ function AppWithGlobalCall() {
               <ChatAccentProvider />
               <ChatWallpaperProvider />
               <AppRoutes />
+              <VideoHideMenu />
               <MarketplaceDeliveryLocationDock />
             </GlobalCallProvider>
           </OnlinePresenceProvider>
