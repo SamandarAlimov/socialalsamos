@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { db } from '@/lib/db';
-import { MoreHorizontal, Edit, Trash2, Pin, PinOff, Flag, Share2, Bookmark, EyeOff, Link, Sparkles, BarChart3 } from 'lucide-react';
+import { MoreHorizontal, Edit, Trash2, Pin, PinOff, Flag, Share2, Bookmark, Eye, EyeOff, Link, Sparkles, BarChart3 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -41,6 +41,8 @@ interface PostActionsMenuProps {
   isBookmarked?: boolean;
   onToggleBookmark?: () => void | Promise<void>;
   onHide?: () => void | Promise<void>;
+  isProfileHidden?: boolean;
+  onToggleProfileVisibility?: () => void | Promise<void>;
 }
 
 export function PostActionsMenu({
@@ -54,6 +56,8 @@ export function PostActionsMenu({
   isBookmarked = false,
   onToggleBookmark,
   onHide,
+  isProfileHidden = false,
+  onToggleProfileVisibility,
 }: PostActionsMenuProps) {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -61,6 +65,7 @@ export function PostActionsMenu({
   const [isDeleting, setIsDeleting] = useState(false);
   const [isPinning, setIsPinning] = useState(false);
   const [isHiding, setIsHiding] = useState(false);
+  const [isUpdatingProfileVisibility, setIsUpdatingProfileVisibility] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
 
   const handleForwardToAI = () => {
@@ -136,6 +141,18 @@ export function PostActionsMenu({
       toast.error('Failed to update pin status');
     } finally {
       setIsPinning(false);
+    }
+  };
+
+  const handleToggleProfileVisibility = async () => {
+    if (!isOwner || !onToggleProfileVisibility || isUpdatingProfileVisibility) return;
+    setIsUpdatingProfileVisibility(true);
+    try {
+      await onToggleProfileVisibility();
+    } catch (error) {
+      console.error('Profile post visibility update failed:', error);
+    } finally {
+      setIsUpdatingProfileVisibility(false);
     }
   };
 
@@ -261,6 +278,21 @@ export function PostActionsMenu({
                   </>
                 )}
               </DropdownMenuItem>
+
+              {onToggleProfileVisibility && (
+                <DropdownMenuItem
+                  onClick={() => void handleToggleProfileVisibility()}
+                  disabled={isUpdatingProfileVisibility}
+                  className="cursor-pointer"
+                >
+                  {isProfileHidden ? (
+                    <Eye className="h-4 w-4 mr-2" />
+                  ) : (
+                    <EyeOff className="h-4 w-4 mr-2" />
+                  )}
+                  {isProfileHidden ? 'Profilga qaytarish' : 'Profildan yashirish'}
+                </DropdownMenuItem>
+              )}
 
               <DropdownMenuSeparator />
 
