@@ -1,19 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   ArrowDownWideNarrow,
   ArrowUpNarrowWide,
-  BarChart3,
   Check,
   Clock,
   Eye,
-  Grid3x3,
-  Heart,
-  Images,
-  LayoutList,
-  MessageCircle,
-  Music2,
-  Pin,
   Play,
   SlidersHorizontal,
 } from 'lucide-react';
@@ -30,16 +22,11 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { cn } from '@/lib/utils';
-import { parsePollFromContent } from '@/components/PollDisplay';
 import { useToast } from '@/hooks/use-toast';
 import { useRealtimePostCounts } from '@/hooks/useRealtimePostCounts';
 import { db } from '@/lib/db';
-import {
-  formatCompactCount,
-  parseLocationFromContent,
-  parseMusicFromContent,
-} from '@/lib/postMarkers';
+import { formatCompactCount } from '@/lib/postMarkers';
+import { togglePostLike } from '@/lib/postLikes';
 
 interface PostProfile {
   id?: string | null;
@@ -74,14 +61,18 @@ interface ProfilePostsGridProps {
   posts: Post[];
   isOwnProfile: boolean;
   profile: PostProfile;
-  onLike: (postId: string) => void | Promise<void>;
-  onDelete: (postId: string) => void | Promise<void>;
-  onPin: (postId: string) => void | Promise<void>;
+  onLike?: (postId: string) => void | Promise<void>;
+  onDelete?: (postId: string) => void | Promise<void>;
+  onPin?: (postId: string) => void | Promise<void>;
+  /**
+   * Profile display is decided by the active tab, not by a second user-facing
+   * view switch. Only the Videos/Reels tab should use the compact 3-column grid.
+   */
+  layout?: 'feed' | 'reels-grid';
   /** Postlar hali yuklanayotgan bo'lsa premium skeleton ko'rsatiladi. */
   isLoading?: boolean;
 }
 
-type ViewMode = 'feed' | 'grid';
 type SortMode = 'newest' | 'oldest' | 'most_viewed' | 'least_viewed';
 
 /** Home bilan aynan bir xil vaqt ko‘rinishi. */
@@ -96,13 +87,13 @@ function formatFeedPostTime(dateString: string) {
   return format(date, 'MMM d');
 }
 
-function GridSkeleton() {
+function ReelsGridSkeleton() {
   return (
-    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+    <div className="grid grid-cols-3 gap-[2px] sm:gap-1.5">
       {Array.from({ length: 9 }).map((_, idx) => (
         <div
           key={idx}
-          className="aspect-square animate-pulse rounded-2xl border border-border/60 bg-muted"
+          className="aspect-[3/4] animate-pulse bg-muted sm:rounded-lg"
           style={{ animationDelay: `${idx * 60}ms` }}
         />
       ))}
@@ -145,12 +136,12 @@ export function ProfilePostsGrid({
   onLike,
   onDelete,
   onPin,
+  layout = 'feed',
   isLoading = false,
 }: ProfilePostsGridProps) {
   const { t } = useTranslation();
   const { user, profile: authProfile } = useAuth();
   const { toast } = useToast();
-  const [viewMode, setViewMode] = useState<ViewMode>('feed');
   const [sortMode, setSortMode] = useState<SortMode>('newest');
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [bookmarkedIds, setBookmarkedIds] = useState<Set<string>>(
@@ -244,10 +235,36 @@ export function ProfilePostsGrid({
     }
   };
 
+  const handleLike = useCallback(async (post: Post) => {
+    if (onLike) {
+      await onLike(post.id);
+      return;
+    }
+
+    if (!user?.id) {
+      toast({ title: t('auth.loginRequired', { defaultValue: 'Tizimga kirish kerak' }) });
+      return;
+    }
+
+    const canonical = getPostCounts(post.id);
+    const isLikedNow = canonical.is_liked ?? post.is_liked ?? false;
+
+    try {
+      await togglePostLike(post.id, user.id, isLikedNow);
+    } catch (error) {
+      console.error('Profile post like failed', error);
+      toast({
+        title: t('common.error', { defaultValue: 'Xatolik' }),
+        description: t('post.likeFailed', { defaultValue: 'Like holatini yangilab bo‘lmadi' }),
+        variant: 'destructive',
+      });
+    }
+  }, [getPostCounts, onLike, t, toast, user?.id]);
+
   const ActiveSortIcon = sortIcons[sortMode];
 
   const toolbar = (
-    <div className="mb-4 flex items-center justify-between gap-2">
+    <div className="mb-4 flex items-center">
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="outline" size="sm" className="h-9 gap-2 rounded-full" disabled={isLoading}>
@@ -271,27 +288,6 @@ export function ProfilePostsGrid({
           })}
         </DropdownMenuContent>
       </DropdownMenu>
-
-      <div className="flex rounded-full bg-muted p-1">
-        <Button
-          variant="ghost"
-          size="sm"
-          aria-label={t('profile.view.feed', { defaultValue: 'Bir qator' })}
-          className={cn('h-7 rounded-full px-3', viewMode === 'feed' && 'bg-background shadow-sm')}
-          onClick={() => setViewMode('feed')}
-        >
-          <LayoutList className="h-4 w-4" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          aria-label={t('profile.view.grid', { defaultValue: 'Katakcha' })}
-          className={cn('h-7 rounded-full px-3', viewMode === 'grid' && 'bg-background shadow-sm')}
-          onClick={() => setViewMode('grid')}
-        >
-          <Grid3x3 className="h-4 w-4" />
-        </Button>
-      </div>
     </div>
   );
 
@@ -299,7 +295,7 @@ export function ProfilePostsGrid({
     return (
       <div>
         {toolbar}
-        {viewMode === 'grid' ? <GridSkeleton /> : <FeedSkeleton />}
+        {layout === 'reels-grid' ? <ReelsGridSkeleton /> : <FeedSkeleton />}
       </div>
     );
   }
@@ -310,125 +306,36 @@ export function ProfilePostsGrid({
     <div>
       {toolbar}
 
-      {viewMode === 'grid' ? (
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+      {layout === 'reels-grid' ? (
+        <div className="grid grid-cols-3 gap-[2px] sm:gap-1.5">
           {sortedPosts.map((post) => {
-            const { pollData, cleanContent } = parsePollFromContent(post.content || '');
-            const { location, cleanContent: locationCleanContent } = parseLocationFromContent(cleanContent);
-            const { music, cleanContent: textContent } = parseMusicFromContent(locationCleanContent);
-            const mediaUrls = post.media_urls ?? [];
-            const hasMedia = mediaUrls.length > 0;
-            const isVideo = post.media_type === 'video';
-            const isCarousel = mediaUrls.length > 1;
-            const isAudio = post.media_type === 'audio' || (!hasMedia && Boolean(music));
+            const mediaUrl = post.media_urls?.[0] || '';
+            const counts = getPostCounts(post.id);
 
             return (
               <button
                 key={post.id}
                 type="button"
                 onClick={() => setSelectedPost(post)}
-                className="group relative aspect-square overflow-hidden rounded-2xl border border-border/60 bg-muted text-left outline-none ring-ring/40 transition-[box-shadow,transform] hover:shadow-md focus-visible:ring-2"
+                className="group relative aspect-[3/4] overflow-hidden bg-black text-left outline-none ring-ring/40 focus-visible:ring-2 sm:rounded-lg"
               >
-                {hasMedia ? (
-                  <>
-                    <div
-                      className="absolute inset-0 scale-110 bg-cover bg-center opacity-55 blur-xl"
-                      style={{ backgroundImage: `url(${mediaUrls[0]})` }}
-                      aria-hidden="true"
-                    />
-                    {isVideo ? (
-                      <video
-                        src={mediaUrls[0]}
-                        className="relative h-full w-full object-contain transition-transform duration-300 group-hover:scale-[1.025]"
-                        muted
-                        playsInline
-                        preload="metadata"
-                      />
-                    ) : (
-                      <img
-                        src={mediaUrls[0]}
-                        alt=""
-                        loading="lazy"
-                        draggable={false}
-                        className="relative h-full w-full select-none object-contain transition-transform duration-300 group-hover:scale-[1.025]"
-                        onError={(event) => {
-                          event.currentTarget.src = '/placeholder.svg';
-                        }}
-                      />
-                    )}
-                  </>
-                ) : isAudio && music ? (
-                  <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-muted/60 p-3">
-                    {music.coverUrl ? (
-                      <img src={music.coverUrl} alt="" className="h-16 w-16 rounded-xl object-cover shadow-sm" />
-                    ) : (
-                      <Music2 className="h-7 w-7" />
-                    )}
-                    <p className="line-clamp-2 text-center text-xs font-medium">{music.title}</p>
-                    {music.artist && (
-                      <p className="line-clamp-1 text-center text-[11px] text-muted-foreground">{music.artist}</p>
-                    )}
-                  </div>
-                ) : location ? (
-                  <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-muted/50 p-3">
-                    <p className="line-clamp-2 text-center text-xs font-medium">
-                      {location.label || location.place?.name || 'Joylashuv'}
-                    </p>
-                    <p className="text-[11px] text-muted-foreground">
-                      {location.latitude.toFixed(4)}, {location.longitude.toFixed(4)}
-                    </p>
-                  </div>
-                ) : pollData ? (
-                  <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-muted/50 p-3">
-                    <BarChart3 className="h-6 w-6" />
-                    <p className="line-clamp-3 text-center text-xs text-muted-foreground">{pollData.question}</p>
-                  </div>
+                {mediaUrl ? (
+                  <video
+                    src={mediaUrl}
+                    className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.025]"
+                    muted
+                    playsInline
+                    preload="metadata"
+                  />
                 ) : (
-                  <div className="flex h-full w-full items-center justify-center bg-muted/40 p-4">
-                    <p className="line-clamp-5 text-center text-sm text-foreground">{textContent || ''}</p>
-                  </div>
+                  <div className="h-full w-full bg-muted" />
                 )}
 
-                {post.is_pinned && (
-                  <span className="absolute left-2 top-2 rounded-full bg-black/60 p-1 text-white backdrop-blur">
-                    <Pin className="h-3 w-3" />
-                  </span>
-                )}
-
-                <div className="absolute right-2 top-2 flex items-center gap-1">
-                  {isCarousel && (
-                    <span className="flex items-center gap-1 rounded-full bg-black/60 px-2 py-0.5 text-[11px] font-medium text-white backdrop-blur">
-                      <Images className="h-3 w-3" />
-                      {mediaUrls.length}
-                    </span>
-                  )}
-                  {isVideo && (
-                    <span className="rounded-full bg-black/60 p-1 text-white backdrop-blur">
-                      <Play className="h-3 w-3 fill-white" />
-                    </span>
-                  )}
-                  {isAudio && (
-                    <span className="rounded-full bg-black/60 p-1 text-white backdrop-blur">
-                      <Music2 className="h-3 w-3" />
-                    </span>
-                  )}
-                </div>
-
-                <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/75 via-black/10 to-transparent opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-visible:opacity-100 max-sm:opacity-100" />
-                <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center gap-3 px-3 pb-2.5 text-xs font-semibold text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-visible:opacity-100 max-sm:opacity-100">
-                  <span className="flex items-center gap-1 tabular-nums">
-                    <Heart className={cn('h-4 w-4', post.is_liked && 'fill-current')} />
-                    {formatCompactCount(post.likes_count)}
-                  </span>
-                  <span className="flex items-center gap-1 tabular-nums">
-                    <MessageCircle className="h-4 w-4" />
-                    {formatCompactCount(post.comments_count)}
-                  </span>
-                  <span className="ml-auto flex items-center gap-1 tabular-nums">
-                    <Eye className="h-4 w-4" />
-                    {formatCompactCount(post.views_count)}
-                  </span>
-                </div>
+                <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/55 via-transparent to-black/10" />
+                <span className="pointer-events-none absolute bottom-2 left-2 flex items-center gap-1 text-[11px] font-semibold text-white drop-shadow-sm sm:text-xs">
+                  <Play className="h-3.5 w-3.5 fill-current" />
+                  {formatCompactCount(counts.views_count)}
+                </span>
               </button>
             );
           })}
@@ -464,13 +371,13 @@ export function ProfilePostsGrid({
               <FeedPostCard
                 key={post.id}
                 post={canonicalPost}
-                onLike={() => void onLike(post.id)}
+                onLike={() => void handleLike(post)}
                 formatTime={formatFeedPostTime}
                 realtimeCounts={getPostCounts(post.id)}
-                onDelete={() => void onDelete(post.id)}
-                onPin={() => void onPin(post.id)}
+                onDelete={onDelete ? () => void onDelete(post.id) : undefined}
+                onPin={onPin ? () => void onPin(post.id) : undefined}
                 onBookmark={() => toggleBookmark(post.id)}
-                isOwner={isOwnProfile && postUserId === user?.id}
+                isOwner={Boolean(isOwnProfile && postUserId === user?.id)}
               />
             );
           })}
@@ -483,8 +390,8 @@ export function ProfilePostsGrid({
           profile={selectedPost.profile || profile}
           open={Boolean(selectedPost)}
           onOpenChange={(open) => !open && setSelectedPost(null)}
-          onLike={() => void onLike(selectedPost.id)}
-          isOwnProfile={isOwnProfile}
+          onLike={() => void handleLike(selectedPost)}
+          isOwnProfile={Boolean(isOwnProfile && (selectedPost.user_id || user?.id) === user?.id)}
         />
       )}
     </div>
