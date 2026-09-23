@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
@@ -23,6 +23,7 @@ import {
   runWithProfileEmbedFallback,
   type EmbedQueryResult,
 } from '@/lib/profileEmbed';
+import { togglePostLike } from '@/lib/postLikes';
 import db from '@/lib/supabaseAny';
 
 export interface Post {
@@ -161,6 +162,7 @@ export function usePosts(
   const [isLoading, setIsLoading] = useState(true);
   const [hasMore, setHasMore] = useState(true);
   const [page, setPage] = useState(0);
+  const likeMutationRef = useRef<Set<string>>(new Set());
   const { user } = useAuth();
   const { toast } = useToast();
   const PAGE_SIZE = filter === 'recommended' ? 18 : 10;
@@ -739,37 +741,42 @@ export function usePosts(
   }, [user, toast]);
 
   const likePost = useCallback(async (postId: string) => {
-    if (!user) return;
+    if (!user || likeMutationRef.current.has(postId)) return;
 
-    const post = posts.find(p => p.id === postId);
+    const post = posts.find((item) => item.id === postId);
     if (!post) return;
 
+    const wasLiked = Boolean(post.is_liked);
+    const previousCount = Math.max(0, Number(post.likes_count ?? 0));
+    likeMutationRef.current.add(postId);
+
+    // Instagram-style feedback: the heart and counter change on the same frame
+    // as the tap. The DB request and realtime event only confirm this state.
+    setPosts((previous) =>
+      previous.map((item) =>
+        item.id === postId
+          ? {
+              ...item,
+              is_liked: !wasLiked,
+              likes_count: Math.max(0, previousCount + (wasLiked ? -1 : 1)),
+            }
+          : item,
+      ),
+    );
+
     try {
-      if (post.is_liked) {
-        await supabase
-          .from('post_likes')
-          .delete()
-          .eq('post_id', postId)
-          .eq('user_id', user.id);
-
-        setPosts(prev => prev.map(p =>
-          p.id === postId
-            ? { ...p, is_liked: false, likes_count: p.likes_count - 1 }
-            : p
-        ));
-      } else {
-        await supabase
-          .from('post_likes')
-          .insert({ post_id: postId, user_id: user.id });
-
-        setPosts(prev => prev.map(p =>
-          p.id === postId
-            ? { ...p, is_liked: true, likes_count: p.likes_count + 1 }
-            : p
-        ));
-      }
+      await togglePostLike(postId, user.id, wasLiked);
     } catch (error) {
       console.error('Error toggling like:', error);
+      setPosts((previous) =>
+        previous.map((item) =>
+          item.id === postId
+            ? { ...item, is_liked: wasLiked, likes_count: previousCount }
+            : item,
+        ),
+      );
+    } finally {
+      likeMutationRef.current.delete(postId);
     }
   }, [user, posts]);
 
