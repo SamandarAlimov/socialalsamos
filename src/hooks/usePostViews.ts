@@ -13,11 +13,13 @@ import { db } from '@/lib/db';
  */
 
 const recorded = new Set<string>();
+const MAX_ANALYTICS_SESSIONS = 180;
 let viewTrackingDisabled = false;
 let rpcAvailable: boolean | null = null;
 let capabilityProbeInFlight = false;
 let tableFallbackAvailable: boolean | null = null;
 let analyticsRpcAvailable: boolean | null = null;
+let analyticsRetryAfter = 0;
 
 interface AnalyticsSessionState {
   key: string;
@@ -37,6 +39,7 @@ interface AnalyticsSessionState {
   visibleSince: number | null;
   playingSince: number | null;
   lastFlushAt: number;
+  createdAt: number;
   observer: IntersectionObserver | null;
   mutationObserver: MutationObserver | null;
   video: HTMLVideoElement | null;
@@ -96,7 +99,7 @@ function isMissingAnalyticsRpc(error: unknown): boolean {
   );
 }
 
-function getSessionId(): string {
+function getPageSessionId(): string {
   if (typeof window === 'undefined') return 'server';
   const key = 'alsamos:post-analytics-session';
   try {
@@ -113,10 +116,19 @@ function getSessionId(): string {
   }
 }
 
+function createQualifiedSessionId(postId: string): string {
+  const pageSession = getPageSessionId();
+  const nonce =
+    typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  return `${pageSession}:${postId.slice(0, 8)}:${nonce}`.slice(0, 128);
+}
+
 function inferSource(): string {
   if (typeof window === 'undefined') return 'unknown';
   const path = window.location.pathname;
-  if (path === '/home') return 'home';
+  if (path === '/' || path === '/home' || path.startsWith('/feed')) return 'home';
   if (path.startsWith('/discover')) return 'discover';
   if (path.startsWith('/search')) return 'search';
   if (path.startsWith('/videos')) return 'videos';
@@ -134,12 +146,22 @@ function inferDeviceType(): string {
   return 'desktop';
 }
 
+function visibleArea(element: HTMLElement): number {
+  const rect = element.getBoundingClientRect();
+  if (rect.width <= 0 || rect.height <= 0) return 0;
+  const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
+  const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+  const width = Math.max(0, Math.min(rect.right, viewportWidth) - Math.max(rect.left, 0));
+  const height = Math.max(0, Math.min(rect.bottom, viewportHeight) - Math.max(rect.top, 0));
+  return width * height;
+}
+
 function resolveAnalyticsContainer(
   postId: string,
   provided?: HTMLElement | null,
 ): HTMLElement | null {
   if (provided) return provided;
-  if (typeof document === 'undefined') return null;
+  if (typeof document === 'undefined' || typeof window === 'undefined') return null;
 
   // Home still uses its legacy inline PostCard while Profile uses the shared
   // FeedPostCard. PostExtras is common to both and exposes this marker, so the
@@ -148,7 +170,24 @@ function resolveAnalyticsContainer(
   const marker = document.querySelector<HTMLElement>(
     `[data-post-analytics-post-id="${postId}"]`,
   );
-  return marker?.closest<HTMLElement>('article') ?? marker;
+  if (marker) return marker.closest<HTMLElement>('article') ?? marker;
+
+  // Videos and modal viewers do not always expose a post-id marker. Pick the
+  // video that occupies the largest visible area; the caller only reaches this
+  // path after a qualified/active view, so this maps to the active media frame
+  // while avoiding brittle coupling to the page component implementation.
+  const candidates = Array.from(document.querySelectorAll<HTMLVideoElement>('video'))
+    .map((video) => ({ video, area: visibleArea(video) }))
+    .filter((item) => item.area > 0)
+    .sort((a, b) => b.area - a.area);
+  const activeVideo = candidates[0]?.video ?? null;
+  if (!activeVideo) return null;
+
+  return (
+    activeVideo.closest<HTMLElement>('article, [role="dialog"]') ??
+    activeVideo.parentElement ??
+    activeVideo
+  );
 }
 
 function checkpointDwell(state: AnalyticsSessionState, now = Date.now()) {
@@ -166,7 +205,7 @@ function checkpointWatch(state: AnalyticsSessionState, now = Date.now()) {
 }
 
 async function flushAnalytics(state: AnalyticsSessionState) {
-  if (analyticsRpcAvailable === false) return;
+  if (analyticsRpcAvailable === false || Date.now() < analyticsRetryAfter) return;
   checkpointDwell(state);
   checkpointWatch(state);
   state.lastFlushAt = Date.now();
@@ -189,11 +228,19 @@ async function flushAnalytics(state: AnalyticsSessionState) {
 
     if (!error) {
       analyticsRpcAvailable = true;
+      analyticsRetryAfter = 0;
       return;
     }
 
-    if (isMissingAnalyticsRpc(error) || isBlockedError(error)) {
+    if (isMissingAnalyticsRpc(error)) {
       analyticsRpcAvailable = false;
+      return;
+    }
+
+    if (isBlockedError(error)) {
+      // Permission/token drift can be transient during deploy/session refresh.
+      // Retry later instead of disabling analytics for the whole browser tab.
+      analyticsRetryAfter = Date.now() + 60_000;
     }
   } catch {
     // Analytics must never interrupt content consumption.
@@ -268,24 +315,105 @@ function attachVideo(state: AnalyticsSessionState, video: HTMLVideoElement) {
   };
 }
 
+function bindAnalyticsContainer(state: AnalyticsSessionState, container: HTMLElement) {
+  state.observer?.disconnect();
+  state.mutationObserver?.disconnect();
+  state.cleanupVideo?.();
+  state.cleanupVideo = null;
+  state.video = null;
+  state.container = container;
+
+  if (typeof IntersectionObserver !== 'undefined') {
+    state.observer = new IntersectionObserver(
+      ([entry]) => {
+        const visible = entry.isIntersecting && entry.intersectionRatio >= 0.55;
+        if (visible) {
+          if (state.visibleSince === null) state.visibleSince = Date.now();
+          if (state.video && !state.video.paused && state.playingSince === null) {
+            state.playingSince = Date.now();
+          }
+        } else {
+          checkpointDwell(state);
+          state.visibleSince = null;
+          checkpointWatch(state);
+          state.playingSince = null;
+          void flushAnalytics(state);
+        }
+      },
+      { threshold: [0, 0.55, 0.8] },
+    );
+    state.observer.observe(container);
+  }
+
+  const findVideo = () => {
+    const video = container.matches('video') ? container : container.querySelector('video');
+    if (video instanceof HTMLVideoElement) attachVideo(state, video);
+  };
+  findVideo();
+
+  if (typeof MutationObserver !== 'undefined') {
+    state.mutationObserver = new MutationObserver(findVideo);
+    state.mutationObserver.observe(container, { childList: true, subtree: true });
+  }
+}
+
+function disposeAnalyticsState(state: AnalyticsSessionState) {
+  checkpointDwell(state);
+  state.visibleSince = null;
+  checkpointWatch(state);
+  state.playingSince = null;
+  void flushAnalytics(state);
+  state.observer?.disconnect();
+  state.mutationObserver?.disconnect();
+  state.cleanupVideo?.();
+}
+
+function pruneAnalyticsSessions() {
+  for (const [key, state] of analyticsSessions) {
+    if (state.container && !state.container.isConnected) {
+      disposeAnalyticsState(state);
+      analyticsSessions.delete(key);
+    }
+  }
+
+  if (analyticsSessions.size < MAX_ANALYTICS_SESSIONS) return;
+  const ordered = Array.from(analyticsSessions.values()).sort(
+    (a, b) => a.createdAt - b.createdAt,
+  );
+  for (const state of ordered) {
+    if (analyticsSessions.size < MAX_ANALYTICS_SESSIONS) break;
+    disposeAnalyticsState(state);
+    analyticsSessions.delete(state.key);
+  }
+}
+
 function ensureAnalyticsSession(
   postId: string,
   userId: string,
   container?: HTMLElement | null,
 ): AnalyticsSessionState {
+  pruneAnalyticsSessions();
   const resolvedContainer = resolveAnalyticsContainer(postId, container);
   const key = `${userId}:${postId}`;
   const existing = analyticsSessions.get(key);
-  if (existing) return existing;
+  if (existing) {
+    if (
+      resolvedContainer &&
+      (!existing.container || !existing.container.isConnected)
+    ) {
+      bindAnalyticsContainer(existing, resolvedContainer);
+    }
+    return existing;
+  }
 
   const state: AnalyticsSessionState = {
     key,
     postId,
     userId,
-    sessionId: getSessionId(),
+    sessionId: createQualifiedSessionId(postId),
     source: inferSource(),
     deviceType: inferDeviceType(),
-    container: resolvedContainer,
+    container: null,
     dwellMs: 900,
     watchMs: 0,
     maxPositionMs: 0,
@@ -296,6 +424,7 @@ function ensureAnalyticsSession(
     visibleSince: Date.now(),
     playingSince: null,
     lastFlushAt: 0,
+    createdAt: Date.now(),
     observer: null,
     mutationObserver: null,
     video: null,
@@ -303,40 +432,7 @@ function ensureAnalyticsSession(
   };
   analyticsSessions.set(key, state);
 
-  if (resolvedContainer) {
-    if (typeof IntersectionObserver !== 'undefined') {
-      state.observer = new IntersectionObserver(
-        ([entry]) => {
-          const visible = entry.isIntersecting && entry.intersectionRatio >= 0.55;
-          if (visible) {
-            if (state.visibleSince === null) state.visibleSince = Date.now();
-            if (state.video && !state.video.paused && state.playingSince === null) {
-              state.playingSince = Date.now();
-            }
-          } else {
-            checkpointDwell(state);
-            state.visibleSince = null;
-            checkpointWatch(state);
-            state.playingSince = null;
-            void flushAnalytics(state);
-          }
-        },
-        { threshold: [0, 0.55, 0.8] },
-      );
-      state.observer.observe(resolvedContainer);
-    }
-
-    const findVideo = () => {
-      const video = resolvedContainer.querySelector('video');
-      if (video instanceof HTMLVideoElement) attachVideo(state, video);
-    };
-    findVideo();
-
-    if (typeof MutationObserver !== 'undefined') {
-      state.mutationObserver = new MutationObserver(findVideo);
-      state.mutationObserver.observe(resolvedContainer, { childList: true, subtree: true });
-    }
-  }
+  if (resolvedContainer) bindAnalyticsContainer(state, resolvedContainer);
 
   void flushAnalytics(state);
   return state;
