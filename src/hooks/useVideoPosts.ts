@@ -7,6 +7,7 @@ import {
   runWithProfileEmbedFallback,
   type EmbedQueryResult,
 } from '@/lib/profileEmbed';
+import { togglePostLike } from '@/lib/postLikes';
 import { hydratePlayableVideoPosts } from '@/lib/videoPostMedia';
 
 export interface VideoPost {
@@ -109,6 +110,7 @@ export function useVideoPosts() {
   const cursorRef = useRef<string | null>(null);
   const loadingMoreRef = useRef(false);
   const hasLoadedOnceRef = useRef(false);
+  const likeMutationRef = useRef<Set<string>>(new Set());
 
   const attachUserState = useCallback(
     async (rows: VideoPost[]): Promise<VideoPost[]> => {
@@ -406,12 +408,17 @@ export function useVideoPosts() {
   }, []);
 
   const likeVideo = useCallback(async (postId: string) => {
-    if (!userId) return;
+    if (!userId || likeMutationRef.current.has(postId)) return;
     const video = videos.find((item) => item.id === postId);
     if (!video) return;
 
     const wasLiked = Boolean(video.is_liked);
     const previousCount = Math.max(0, video.likes_count || 0);
+    likeMutationRef.current.add(postId);
+
+    // Keep the video heart responsive even before Supabase answers. The shared
+    // helper broadcasts the same optimistic state to canonical Home/Videos
+    // counters so recommendation hydration cannot paint the old state back.
     setVideos((previous) =>
       previous.map((item) =>
         item.id === postId
@@ -425,19 +432,7 @@ export function useVideoPosts() {
     );
 
     try {
-      if (wasLiked) {
-        const { error } = await supabase
-          .from('post_likes')
-          .delete()
-          .eq('post_id', postId)
-          .eq('user_id', userId);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from('post_likes')
-          .insert({ post_id: postId, user_id: userId });
-        if (error) throw error;
-      }
+      await togglePostLike(postId, userId, wasLiked);
       await reconcileLikeCount(postId);
     } catch (error) {
       console.error('Error toggling like:', error);
@@ -449,6 +444,8 @@ export function useVideoPosts() {
         ),
       );
       void reconcileLikeCount(postId);
+    } finally {
+      likeMutationRef.current.delete(postId);
     }
   }, [reconcileLikeCount, userId, videos]);
 
