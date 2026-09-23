@@ -1,0 +1,35 @@
+/* Compact mobile feed chrome for Alsamos' own post-card UI. */
+@media (max-width: 767px) {
+  /* The author row used to keep p-4 vertically even after the avatar was reduced.
+     Compact the actual header container, not just the avatar. */
+  article:has(.post-author-avatars) > div:has(.post-author-avatars) {
+    padding-top: 0.5rem !important;
+    padding-bottom: 0.5rem !important;
+  }
+
+  /* PostExtras keeps pb-4 for cards such as location/poll/document. When the
+     trailing social-proof probe resolves to nothing, cancel both its space-y-3
+     gap and that reserved bottom padding so media touches the actions cleanly. */
+  article:has(.post-author-avatars) .space-y-3 > .h-px.w-full:last-child {
+    margin-top: 0 !important;
+    margin-bottom: -1rem !important;
+  }
+
+  /* When Commented/Liked/Followed exists, keep the row but make its vertical
+     footprint compact instead of reserving a full card-sized band. */
+  article:has(.post-author-avatars) .space-y-3 > div:last-child:has(> button) {
+    margin-top: 0.25rem !important;
+    margin-bottom: -0.75rem !important;
+  }
+
+  article:has(.post-author-avatars) .space-y-3 > div:last-child:has(> button) > button {
+    gap: 0.375rem !important;
+    font-size: 0.6875rem;
+    line-height: 1rem;
+  }
+
+  article:has(.post-author-avatars) .space-y-3 > div:last-child:has(> button) .h-5.w-5 {
+    width: 1rem !important;
+    height: 1rem !important;
+  }
+}
