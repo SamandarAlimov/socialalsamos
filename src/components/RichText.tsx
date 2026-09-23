@@ -185,7 +185,7 @@ export function RichText({ content, formattedContent, className, collapsible }: 
         ref={previewRef}
         className={cn(
           'relative space-y-1',
-          compactPostBody && !expanded && 'max-h-[5.75rem] overflow-hidden',
+          compactPostBody && !expanded && 'max-h-[8rem] overflow-hidden',
         )}
       >
         {blocks.map((block, blockIndex) => {
