@@ -3,6 +3,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRealtimePostCounts } from '@/hooks/useRealtimePostCounts';
 import type { VideoPost } from '@/hooks/useVideoPosts';
+import {
+  CONTENT_HIDE_CHANGE_EVENT,
+  type ContentHideChangeDetail,
+} from '@/lib/contentHides';
 import db from '@/lib/supabaseAny';
 import {
   EMPTY_VIDEO_RECOMMENDATION_PROFILE,
@@ -393,6 +397,40 @@ export function useVideoRecommendations(candidates: VideoPost[]) {
     };
   }, [userId]);
 
+  useEffect(() => {
+    if (!userId || typeof window === 'undefined') return;
+
+    const handleHideChange = (event: Event) => {
+      const detail = (event as CustomEvent<ContentHideChangeDetail>).detail;
+      if (!detail || detail.userId !== userId || !detail.postId) return;
+
+      setProfile((current) => {
+        const hiddenPosts = new Set(current.hiddenPosts);
+        if (detail.hidden) hiddenPosts.add(detail.postId);
+        else hiddenPosts.delete(detail.postId);
+
+        const next = { ...current, hiddenPosts };
+        const cached = profileCache.get(userId);
+        if (cached) {
+          profileCache.set(userId, {
+            profile: next,
+            expiresAt: cached.expiresAt,
+          });
+        }
+        return next;
+      });
+
+      setFeedOrderIds((previous) =>
+        detail.hidden
+          ? previous.filter((id) => id !== detail.postId)
+          : [],
+      );
+    };
+
+    window.addEventListener(CONTENT_HIDE_CHANGE_EVENT, handleHideChange);
+    return () => window.removeEventListener(CONTENT_HIDE_CHANGE_EVENT, handleHideChange);
+  }, [userId]);
+
   const rankedSnapshot = useMemo(
     () => rankVideoRecommendations(canonicalCandidates, profile, userId),
     [canonicalCandidates, profile, userId],
@@ -408,9 +446,11 @@ export function useVideoRecommendations(candidates: VideoPost[]) {
       if (previous.length === 0) return rankedSnapshot.map((video) => video.id);
 
       const available = new Set(canonicalCandidates.map((video) => video.id));
-      const kept = previous.filter((id) => available.has(id));
+      const kept = previous.filter((id) => available.has(id) && !profile.hiddenPosts.has(id));
       const known = new Set(kept);
-      const newcomers = canonicalCandidates.filter((video) => !known.has(video.id));
+      const newcomers = canonicalCandidates.filter(
+        (video) => !known.has(video.id) && !profile.hiddenPosts.has(video.id),
+      );
 
       if (newcomers.length === 0) return kept;
 
@@ -429,13 +469,14 @@ export function useVideoRecommendations(candidates: VideoPost[]) {
 
     const byId = new Map(canonicalCandidates.map((video) => [video.id, video]));
     const ordered = feedOrderIds
+      .filter((id) => !profile.hiddenPosts.has(id))
       .map((id) => byId.get(id))
       .filter((video): video is VideoPost => Boolean(video));
     const orderedIds = new Set(ordered.map((video) => video.id));
     const missing = rankedSnapshot.filter((video) => !orderedIds.has(video.id));
 
     return [...ordered, ...missing];
-  }, [canonicalCandidates, canonicalCountsReady, feedOrderIds, isReady, rankedSnapshot]);
+  }, [canonicalCandidates, canonicalCountsReady, feedOrderIds, isReady, profile.hiddenPosts, rankedSnapshot]);
 
   const rankForContext = useCallback(
     (activeVideoId: string | null) => {
@@ -447,7 +488,7 @@ export function useVideoRecommendations(candidates: VideoPost[]) {
         active,
       );
 
-      if (!active) return ranked;
+      if (!active || profile.hiddenPosts.has(active.id)) return ranked;
       return [active, ...ranked.filter((video) => video.id !== active.id)];
     },
     [canonicalCandidates, profile, userId],
