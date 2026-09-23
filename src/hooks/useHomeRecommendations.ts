@@ -4,6 +4,10 @@ import { useAuth } from '@/contexts/AuthContext';
 import type { Post } from '@/hooks/usePosts';
 import { db } from '@/lib/db';
 import {
+  CONTENT_HIDE_CHANGE_EVENT,
+  type ContentHideChangeDetail,
+} from '@/lib/contentHides';
+import {
   EMPTY_HOME_RECOMMENDATION_PROFILE,
   rankHomeRecommendations,
   recommendationHashtags,
@@ -311,6 +315,34 @@ export function useHomeRecommendations(posts: Post[]) {
     return () => {
       active = false;
     };
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!user?.id || typeof window === 'undefined') return;
+
+    const handleHideChange = (event: Event) => {
+      const detail = (event as CustomEvent<ContentHideChangeDetail>).detail;
+      if (!detail || detail.userId !== user.id || !detail.postId) return;
+
+      setProfile((current) => {
+        const hiddenPosts = new Set(current.hiddenPosts);
+        if (detail.hidden) hiddenPosts.add(detail.postId);
+        else hiddenPosts.delete(detail.postId);
+
+        const next = { ...current, hiddenPosts };
+        const cached = profileCache.get(user.id);
+        if (cached) {
+          profileCache.set(user.id, {
+            profile: next,
+            expiresAt: cached.expiresAt,
+          });
+        }
+        return next;
+      });
+    };
+
+    window.addEventListener(CONTENT_HIDE_CHANGE_EVENT, handleHideChange);
+    return () => window.removeEventListener(CONTENT_HIDE_CHANGE_EVENT, handleHideChange);
   }, [user?.id]);
 
   const refreshProfile = useCallback(async () => {
