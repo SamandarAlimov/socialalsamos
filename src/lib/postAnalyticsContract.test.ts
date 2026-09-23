@@ -46,7 +46,7 @@ describe('creator analytics contracts', () => {
     expect(dialog).toContain("trackShare('native_share')");
   });
 
-  it('keeps server analytics owner-scoped, window-correct and share-aware', () => {
+  it('keeps canonical share telemetry owner-scoped and window-aware', () => {
     const migration = root('supabase/migrations/20260923183000_creator_analytics_v2.sql');
 
     expect(migration).toContain('create table if not exists public.post_share_events');
@@ -57,5 +57,27 @@ describe('creator analytics contracts', () => {
     expect(migration).toContain("'data_source', 'server_rpc'");
     expect(migration).toContain("'telemetry_coverage_pct'");
     expect(migration).toContain('post_share_events_mark_analytics_engagement');
+  });
+
+  it('excludes creators and collaborators from audience/view analytics', () => {
+    const migration = root('supabase/migrations/20260923190000_creator_analytics_integrity_v3.sql');
+
+    expect(migration).toContain('delete from public.post_views pv');
+    expect(migration).toContain('post_views_guard_creator');
+    expect(migration).toContain('post_views_sync_count');
+    expect(migration).toContain('v_owner = v_user');
+    expect(migration).toContain("pc.status = 'accepted'");
+    expect(migration).toContain("'historical_views_are_unique', true");
+    expect(migration).toContain("'views_include_qualified_sessions', true");
+    expect(migration).toContain("'canonical_share_events', true");
+  });
+
+  it('counts qualified repeat sessions as views without double-counting the first unique row', () => {
+    const migration = root('supabase/migrations/20260923190000_creator_analytics_integrity_v3.sql');
+
+    expect(migration).toContain('v_views := v_historical_views + v_telemetry_views');
+    expect(migration).toContain('abs(extract(epoch from (s.first_seen_at - pv.viewed_at))) <= 300');
+    expect(migration).toContain('union\n    select s.viewer_id');
+    expect(migration).toContain('combined_view_counts');
   });
 });
