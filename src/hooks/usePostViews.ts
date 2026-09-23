@@ -409,9 +409,18 @@ export function usePostViews() {
 
         if (tableFallbackAvailable === false) return;
 
+        // Fallback must follow the same first-view contract as the RPC. A
+        // repeated qualified view may be counted as another analytics session,
+        // but it must never rewrite post_views.viewed_at.
         const { error: upsertError } = await supabase
           .from('post_views')
-          .upsert({ post_id: postId, user_id: userId }, { onConflict: 'post_id,user_id' });
+          .upsert(
+            { post_id: postId, user_id: userId },
+            {
+              onConflict: 'post_id,user_id',
+              ignoreDuplicates: true,
+            },
+          );
 
         if (!upsertError) {
           tableFallbackAvailable = true;
