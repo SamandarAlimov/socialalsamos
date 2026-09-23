@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import db from '@/lib/supabaseAny';
+import {
+  POST_LIKE_OPTIMISTIC_EVENT,
+  type PostLikeOptimisticEventDetail,
+} from '@/lib/postLikes';
 
 export interface PostCounts {
   id: string;
@@ -12,6 +16,12 @@ export interface PostCounts {
 }
 
 type CountTable = 'post_likes' | 'comments' | 'post_views' | 'reposts';
+
+type PendingOptimisticLike = {
+  mutationId: string;
+  userId: string;
+  isLiked: boolean;
+};
 
 const EMPTY_COUNTS = (postId: string): PostCounts => ({
   id: postId,
@@ -95,6 +105,7 @@ async function fetchCanonicalPostCounts(
 export function useRealtimePostCounts(postIds: string[], userId: string | null) {
   const [counts, setCounts] = useState<Map<string, PostCounts>>(new Map());
   const refreshTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const optimisticLikesRef = useRef<Map<string, PendingOptimisticLike>>(new Map());
 
   // Callers frequently create a new `postIds` array every render. A stable key
   // prevents an otherwise endless refetch/subscription cycle.
@@ -108,11 +119,33 @@ export function useRealtimePostCounts(postIds: string[], userId: string | null) 
   );
   const trackedIds = useMemo(() => new Set(stablePostIds), [stablePostIds]);
 
+  const overlayOptimisticLike = useCallback((postId: string, canonical: PostCounts) => {
+    const pending = optimisticLikesRef.current.get(postId);
+    if (!pending || !userId || pending.userId !== userId) return canonical;
+
+    // Once the canonical query sees the requested state, the optimistic layer
+    // has served its purpose and can be dropped without a visual jump.
+    if (canonical.is_liked === pending.isLiked) {
+      optimisticLikesRef.current.delete(postId);
+      return canonical;
+    }
+
+    return {
+      ...canonical,
+      likes_count: Math.max(
+        0,
+        canonical.likes_count + (pending.isLiked ? 1 : -1),
+      ),
+      is_liked: pending.isLiked,
+    };
+  }, [userId]);
+
   const refreshPost = useCallback(async (postId: string) => {
     if (!postId || !trackedIds.has(postId)) return;
 
     try {
-      const next = await fetchCanonicalPostCounts(postId, userId);
+      const canonical = await fetchCanonicalPostCounts(postId, userId);
+      const next = overlayOptimisticLike(postId, canonical);
       setCounts((current) => {
         const updated = new Map(current);
         updated.set(postId, next);
@@ -121,7 +154,7 @@ export function useRealtimePostCounts(postIds: string[], userId: string | null) 
     } catch (error) {
       console.warn('Canonical post counters could not be refreshed:', postId, error);
     }
-  }, [trackedIds, userId]);
+  }, [overlayOptimisticLike, trackedIds, userId]);
 
   const fetchCounts = useCallback(async () => {
     if (stablePostIds.length === 0) {
@@ -131,7 +164,8 @@ export function useRealtimePostCounts(postIds: string[], userId: string | null) 
 
     const rows = await mapWithConcurrency(stablePostIds, 6, async (postId) => {
       try {
-        return await fetchCanonicalPostCounts(postId, userId);
+        const canonical = await fetchCanonicalPostCounts(postId, userId);
+        return overlayOptimisticLike(postId, canonical);
       } catch (error) {
         console.warn('Canonical post counters could not be loaded:', postId, error);
         return null;
@@ -145,7 +179,7 @@ export function useRealtimePostCounts(postIds: string[], userId: string | null) 
       });
       return next;
     });
-  }, [stablePostIds, userId]);
+  }, [overlayOptimisticLike, stablePostIds, userId]);
 
   const scheduleRefresh = useCallback((postId: string) => {
     if (!trackedIds.has(postId)) return;
@@ -153,9 +187,8 @@ export function useRealtimePostCounts(postIds: string[], userId: string | null) 
     const existing = refreshTimersRef.current.get(postId);
     if (existing) clearTimeout(existing);
 
-    // The realtime payload is applied immediately below. This delayed exact
-    // reconciliation only corrects races/missed events; it is not responsible
-    // for the visible heart state anymore.
+    // Realtime/local optimistic events update the visible heart immediately.
+    // This exact read only reconciles races and missed websocket events.
     const timer = setTimeout(() => {
       refreshTimersRef.current.delete(postId);
       void refreshPost(postId);
@@ -171,14 +204,28 @@ export function useRealtimePostCounts(postIds: string[], userId: string | null) 
 
     const actorId = String(newRow?.user_id ?? oldRow?.user_id ?? '');
     const eventType = String(payload?.eventType ?? '').toUpperCase();
+    const isCurrentUser = Boolean(userId && actorId && actorId === userId);
+    const pending = optimisticLikesRef.current.get(postId);
+    const confirmsPending = Boolean(
+      isCurrentUser &&
+        pending &&
+        pending.userId === userId &&
+        ((eventType === 'INSERT' && pending.isLiked) ||
+          (eventType === 'DELETE' && !pending.isLiked)),
+    );
+
+    if (confirmsPending) optimisticLikesRef.current.delete(postId);
 
     setCounts((current) => {
       const existing = current.get(postId);
       if (!existing) return current;
 
-      const next = new Map(current);
-      const delta = eventType === 'INSERT' ? 1 : eventType === 'DELETE' ? -1 : 0;
-      const isCurrentUser = Boolean(userId && actorId && actorId === userId);
+      const alreadyAppliedForCurrentUser =
+        isCurrentUser &&
+        ((eventType === 'INSERT' && existing.is_liked === true) ||
+          (eventType === 'DELETE' && existing.is_liked === false));
+      const rawDelta = eventType === 'INSERT' ? 1 : eventType === 'DELETE' ? -1 : 0;
+      const delta = confirmsPending || alreadyAppliedForCurrentUser ? 0 : rawDelta;
       const nextLiked = isCurrentUser
         ? eventType === 'INSERT'
           ? true
@@ -187,6 +234,7 @@ export function useRealtimePostCounts(postIds: string[], userId: string | null) 
             : existing.is_liked
         : existing.is_liked;
 
+      const next = new Map(current);
       next.set(postId, {
         ...existing,
         likes_count: Math.max(0, existing.likes_count + delta),
@@ -201,6 +249,86 @@ export function useRealtimePostCounts(postIds: string[], userId: string | null) 
   useEffect(() => {
     void fetchCounts();
   }, [fetchCounts]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const handleOptimisticLike = (event: Event) => {
+      const detail = (event as CustomEvent<PostLikeOptimisticEventDetail>).detail;
+      if (
+        !detail ||
+        !userId ||
+        detail.userId !== userId ||
+        !trackedIds.has(detail.postId)
+      ) {
+        return;
+      }
+
+      if (detail.phase === 'optimistic') {
+        optimisticLikesRef.current.set(detail.postId, {
+          mutationId: detail.mutationId,
+          userId: detail.userId,
+          isLiked: detail.isLiked,
+        });
+
+        setCounts((current) => {
+          const existing = current.get(detail.postId);
+          // If canonical counts have not loaded yet, the caller's own hydrated
+          // local state remains the fallback. Do not introduce a fake zero count.
+          if (!existing) return current;
+
+          const alreadyInRequestedState = existing.is_liked === detail.isLiked;
+          const next = new Map(current);
+          next.set(detail.postId, {
+            ...existing,
+            likes_count: Math.max(
+              0,
+              existing.likes_count + (alreadyInRequestedState ? 0 : detail.delta),
+            ),
+            is_liked: detail.isLiked,
+          });
+          return next;
+        });
+        return;
+      }
+
+      if (detail.phase === 'rollback') {
+        const pending = optimisticLikesRef.current.get(detail.postId);
+        if (pending?.mutationId === detail.mutationId) {
+          optimisticLikesRef.current.delete(detail.postId);
+        }
+
+        setCounts((current) => {
+          const existing = current.get(detail.postId);
+          if (!existing) return current;
+
+          const alreadyRolledBack = existing.is_liked === detail.isLiked;
+          const next = new Map(current);
+          next.set(detail.postId, {
+            ...existing,
+            likes_count: Math.max(
+              0,
+              existing.likes_count + (alreadyRolledBack ? 0 : detail.delta),
+            ),
+            is_liked: detail.isLiked,
+          });
+          return next;
+        });
+        scheduleRefresh(detail.postId);
+        return;
+      }
+
+      // `confirmed` keeps the optimistic overlay until a websocket/exact read
+      // observes the canonical row. This prevents a stale in-flight fetch from
+      // flashing the heart back to its previous state.
+      scheduleRefresh(detail.postId);
+    };
+
+    window.addEventListener(POST_LIKE_OPTIMISTIC_EVENT, handleOptimisticLike);
+    return () => {
+      window.removeEventListener(POST_LIKE_OPTIMISTIC_EVENT, handleOptimisticLike);
+    };
+  }, [scheduleRefresh, trackedIds, userId]);
 
   useEffect(() => {
     if (stablePostIds.length === 0) return;
