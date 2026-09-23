@@ -4,22 +4,22 @@ import { cn } from '@/lib/utils';
 /**
  * MediaFrame — shared responsive container for all post media (images & videos).
  *
- * Behaves like Instagram / YouTube / Telegram:
- *   - Preserves the media's natural aspect ratio where the feed has room.
- *   - Uses a dedicated portrait-video range so 9:16 feed video can actually
- *     occupy the card width instead of being squeezed into a 4:5 image frame.
+ * Behaves like modern social feeds:
+ *   - Preserves the media's natural aspect ratio where the viewport has room.
+ *   - Lets portrait media down to 9:16 use the full post width instead of
+ *     forcing it into a 4:5 box with large pillarboxes.
  *   - Clamps only extreme ratios / viewport height so the feed stays usable.
- *   - Centers media over an optional blurred media-derived backdrop.
+ *   - Video can cover the frame when the viewport-height budget requires a
+ *     small crop; images remain contained and are never distorted.
  *
  * Variants:
- *   - "feed"       → 4:5 ≤ ratio ≤ 1.91:1 (images / standard visual media)
- *   - "feed-video" → 9:16 ≤ ratio ≤ 1.91:1 + taller viewport budget
+ *   - "feed"       → 9:16 ≤ ratio ≤ 1.91:1 + adaptive viewport-height budget
+ *   - "feed-video" → same portrait-friendly range (explicit video surface)
  *   - "reel"       → 9:16 fixed                (Reels / Shorts viewport)
  *   - "preview"    → 16:9 fixed                (small shared previews, chat cards)
  *   - "free"       → no clamp, exact natural ratio
  */
 
-const FEED_MIN = 4 / 5;        // 0.8 (image-feed portrait floor)
 const FEED_MAX = 1.91;         // widest landscape allowed in feed
 const REEL_RATIO = 9 / 16;     // 0.5625
 const PREVIEW_RATIO = 16 / 9;  // 1.777…
@@ -56,17 +56,14 @@ export function resolveFrameRatio(variant: MediaFrameVariant, naturalRatio?: num
       return PREVIEW_RATIO;
     case 'free':
       return naturalRatio && isFinite(naturalRatio) && naturalRatio > 0 ? naturalRatio : 1;
-    case 'feed-video': {
-      // Instagram-style feed video: a normal 9:16 upload is allowed to use its
-      // real portrait ratio and therefore the full card width. Only videos even
-      // taller than 9:16 are cropped into the 9:16 floor.
-      if (!naturalRatio || !isFinite(naturalRatio) || naturalRatio <= 0) return REEL_RATIO;
-      return Math.min(FEED_MAX, Math.max(REEL_RATIO, naturalRatio));
-    }
+    case 'feed-video':
     case 'feed':
     default: {
+      // A standard 9:16 upload is allowed to keep its real portrait ratio and
+      // therefore occupy the card width. Media taller than 9:16 is clamped and
+      // video is allowed a small object-cover crop instead of side pillarboxes.
       if (!naturalRatio || !isFinite(naturalRatio) || naturalRatio <= 0) return 1;
-      return Math.min(FEED_MAX, Math.max(FEED_MIN, naturalRatio));
+      return Math.min(FEED_MAX, Math.max(REEL_RATIO, naturalRatio));
     }
   }
 }
@@ -90,8 +87,7 @@ export function MediaFrame({
   containerRef,
 }: MediaFrameProps) {
   const ratio = resolveFrameRatio(variant, naturalRatio);
-  const isFeed = variant === 'feed';
-  const isFeedVideo = variant === 'feed-video';
+  const isFeed = variant === 'feed' || variant === 'feed-video';
 
   return (
     <div
@@ -99,9 +95,7 @@ export function MediaFrame({
       className={cn(
         'relative w-full overflow-hidden bg-neutral-950 flex items-center justify-center',
         isFeed &&
-          'max-h-[min(72dvh,720px)] sm:max-h-[min(74dvh,720px)] xl:max-h-[min(76dvh,740px)]',
-        isFeedVideo &&
-          'max-h-[min(82dvh,860px)] sm:max-h-[min(84dvh,880px)] xl:max-h-[min(86dvh,900px)]',
+          'max-h-[min(82dvh,860px)] sm:max-h-[min(84dvh,880px)] xl:max-h-[min(86dvh,900px)] [&_video]:object-cover',
         rounded && 'rounded-2xl',
         className,
       )}
