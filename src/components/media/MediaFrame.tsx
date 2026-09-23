@@ -97,7 +97,7 @@ export function MediaFrame({
       className={cn(
         'relative w-full overflow-hidden bg-neutral-950 flex items-center justify-center',
         isFeed &&
-          'max-h-[min(82dvh,860px)] sm:max-h-[min(84dvh,880px)] xl:max-h-[min(86dvh,900px)] [&_video]:object-cover [&_video]:object-center',
+          'max-h-[min(82dvh,860px)] sm:max-h-[min(84dvh,880px)] xl:max-h-[min(86dvh,900px)] [&_video]:object-cover [&_video]:object-center [&_button>img.select-none]:object-cover [&_button>img.select-none]:object-center',
         rounded && 'rounded-2xl',
         className,
       )}
@@ -159,3 +159,4 @@ export function useNaturalRatio() {
 
   return { ratio, onImageLoad, onVideoLoadedMetadata, setRatio };
 }
+
