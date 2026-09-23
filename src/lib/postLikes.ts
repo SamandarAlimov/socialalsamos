@@ -90,6 +90,8 @@ export async function togglePostLike(
 
   try {
     if (isLikedNow) {
+      // DELETE is naturally idempotent: a stale client can safely request an
+      // unlike even if another surface/device has already removed the row.
       const { error } = await supabase
         .from('post_likes')
         .delete()
@@ -98,9 +100,16 @@ export async function togglePostLike(
 
       if (error) throw error;
     } else {
+      // A stale surface can occasionally think the post is unliked while the
+      // canonical row already exists. Upsert + the UNIQUE(post_id,user_id)
+      // constraint makes repeated like requests idempotent instead of failing
+      // with 23505 and flashing the optimistic heart back off.
       const { error } = await supabase
         .from('post_likes')
-        .insert({ post_id: postId, user_id: userId });
+        .upsert(
+          { post_id: postId, user_id: userId },
+          { onConflict: 'post_id,user_id', ignoreDuplicates: true },
+        );
 
       if (error) throw error;
     }
