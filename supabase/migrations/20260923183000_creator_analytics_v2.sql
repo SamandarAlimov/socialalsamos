@@ -51,6 +51,7 @@ declare
   v_destination text;
   v_event_id text;
   v_inserted boolean := false;
+  v_row_count bigint := 0;
 begin
   if v_actor is null or p_post_id is null then
     return false;
@@ -93,7 +94,8 @@ begin
   )
   on conflict (actor_id, post_id, client_event_id) do nothing;
 
-  get diagnostics v_inserted = row_count;
+  get diagnostics v_row_count = row_count;
+  v_inserted := v_row_count > 0;
 
   if v_inserted then
     update public.posts
@@ -304,11 +306,14 @@ begin
   )
   on conflict (post_id, viewer_id, session_id) do update set
     source = case
-      when post_analytics_sessions.source in ('unknown', 'other') then excluded.source
+      when post_analytics_sessions.source in ('unknown', 'other')
+        and excluded.source not in ('unknown', 'other')
+        then excluded.source
       else post_analytics_sessions.source
     end,
     device_type = case
-      when post_analytics_sessions.device_type = 'unknown' then excluded.device_type
+      when post_analytics_sessions.device_type = 'unknown' and excluded.device_type <> 'unknown'
+        then excluded.device_type
       else post_analytics_sessions.device_type
     end,
     is_follower = excluded.is_follower,
