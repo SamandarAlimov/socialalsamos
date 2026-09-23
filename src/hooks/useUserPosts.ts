@@ -26,6 +26,7 @@ export interface UserPost {
   reposts_count: number;
   is_pinned: boolean;
   visibility: string;
+  profile_hidden_at?: string | null;
   created_at: string;
   profile?: {
     id: string;
@@ -60,6 +61,7 @@ export function useUserPosts(userId: string | undefined) {
   const [posts, setPosts] = useState<UserPost[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const { user } = useAuth();
+  const viewingOwnProfile = Boolean(user?.id && userId && user.id === userId);
 
   const fetchPosts = useCallback(async () => {
     if (!userId) return;
@@ -127,7 +129,22 @@ export function useUserPosts(userId: string | undefined) {
         writeStructuredPostSchemaCapability(hasPostKindColumn ? 'available' : 'missing');
       }
 
-      const visibleData = rawData.filter((post) => post.post_kind !== 'story');
+      const visibleData = rawData.filter((post) => {
+        if (post.post_kind === 'story') return false;
+
+        // profile_hidden_at only affects the author's own profile. Accepted
+        // collaboration posts still remain on a collaborator's profile because
+        // hiding a post from one profile must not silently remove it from another.
+        if (
+          !viewingOwnProfile &&
+          post.user_id === userId &&
+          Boolean(post.profile_hidden_at)
+        ) {
+          return false;
+        }
+
+        return true;
+      });
 
       // Get liked status for current user
       if (user && visibleData.length > 0) {
@@ -161,7 +178,7 @@ export function useUserPosts(userId: string | undefined) {
     } finally {
       setIsLoading(false);
     }
-  }, [userId, user?.id]);
+  }, [userId, user?.id, viewingOwnProfile]);
 
   useEffect(() => {
     fetchPosts();
@@ -220,16 +237,25 @@ export function useUserPosts(userId: string | undefined) {
         (payload) => {
           const newData = payload.new as any;
           if (!newData?.id) return;
-          setPosts(prev => prev.map(p => {
-            if (p.id !== newData.id) return p;
-            return {
-              ...p,
-              likes_count: newData.likes_count ?? p.likes_count,
-              comments_count: newData.comments_count ?? p.comments_count,
-              shares_count: newData.shares_count ?? p.shares_count,
-              bookmarks_count: newData.bookmarks_count ?? p.bookmarks_count,
-            };
-          }));
+          const hasProfileVisibility = Object.prototype.hasOwnProperty.call(newData, 'profile_hidden_at');
+          setPosts(prev => prev
+            .map(p => {
+              if (p.id !== newData.id) return p;
+              return {
+                ...p,
+                likes_count: newData.likes_count ?? p.likes_count,
+                comments_count: newData.comments_count ?? p.comments_count,
+                shares_count: newData.shares_count ?? p.shares_count,
+                bookmarks_count: newData.bookmarks_count ?? p.bookmarks_count,
+                profile_hidden_at: hasProfileVisibility
+                  ? newData.profile_hidden_at
+                  : p.profile_hidden_at,
+              };
+            })
+            .filter(p =>
+              viewingOwnProfile || p.user_id !== userId || !p.profile_hidden_at,
+            )
+          );
         }
       )
       .subscribe();
@@ -237,7 +263,7 @@ export function useUserPosts(userId: string | undefined) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [userId, user?.id]);
+  }, [userId, user?.id, viewingOwnProfile]);
 
   const likePost = useCallback(async (postId: string) => {
     if (!user) return;
