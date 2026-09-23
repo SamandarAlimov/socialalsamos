@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { db } from '@/lib/db';
 
@@ -67,6 +67,13 @@ export interface PostInsightsData {
     telemetry_sessions: number;
     telemetry_started_at: string | null;
     window_days: number;
+    generated_at?: string | null;
+    data_source?: 'server_rpc' | 'client_fallback' | string;
+    share_tracking_started_at?: string | null;
+    last_event_at?: string | null;
+    window_reach?: number;
+    telemetry_coverage_pct?: number;
+    degraded_fields?: string[];
   };
 }
 
@@ -91,14 +98,35 @@ function numberValue(value: unknown): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function errorText(error: unknown): string {
+  const item = error as { code?: string; message?: string; details?: string; hint?: string } | null;
+  return [item?.code, item?.message, item?.details, item?.hint]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+}
+
 function isMissingInsightsRpc(error: unknown): boolean {
   const item = error as { code?: string; message?: string } | null;
-  const text = `${item?.code ?? ''} ${item?.message ?? ''}`.toLowerCase();
+  const text = errorText(error);
   return (
     item?.code === 'PGRST202' ||
     item?.code === '42883' ||
-    text.includes('get_post_insights') &&
-      (text.includes('schema cache') || text.includes('could not find'))
+    (text.includes('get_post_insights') &&
+      (text.includes('schema cache') || text.includes('could not find')))
+  );
+}
+
+function isRecoverableInsightsRpc(error: unknown): boolean {
+  const code = (error as { code?: string } | null)?.code;
+  const text = errorText(error);
+  return (
+    isMissingInsightsRpc(error) ||
+    code === '42501' ||
+    code === 'PGRST301' ||
+    text.includes('permission denied') ||
+    text.includes('execute privilege') ||
+    text.includes('forbidden')
   );
 }
 
@@ -121,6 +149,20 @@ function makeTimeline(days: number): PostInsightTimelinePoint[] {
   return result;
 }
 
+function maxTimestamp(values: Array<string | null | undefined>): string | null {
+  let latest = 0;
+  let latestValue: string | null = null;
+  for (const value of values) {
+    if (!value) continue;
+    const time = new Date(value).getTime();
+    if (Number.isFinite(time) && time > latest) {
+      latest = time;
+      latestValue = value;
+    }
+  }
+  return latestValue;
+}
+
 async function fallbackInsights(
   post: any,
   days: number,
@@ -133,6 +175,17 @@ async function fallbackInsights(
       db.from('reposts').select('created_at').eq('post_id', post.id),
       db.from('bookmarks').select('created_at').eq('post_id', post.id),
     ]);
+
+  const degradedFields: string[] = [];
+  if (viewsResult.error) degradedFields.push('views');
+  if (likesResult.error) degradedFields.push('likes');
+  if (commentsResult.error) degradedFields.push('comments');
+  if (repostsResult.error) degradedFields.push('reposts');
+  if (bookmarksResult.error) degradedFields.push('saves');
+
+  if (degradedFields.length === 5) {
+    throw viewsResult.error ?? new Error('Analitika manbalarini o‘qib bo‘lmadi');
+  }
 
   const views = (viewsResult.data ?? []) as Array<{ user_id: string; viewed_at: string }>;
   const likes = (likesResult.data ?? []) as Array<{ created_at: string | null }>;
@@ -148,11 +201,15 @@ async function fallbackInsights(
   for (let start = 0; start < viewerIds.length; start += 400) {
     const batch = viewerIds.slice(start, start + 400);
     if (batch.length === 0) break;
-    const { data } = await db
+    const { data, error } = await db
       .from('follows')
       .select('follower_id')
       .eq('following_id', post.user_id)
       .in('follower_id', batch);
+    if (error) {
+      if (!degradedFields.includes('audience')) degradedFields.push('audience');
+      continue;
+    }
     for (const row of (data ?? []) as Array<{ follower_id: string }>) {
       followerIds.add(row.follower_id);
     }
@@ -201,6 +258,13 @@ async function fallbackInsights(
   const interactions = likesCount + commentsCount + sharesCount + repostsCount + savesCount;
   const followerCount = viewerIds.filter((id) => followerIds.has(id)).length;
   const nonFollowerCount = Math.max(0, reach - followerCount);
+  const lastEventAt = maxTimestamp([
+    ...views.map((row) => row.viewed_at),
+    ...likes.map((row) => row.created_at),
+    ...comments.map((row) => row.created_at),
+    ...reposts.map((row) => row.created_at),
+    ...bookmarks.map((row) => row.created_at),
+  ]);
 
   return {
     post: {
@@ -248,6 +312,10 @@ async function fallbackInsights(
       telemetry_sessions: 0,
       telemetry_started_at: null,
       window_days: days,
+      generated_at: new Date().toISOString(),
+      data_source: 'client_fallback',
+      last_event_at: lastEventAt,
+      degraded_fields: degradedFields,
     },
   };
 }
@@ -257,16 +325,29 @@ export function usePostInsights(postId: string | undefined, days = 28) {
   const [data, setData] = useState<PostInsightsData | null>(null);
   const [preview, setPreview] = useState<PostInsightsPreview | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
+  const [isFallback, setIsFallback] = useState(false);
+  const dataRef = useRef<PostInsightsData | null>(null);
+  const requestIdRef = useRef(0);
 
-  const load = useCallback(async () => {
+  useEffect(() => {
+    dataRef.current = data;
+  }, [data]);
+
+  const load = useCallback(async (background = false) => {
     if (!postId || !user?.id) {
-      setIsLoading(false);
+      if (!background) setIsLoading(false);
       return;
     }
 
-    setIsLoading(true);
-    setError(null);
+    const requestId = ++requestIdRef.current;
+    if (background) setIsRefreshing(true);
+    else {
+      setIsLoading(true);
+      setError(null);
+    }
 
     try {
       const { data: post, error: postError } = await db
@@ -293,6 +374,8 @@ export function usePostInsights(postId: string | undefined, days = 28) {
         if (!collaborator) throw new Error('Bu post analitikasini ko‘rishga ruxsat yo‘q');
       }
 
+      if (requestId !== requestIdRef.current) return;
+
       setPreview({
         id: post.id,
         user_id: post.user_id,
@@ -309,36 +392,106 @@ export function usePostInsights(postId: string | undefined, days = 28) {
         p_days: days,
       });
 
+      if (requestId !== requestIdRef.current) return;
+
       if (!rpcResult.error && rpcResult.data) {
         const rpcData = rpcResult.data as PostInsightsData;
-        setData({
+        const nextData: PostInsightsData = {
           ...rpcData,
           post: {
             ...rpcData.post,
             content: post.content ?? null,
             media_urls: post.media_urls ?? null,
           },
-        });
+        };
+        setData(nextData);
+        setError(null);
+        setIsFallback(false);
+        setLastUpdatedAt(nextData.data_quality.generated_at ?? new Date().toISOString());
         return;
       }
 
-      if (rpcResult.error && !isMissingInsightsRpc(rpcResult.error)) {
+      if (rpcResult.error && !isRecoverableInsightsRpc(rpcResult.error)) {
         throw rpcResult.error;
       }
 
-      setData(await fallbackInsights(post, days));
+      const fallback = await fallbackInsights(post, days);
+      if (requestId !== requestIdRef.current) return;
+      setData(fallback);
+      setError(null);
+      setIsFallback(true);
+      setLastUpdatedAt(fallback.data_quality.generated_at ?? new Date().toISOString());
     } catch (cause) {
+      if (requestId !== requestIdRef.current) return;
       console.error('Post insights load error:', cause);
+      if (background && dataRef.current) return;
       setError(cause instanceof Error ? cause.message : 'Analitikani yuklab bo‘lmadi');
       setData(null);
+      dataRef.current = null;
     } finally {
-      setIsLoading(false);
+      if (requestId === requestIdRef.current) {
+        if (background) setIsRefreshing(false);
+        else setIsLoading(false);
+      }
     }
   }, [days, postId, user?.id]);
 
   useEffect(() => {
-    void load();
+    void load(false);
   }, [load]);
 
-  return { data, preview, isLoading, error, refresh: load };
+  useEffect(() => {
+    if (!postId || !user?.id) return;
+
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+    const scheduleRefresh = () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        if (typeof document === 'undefined' || document.visibilityState === 'visible') {
+          void load(true);
+        }
+      }, 450);
+    };
+
+    const channel = db
+      .channel(`post-insights:${postId}:${user.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'post_views', filter: `post_id=eq.${postId}` }, scheduleRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'post_likes', filter: `post_id=eq.${postId}` }, scheduleRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'comments', filter: `post_id=eq.${postId}` }, scheduleRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'reposts', filter: `post_id=eq.${postId}` }, scheduleRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'bookmarks', filter: `post_id=eq.${postId}` }, scheduleRefresh)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'posts', filter: `id=eq.${postId}` }, scheduleRefresh)
+      .subscribe();
+
+    const poll = setInterval(() => {
+      if (typeof document === 'undefined' || document.visibilityState === 'visible') {
+        void load(true);
+      }
+    }, 30_000);
+
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') scheduleRefresh();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+
+    return () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      clearInterval(poll);
+      document.removeEventListener('visibilitychange', onVisibility);
+      void db.removeChannel(channel);
+    };
+  }, [load, postId, user?.id]);
+
+  const refresh = useCallback(() => load(false), [load]);
+
+  return {
+    data,
+    preview,
+    isLoading,
+    isRefreshing,
+    error,
+    lastUpdatedAt,
+    isFallback,
+    refresh,
+  };
 }
