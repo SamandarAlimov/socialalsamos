@@ -26,10 +26,11 @@ function profileHandle(profile: PostCollaboratorProfile | null) {
 }
 
 /**
- * Instagram-style public collaborator byline.
+ * Public collaborator byline.
  *
- * Only accepted collaborators are surfaced publicly. Pending invitations stay
- * inside the edit/invitation flow and are never presented as co-authors.
+ * Only accepted collaborators are surfaced publicly. The byline deliberately
+ * stays on one compact line in feed headers so a long collaborator username
+ * cannot make the whole author layer taller.
  */
 export function PostCollaboratorByline({
   postId,
@@ -74,14 +75,19 @@ export function PostCollaboratorByline({
 
   return (
     <>
-      <span className={cn('inline min-w-0 text-sm', className)}>
+      <span
+        className={cn(
+          'inline-flex min-w-0 max-w-full items-center overflow-hidden whitespace-nowrap align-bottom text-xs',
+          className,
+        )}
+      >
         {accepted.length === 1 ? (
           <>
-            <span className="font-semibold text-foreground"> and </span>
+            <span className="shrink-0 font-semibold text-foreground"> and </span>
             <button
               type="button"
               onClick={(event) => openProfile(event, first.profile, first.user_id)}
-              className="font-semibold text-foreground transition hover:underline"
+              className="min-w-0 truncate font-semibold text-foreground transition hover:underline"
             >
               {profileHandle(first.profile)}
             </button>
@@ -90,7 +96,7 @@ export function PostCollaboratorByline({
           <button
             type="button"
             onClick={openList}
-            className="font-semibold text-foreground transition hover:underline"
+            className="min-w-0 truncate font-semibold text-foreground transition hover:underline"
           >
             {' and ' + accepted.length + ' more'}
           </button>
