@@ -44,6 +44,11 @@ interface SharePostDialogProps {
   postContent?: string;
 }
 
+function createShareEventId() {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID();
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+}
+
 export function SharePostDialog({ 
   open, 
   onOpenChange, 
@@ -61,6 +66,21 @@ export function SharePostDialog({
   
   const shareUrl = `${window.location.origin}/post/${postId}`;
   const shareText = postContent ? postContent.substring(0, 100) : 'Check out this post!';
+
+  const trackShare = async (channel: 'internal_chat' | 'copy_link' | 'external' | 'native_share', destination?: string | null) => {
+    if (!user?.id || !postId) return;
+    try {
+      await (supabase as any).rpc('track_post_share', {
+        p_post_id: postId,
+        p_channel: channel,
+        p_destination: destination || null,
+        p_client_event_id: createShareEventId(),
+      });
+    } catch {
+      // Sharing is the primary action. Analytics is best-effort and must never
+      // block a message, clipboard action, external share or native share sheet.
+    }
+  };
 
   useEffect(() => {
     if (open && user) {
@@ -87,6 +107,12 @@ export function SharePostDialog({
 
       const conversationIds = participations.map(p => p.conversation_id);
 
+      if (conversationIds.length === 0) {
+        setConversations([]);
+        setIsLoading(false);
+        return;
+      }
+
       const { data: convos } = await supabase
         .from('conversations')
         .select('id, type, name, avatar_url')
@@ -104,7 +130,6 @@ export function SharePostDialog({
       
       for (const convo of convos) {
         if (convo.type === 'private') {
-          // Get other participant
           const { data: participants } = await supabase
             .from('conversation_participants')
             .select('user_id')
@@ -142,6 +167,7 @@ export function SharePostDialog({
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(shareUrl);
+      await trackShare('copy_link', 'clipboard');
       setCopied(true);
       toast.success('Link copied to clipboard');
       setTimeout(() => setCopied(false), 2000);
@@ -164,9 +190,9 @@ export function SharePostDialog({
     setIsSending(true);
     
     try {
-      // Send message to each selected conversation
+      let sentCount = 0;
       for (const conversationId of selectedIds) {
-        await supabase
+        const { error: messageError } = await supabase
           .from('messages')
           .insert({
             conversation_id: conversationId,
@@ -175,14 +201,18 @@ export function SharePostDialog({
             shared_post_id: postId,
           });
 
-        // Update conversation last_message_at
+        if (messageError) throw messageError;
+
         await supabase
           .from('conversations')
           .update({ last_message_at: new Date().toISOString() })
           .eq('id', conversationId);
+
+        sentCount += 1;
+        await trackShare('internal_chat', 'chat');
       }
 
-      toast.success(`Shared to ${selectedIds.length} chat${selectedIds.length > 1 ? 's' : ''}`);
+      toast.success(`Shared to ${sentCount} chat${sentCount !== 1 ? 's' : ''}`);
       setSelectedIds([]);
       onOpenChange(false);
     } catch (error) {
@@ -240,7 +270,6 @@ export function SharePostDialog({
         </TabsList>
 
         <TabsContent value="internal" className="space-y-4 mt-4">
-          {/* Search */}
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
@@ -251,7 +280,6 @@ export function SharePostDialog({
             />
           </div>
 
-          {/* Conversations List */}
           <ScrollArea className="h-64">
             {isLoading ? (
               <div className="flex items-center justify-center h-full">
@@ -309,7 +337,6 @@ export function SharePostDialog({
             )}
           </ScrollArea>
 
-          {/* Send Button */}
           <Button
             onClick={handleSend}
             disabled={selectedIds.length === 0 || isSending}
@@ -325,7 +352,6 @@ export function SharePostDialog({
         </TabsContent>
 
         <TabsContent value="external" className="space-y-4 mt-4">
-          {/* Link Copy */}
           <div className="flex items-center gap-2">
             <div className="relative flex-1">
               <Link2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -349,14 +375,16 @@ export function SharePostDialog({
             </Button>
           </div>
 
-          {/* External Share Buttons */}
           <div className="grid grid-cols-4 gap-2">
             {externalShareOptions.map((option) => (
               <Button
                 key={option.name}
                 variant="ghost"
                 className={`flex flex-col items-center gap-1 h-auto py-3 ${option.color}`}
-                onClick={() => window.open(option.url, '_blank', 'width=600,height=400')}
+                onClick={() => {
+                  const popup = window.open(option.url, '_blank', 'width=600,height=400');
+                  if (popup) void trackShare('external', option.name.toLowerCase());
+                }}
               >
                 <option.icon className="h-5 w-5" />
                 <span className="text-xs">{option.name}</span>
@@ -364,7 +392,6 @@ export function SharePostDialog({
             ))}
           </div>
 
-          {/* Native Share */}
           {navigator.share && (
             <Button 
               variant="default" 
@@ -376,6 +403,7 @@ export function SharePostDialog({
                     text: shareText,
                     url: shareUrl,
                   });
+                  await trackShare('native_share');
                 } catch (err) {
                   if ((err as Error).name !== 'AbortError') {
                     toast.error('Failed to share');
