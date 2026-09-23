@@ -6,6 +6,7 @@ import {
   Check,
   Clock,
   Eye,
+  EyeOff,
   Play,
   SlidersHorizontal,
 } from 'lucide-react';
@@ -51,6 +52,7 @@ interface Post {
   is_pinned?: boolean;
   is_liked?: boolean;
   is_bookmarked?: boolean;
+  profile_hidden_at?: string | null;
   post_kind?: string | null;
   has_poll?: boolean | null;
   created_at: string;
@@ -144,6 +146,13 @@ export function ProfilePostsGrid({
   const { toast } = useToast();
   const [sortMode, setSortMode] = useState<SortMode>('newest');
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
+  const [showHiddenProfilePosts, setShowHiddenProfilePosts] = useState(false);
+  const [profileVisibilityOverrides, setProfileVisibilityOverrides] = useState<Map<string, boolean>>(
+    () => new Map(),
+  );
+  const [profileVisibilityMutations, setProfileVisibilityMutations] = useState<Set<string>>(
+    () => new Set(),
+  );
   const [bookmarkedIds, setBookmarkedIds] = useState<Set<string>>(
     () => new Set(posts.filter((post) => post.is_bookmarked).map((post) => post.id)),
   );
@@ -157,6 +166,59 @@ export function ProfilePostsGrid({
       return next;
     });
   }, [posts]);
+
+  const resolvePostUserId = useCallback(
+    (post: Post) => post.user_id || post.profile?.id || (isOwnProfile ? user?.id : null) || null,
+    [isOwnProfile, user?.id],
+  );
+
+  const belongsToRenderedProfile = useCallback((post: Post) => {
+    const postUserId = resolvePostUserId(post);
+
+    if (isOwnProfile && user?.id) {
+      return !postUserId || postUserId === user.id;
+    }
+    if (profile.id && postUserId) return profile.id === postUserId;
+    if (profile.username && post.profile?.username) {
+      return profile.username === post.profile.username;
+    }
+    return true;
+  }, [isOwnProfile, profile.id, profile.username, resolvePostUserId, user?.id]);
+
+  const isPostProfileHidden = useCallback((post: Post) => {
+    const override = profileVisibilityOverrides.get(post.id);
+    return override ?? Boolean(post.profile_hidden_at);
+  }, [profileVisibilityOverrides]);
+
+  const renderedProfilePosts = useMemo(
+    () => posts.filter((post) => belongsToRenderedProfile(post)),
+    [belongsToRenderedProfile, posts],
+  );
+
+  const hiddenProfilePostsCount = useMemo(
+    () => renderedProfilePosts.filter((post) => isPostProfileHidden(post)).length,
+    [isPostProfileHidden, renderedProfilePosts],
+  );
+
+  const canManageProfileVisibility = Boolean(isOwnProfile && user?.id && renderedProfilePosts.length > 0);
+
+  const displayPosts = useMemo(() => {
+    if (canManageProfileVisibility && showHiddenProfilePosts) {
+      return renderedProfilePosts.filter((post) => isPostProfileHidden(post));
+    }
+
+    return posts.filter((post) => {
+      if (!belongsToRenderedProfile(post)) return true;
+      return !isPostProfileHidden(post);
+    });
+  }, [
+    belongsToRenderedProfile,
+    canManageProfileVisibility,
+    isPostProfileHidden,
+    posts,
+    renderedProfilePosts,
+    showHiddenProfilePosts,
+  ]);
 
   const sortLabels: Record<SortMode, string> = {
     newest: t('profile.sort.newest', { defaultValue: 'Yangidan eskiga' }),
@@ -173,7 +235,7 @@ export function ProfilePostsGrid({
   };
 
   const sortedPosts = useMemo(() => {
-    const list = [...posts];
+    const list = [...displayPosts];
     const views = (post: Post) => post.views_count ?? 0;
     const time = (post: Post) => new Date(post.created_at).getTime();
 
@@ -194,10 +256,81 @@ export function ProfilePostsGrid({
     });
 
     return list;
-  }, [posts, sortMode]);
+  }, [displayPosts, sortMode]);
 
   const postIds = useMemo(() => sortedPosts.map((post) => post.id), [sortedPosts]);
   const { getPostCounts } = useRealtimePostCounts(postIds, user?.id || null);
+
+  const toggleProfileVisibility = useCallback(async (post: Post) => {
+    const postUserId = resolvePostUserId(post);
+    if (!user?.id || !isOwnProfile || postUserId !== user.id) return;
+    if (profileVisibilityMutations.has(post.id)) return;
+
+    const wasHidden = isPostProfileHidden(post);
+    const nextHidden = !wasHidden;
+    const hiddenAt = nextHidden ? new Date().toISOString() : null;
+
+    setProfileVisibilityMutations((current) => {
+      const next = new Set(current);
+      next.add(post.id);
+      return next;
+    });
+    setProfileVisibilityOverrides((current) => {
+      const next = new Map(current);
+      next.set(post.id, nextHidden);
+      return next;
+    });
+
+    try {
+      const result = await db
+        .from('posts')
+        .update({ profile_hidden_at: hiddenAt })
+        .eq('id', post.id)
+        .eq('user_id', user.id);
+
+      if (result.error) throw result.error;
+
+      setSelectedPost((current) =>
+        current?.id === post.id
+          ? { ...current, profile_hidden_at: hiddenAt }
+          : current,
+      );
+
+      toast({
+        title: nextHidden ? 'Post profildan yashirildi' : 'Post profilga qaytarildi',
+        description: nextHidden
+          ? 'Post o‘chirilmagan. Uni Yashirilgan bo‘limidan istalgan payt qaytarishingiz mumkin.'
+          : 'Post yana profilingizda ko‘rinadi.',
+      });
+    } catch (error) {
+      setProfileVisibilityOverrides((current) => {
+        const next = new Map(current);
+        next.set(post.id, wasHidden);
+        return next;
+      });
+      console.error('Profile post visibility update failed', error);
+      toast({
+        title: t('common.error', { defaultValue: 'Xatolik' }),
+        description: 'Post ko‘rinishini yangilab bo‘lmadi',
+        variant: 'destructive',
+      });
+      throw error;
+    } finally {
+      setProfileVisibilityMutations((current) => {
+        const next = new Set(current);
+        next.delete(post.id);
+        return next;
+      });
+    }
+  }, [
+    isOwnProfile,
+    isPostProfileHidden,
+    profileVisibilityMutations,
+    resolvePostUserId,
+    t,
+    toast,
+    user?.id,
+  ]);
 
   const toggleBookmark = async (postId: string) => {
     if (!user?.id) {
@@ -264,7 +397,7 @@ export function ProfilePostsGrid({
   const ActiveSortIcon = sortIcons[sortMode];
 
   const toolbar = (
-    <div className="mb-4 flex items-center">
+    <div className="mb-4 flex items-center justify-between gap-2">
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="outline" size="sm" className="h-9 gap-2 rounded-full" disabled={isLoading}>
@@ -288,6 +421,25 @@ export function ProfilePostsGrid({
           })}
         </DropdownMenuContent>
       </DropdownMenu>
+
+      {canManageProfileVisibility && (
+        <Button
+          type="button"
+          variant={showHiddenProfilePosts ? 'secondary' : 'outline'}
+          size="sm"
+          className="h-9 gap-2 rounded-full"
+          onClick={() => setShowHiddenProfilePosts((current) => !current)}
+          aria-pressed={showHiddenProfilePosts}
+        >
+          {showHiddenProfilePosts ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+          <span className="hidden sm:inline">
+            {showHiddenProfilePosts ? 'Postlar' : 'Yashirilgan'}
+          </span>
+          <span className="min-w-5 rounded-full bg-muted px-1.5 text-[11px] font-semibold tabular-nums">
+            {hiddenProfilePostsCount}
+          </span>
+        </Button>
+      )}
     </div>
   );
 
@@ -302,41 +454,80 @@ export function ProfilePostsGrid({
 
   if (posts.length === 0) return null;
 
+  const emptyVisibleState = sortedPosts.length === 0;
+
   return (
     <div>
       {toolbar}
 
-      {layout === 'reels-grid' ? (
+      {emptyVisibleState ? (
+        <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border/70 bg-muted/10 px-6 py-14 text-center text-muted-foreground">
+          {showHiddenProfilePosts ? (
+            <EyeOff className="mb-3 h-10 w-10 opacity-55" />
+          ) : (
+            <Eye className="mb-3 h-10 w-10 opacity-55" />
+          )}
+          <p className="text-sm font-semibold text-foreground">
+            {showHiddenProfilePosts ? 'Yashirilgan postlar yo‘q' : 'Ko‘rinadigan postlar yo‘q'}
+          </p>
+          <p className="mt-1 max-w-sm text-xs leading-relaxed">
+            {showHiddenProfilePosts
+              ? 'Profildan yashirgan postlaringiz shu yerda paydo bo‘ladi va ularni istalgan payt qaytarish mumkin.'
+              : 'Bu profil uchun ko‘rsatiladigan postlar hozircha yo‘q.'}
+          </p>
+        </div>
+      ) : layout === 'reels-grid' ? (
         <div className="grid grid-cols-3 gap-[2px] sm:gap-1.5">
           {sortedPosts.map((post) => {
             const mediaUrl = post.media_urls?.[0] || '';
             const counts = getPostCounts(post.id);
+            const postUserId = resolvePostUserId(post);
+            const canManageThisPost = Boolean(isOwnProfile && user?.id && postUserId === user.id);
+            const profileHidden = isPostProfileHidden(post);
+            const mutationPending = profileVisibilityMutations.has(post.id);
 
             return (
-              <button
-                key={post.id}
-                type="button"
-                onClick={() => setSelectedPost(post)}
-                className="group relative aspect-[3/4] overflow-hidden bg-black text-left outline-none ring-ring/40 focus-visible:ring-2 sm:rounded-lg"
-              >
-                {mediaUrl ? (
-                  <video
-                    src={mediaUrl}
-                    className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.025]"
-                    muted
-                    playsInline
-                    preload="metadata"
-                  />
-                ) : (
-                  <div className="h-full w-full bg-muted" />
-                )}
+              <div key={post.id} className="group relative aspect-[3/4] overflow-hidden bg-black sm:rounded-lg">
+                <button
+                  type="button"
+                  onClick={() => setSelectedPost(post)}
+                  className="absolute inset-0 h-full w-full text-left outline-none ring-ring/40 focus-visible:ring-2"
+                >
+                  {mediaUrl ? (
+                    <video
+                      src={mediaUrl}
+                      className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.025]"
+                      muted
+                      playsInline
+                      preload="metadata"
+                    />
+                  ) : (
+                    <div className="h-full w-full bg-muted" />
+                  )}
 
-                <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/55 via-transparent to-black/10" />
-                <span className="pointer-events-none absolute bottom-2 left-2 flex items-center gap-1 text-[11px] font-semibold text-white drop-shadow-sm sm:text-xs">
-                  <Play className="h-3.5 w-3.5 fill-current" />
-                  {formatCompactCount(counts.views_count)}
-                </span>
-              </button>
+                  <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/55 via-transparent to-black/10" />
+                  <span className="pointer-events-none absolute bottom-2 left-2 flex items-center gap-1 text-[11px] font-semibold text-white drop-shadow-sm sm:text-xs">
+                    <Play className="h-3.5 w-3.5 fill-current" />
+                    {formatCompactCount(counts.views_count)}
+                  </span>
+                </button>
+
+                {canManageThisPost && (
+                  <button
+                    type="button"
+                    disabled={mutationPending}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      void toggleProfileVisibility(post);
+                    }}
+                    aria-label={profileHidden ? 'Profilga qaytarish' : 'Profildan yashirish'}
+                    title={profileHidden ? 'Profilga qaytarish' : 'Profildan yashirish'}
+                    className="absolute right-2 top-2 z-20 flex h-8 w-8 items-center justify-center rounded-full bg-black/55 text-white ring-1 ring-white/15 backdrop-blur transition hover:bg-black/75 active:scale-90 disabled:opacity-50"
+                  >
+                    {profileHidden ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+                  </button>
+                )}
+              </div>
             );
           })}
         </div>
@@ -348,8 +539,10 @@ export function ProfilePostsGrid({
               is_verified:
                 profile.is_verified ?? (isOwnProfile ? Boolean(authProfile?.is_verified) : false),
             };
-            const postUserId = post.user_id || post.profile?.id || (isOwnProfile ? user?.id : null) || '';
+            const postUserId = resolvePostUserId(post) || '';
             const isBookmarked = bookmarkedIds.has(post.id);
+            const canManageThisPost = Boolean(isOwnProfile && user?.id && postUserId === user.id);
+            const profileHidden = isPostProfileHidden(post);
             const canonicalPost: FeedPostCardPost = {
               ...post,
               user_id: postUserId,
@@ -358,6 +551,7 @@ export function ProfilePostsGrid({
               shares_count: post.shares_count ?? 0,
               views_count: post.views_count ?? 0,
               is_bookmarked: isBookmarked,
+              profile_hidden_at: profileHidden ? (post.profile_hidden_at || new Date(0).toISOString()) : null,
               profile: {
                 id: author.id || postUserId,
                 username: author.username,
@@ -377,7 +571,11 @@ export function ProfilePostsGrid({
                 onDelete={onDelete ? () => void onDelete(post.id) : undefined}
                 onPin={onPin ? () => void onPin(post.id) : undefined}
                 onBookmark={() => toggleBookmark(post.id)}
-                isOwner={Boolean(isOwnProfile && postUserId === user?.id)}
+                isProfileHidden={profileHidden}
+                onToggleProfileVisibility={
+                  canManageThisPost ? () => toggleProfileVisibility(post) : undefined
+                }
+                isOwner={canManageThisPost}
               />
             );
           })}
@@ -391,7 +589,7 @@ export function ProfilePostsGrid({
           open={Boolean(selectedPost)}
           onOpenChange={(open) => !open && setSelectedPost(null)}
           onLike={() => void handleLike(selectedPost)}
-          isOwnProfile={Boolean(isOwnProfile && (selectedPost.user_id || user?.id) === user?.id)}
+          isOwnProfile={Boolean(isOwnProfile && resolvePostUserId(selectedPost) === user?.id)}
         />
       )}
     </div>
