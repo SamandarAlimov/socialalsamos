@@ -78,6 +78,23 @@ describe('profile post layouts', () => {
     expect(storyAvatar).toContain('else if (onClick)');
   });
 
+  it('renders profile photos as an immersive fullscreen viewer instead of a card modal', () => {
+    const photoViewer = source('components/profile/ProfilePhotosDialog.tsx');
+
+    expect(photoViewer).toContain('hideDefaultClose');
+    expect(photoViewer).toContain('!h-[100dvh]');
+    expect(photoViewer).toContain('!w-screen');
+    expect(photoViewer).toContain('!max-w-none');
+    expect(photoViewer).toContain('sm:rounded-none');
+    expect(photoViewer).toContain('env(safe-area-inset-top)');
+    expect(photoViewer).toContain('env(safe-area-inset-bottom)');
+    expect(photoViewer).toContain('max-h-full max-w-full select-none object-contain');
+    expect(photoViewer).toContain('bg-black/45 p-1.5 shadow-2xl backdrop-blur-2xl');
+    expect(photoViewer).toContain("defaultValue: 'Rasm o‘chirilsinmi?'");
+    expect(photoViewer).not.toContain('max-w-3xl');
+    expect(photoViewer).not.toContain('min-h-[50vh]');
+  });
+
   it('keeps own and viewed profiles on one shared premium identity layout', () => {
     const ownProfile = source('pages/ProfilePage.tsx');
     const userProfile = source('pages/UserProfilePage.tsx');
