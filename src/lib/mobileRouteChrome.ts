@@ -28,6 +28,10 @@ export function getMobileChromeMode(pathname: string): MobileChromeMode {
     return 'immersive';
   }
 
+  // The profile cover editor owns a minimal premium header and its sticky save
+  // action. Shell chrome would duplicate the back row and steal scroll space.
+  if (path === '/profile/cover') return 'immersive';
+
   // Settings landing and detail pages render their own titles/back controls.
   // Adding the shell MobileBackHeader here creates the duplicate top "Orqaga"
   // row on mobile and also adds unnecessary top padding.
@@ -65,6 +69,7 @@ export function getMobileChromeMode(pathname: string): MobileChromeMode {
 export function getMobileBackFallback(pathname: string): string {
   const path = normalizePath(pathname);
 
+  if (path === '/profile/cover') return '/profile';
   if (path.startsWith('/settings/')) return '/settings';
   if (path.startsWith('/ads/')) return '/ads';
   if (path.startsWith('/marketplace/product/')) return '/marketplace';
