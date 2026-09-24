@@ -34,6 +34,16 @@ describe('profile post layouts', () => {
     expect(userProfile).toContain('layout="feed"');
   });
 
+  it('renders a real preview frame for profile videos instead of a metadata-only black tile', () => {
+    const profilePosts = source('components/profile/ProfilePostsGrid.tsx');
+
+    expect(profilePosts).toContain('poster={post.thumbnail_url || undefined}');
+    expect(profilePosts).toContain('preload="auto"');
+    expect(profilePosts).toContain('onLoadedMetadata');
+    expect(profilePosts).toContain('video.currentTime = previewTime');
+    expect(profilePosts).not.toContain('preload="metadata"');
+  });
+
   it('keeps own and viewed profiles on one shared premium identity layout', () => {
     const ownProfile = source('pages/ProfilePage.tsx');
     const userProfile = source('pages/UserProfilePage.tsx');
