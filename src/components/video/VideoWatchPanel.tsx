@@ -14,7 +14,7 @@ import {
   Volume2,
   VolumeX,
 } from 'lucide-react';
-import { formatDistanceToNow } from 'date-fns';
+import { formatPostDateTime } from '@/lib/postDateTime';
 
 import { Button } from '@/components/ui/button';
 import { StoryAvatar } from '@/components/stories/StoryAvatar';
@@ -911,7 +911,7 @@ export function VideoWatchPanel({
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-background text-foreground lg:hidden">
             <div className="px-4 pt-4">
               <h1 className="text-base font-semibold leading-snug">{title}</h1>
-              <p className="mt-1 text-xs text-muted-foreground">{formatCompactNumber(video.views_count || 0)} ko‘rish · {formatDistanceToNow(new Date(video.created_at), { addSuffix: true })}</p>
+              <p className="mt-1 text-xs text-muted-foreground">{formatCompactNumber(video.views_count || 0)} ko‘rish · {formatPostDateTime(video.created_at)}</p>
               <div className="mt-3 flex items-center gap-2.5">
                 <button type="button" onClick={() => onOpenProfile(video)} className="flex min-w-0 flex-1 items-center gap-2.5 text-left"><StoryAvatar userId={video.user_id} avatarUrl={video.profile?.avatar_url} username={video.profile?.username} size="sm" /><span className="flex min-w-0 items-center gap-1"><span className="truncate text-sm font-semibold">@{video.profile?.username || 'user'}</span>{video.profile?.is_verified && <VerifiedBadge size="xs" />}</span></button>
                 {!isOwnVideo && <button type="button" onClick={() => onFollow(video.user_id)} className={cn('h-8 rounded-full px-3 text-xs font-semibold', video.is_following ? 'border border-border' : 'bg-foreground text-background')}>{video.is_following ? 'Kuzatilmoqda' : 'Kuzatish'}</button>}

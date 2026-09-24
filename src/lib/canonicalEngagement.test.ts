@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { formatPostDateTime } from './postDateTime';
 
 function source(path: string) {
   return readFileSync(resolve(process.cwd(), 'src', path), 'utf8');
@@ -77,5 +78,30 @@ describe('canonical public engagement counters', () => {
     expect(realtime).toContain('window.addEventListener(POST_LIKE_OPTIMISTIC_EVENT');
     expect(home).toContain('await togglePostLike(postId, user.id, wasLiked)');
     expect(videos).toContain('await togglePostLike(postId, userId, wasLiked)');
+  });
+});
+
+
+describe('canonical post timestamps', () => {
+  it('renders the requested full post date and time shape', () => {
+    expect(formatPostDateTime(new Date(2026, 8, 13, 16, 57))).toBe('13 Sep 2026, 16:57');
+    expect(formatPostDateTime('not-a-date')).toBe('—');
+  });
+
+  it('uses one canonical formatter across public post surfaces', () => {
+    const home = source('pages/HomePage.tsx');
+    const card = source('components/posts/FeedPostCard.tsx');
+    const modal = source('components/PostViewModal.tsx');
+    const channel = source('components/channels/ChannelView.tsx');
+    const video = source('components/video/VideoWatchPanel.tsx');
+
+    expect(home).toContain('const formatPostTime = formatPostDateTime;');
+    expect(card).toContain('formatPostDateTime(post.created_at)');
+    expect(modal).toContain('formatPostDateTime(post.created_at)');
+    expect(channel).toContain('formatPostDateTime(post.created_at)');
+    expect(video).toContain('formatPostDateTime(video.created_at)');
+    expect(home).not.toContain("' ago'");
+    expect(channel).not.toContain('formatDistanceToNow(new Date(post.created_at)');
+    expect(video).not.toContain('formatDistanceToNow(new Date(video.created_at)');
   });
 });

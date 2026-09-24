@@ -10,7 +10,7 @@ import { useStoryViews } from '@/hooks/useRealtimeCounts';
 import { useRealtimePostCounts } from '@/hooks/useRealtimePostCounts';
 import { useLiveStreams } from '@/hooks/useLiveStream';
 import { cn } from '@/lib/utils';
-import { format, formatDistanceToNow } from 'date-fns';
+import { formatPostDateTime } from '@/lib/postDateTime';
 import { CreatePostForm } from '@/components/CreatePostForm';
 import { VideoCommentsSheet } from '@/components/VideoCommentsSheet';
 import { PostActionsMenu } from '@/components/PostActionsMenu';
@@ -187,16 +187,7 @@ export default function HomePage() {
     };
   }, [hasMore, isLoading, loadMore]);
 
-  const formatPostTime = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffInHours = (now.getTime() - date.getTime()) / (1000 * 60 * 60);
-    
-    if (diffInHours < 24) {
-      return formatDistanceToNow(date, { addSuffix: false }) + ' ago';
-    }
-    return format(date, 'MMM d');
-  };
+  const formatPostTime = formatPostDateTime;
 
   const openStory = (group: StoryGroup) => {
     setActiveStoryGroup(group);

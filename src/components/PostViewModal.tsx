@@ -23,7 +23,7 @@ import { Button } from '@/components/ui/button';
 import { UserName } from '@/components/UserName';
 import { useRealtimeCounts } from '@/hooks/useRealtimeCounts';
 import { cn } from '@/lib/utils';
-import { format } from 'date-fns';
+import { formatPostDateTime } from '@/lib/postDateTime';
 import { useTranslation } from 'react-i18next';
 import { PollDisplay, parsePollFromContent } from '@/components/PollDisplay';
 import { RichText } from '@/components/RichText';
@@ -296,9 +296,9 @@ export function PostViewModal({
           />
           <PostCollaboratorByline postId={post.id} isOwner={isOwnProfile} className="text-sm" />
         </div>
-        <p className="truncate text-xs text-muted-foreground">
+        <p className="text-xs leading-snug text-muted-foreground">
           {profile.username ? `@${profile.username} · ` : ''}
-          {format(new Date(post.created_at), 'd MMM yyyy, HH:mm')}
+          {formatPostDateTime(post.created_at)}
         </p>
       </div>
     </div>

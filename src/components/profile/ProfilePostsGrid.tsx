@@ -10,7 +10,6 @@ import {
   Play,
   SlidersHorizontal,
 } from 'lucide-react';
-import { format, formatDistanceToNow } from 'date-fns';
 import { useAuth } from '@/contexts/AuthContext';
 import { FeedPostCard, type FeedPostCardPost } from '@/components/posts/FeedPostCard';
 import { PostMediaThumbnail } from '@/components/PostMediaThumbnail';
@@ -82,18 +81,6 @@ interface ProfilePostsGridProps {
 }
 
 type SortMode = 'newest' | 'oldest' | 'most_viewed' | 'least_viewed';
-
-/** Home bilan aynan bir xil vaqt ko‘rinishi. */
-function formatFeedPostTime(dateString: string) {
-  const date = new Date(dateString);
-  const now = new Date();
-  const diffInHours = (now.getTime() - date.getTime()) / (1000 * 60 * 60);
-
-  if (diffInHours < 24) {
-    return formatDistanceToNow(date, { addSuffix: false }) + ' ago';
-  }
-  return format(date, 'MMM d');
-}
 
 function ReelsGridSkeleton() {
   return (
@@ -603,7 +590,6 @@ export function ProfilePostsGrid({
                 key={post.id}
                 post={canonicalPost}
                 onLike={() => void handleLike(post)}
-                formatTime={formatFeedPostTime}
                 realtimeCounts={getPostCounts(post.id)}
                 onDelete={onDelete ? () => void onDelete(post.id) : undefined}
                 onPin={onPin ? () => void onPin(post.id) : undefined}

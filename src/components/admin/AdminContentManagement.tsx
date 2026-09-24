@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { format } from 'date-fns';
 import {
   Eye,
   FileText,
@@ -60,6 +59,7 @@ import {
 } from '@/components/ui/table';
 import { supabase } from '@/integrations/supabase/client';
 import { PROFILE_PUBLIC_COLUMNS } from '@/lib/profileFields';
+import { formatPostDateTime } from '@/lib/postDateTime';
 
 type ContentTab = 'posts' | 'comments' | 'users';
 
@@ -123,11 +123,7 @@ function initials(profile?: {
 }
 
 function dateTime(value: string) {
-  try {
-    return format(new Date(value), 'dd.MM.yyyy HH:mm');
-  } catch {
-    return '—';
-  }
+  return formatPostDateTime(value);
 }
 
 function mediaIcon(type: string | null) {
