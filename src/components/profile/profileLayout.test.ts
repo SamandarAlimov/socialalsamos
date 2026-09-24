@@ -95,15 +95,23 @@ describe('profile post layouts', () => {
     expect(photoViewer).not.toContain('min-h-[50vh]');
   });
 
-  it('dismisses the fullscreen profile photo viewer with a vertical swipe in either direction', () => {
+  it('makes vertical dismiss interactive, proportional, and reversible before release', () => {
     const photoViewer = source('components/profile/ProfilePhotosDialog.tsx');
+    const dialog = source('components/ui/dialog.tsx');
 
-    expect(photoViewer).toContain('SWIPE_DISMISS_THRESHOLD_PX = 72');
-    expect(photoViewer).toContain('absY > absX * SWIPE_AXIS_DOMINANCE');
-    expect(photoViewer).toContain('onOpenChange(false);');
-    expect(photoViewer).toContain('onTouchCancel={resetTouchGesture}');
-    expect(photoViewer).toContain('touch-none');
-    expect(photoViewer).toContain('total < 2 ||');
+    expect(photoViewer).toContain('DRAG_DISMISS_DISTANCE_PX = 120');
+    expect(photoViewer).toContain('DRAG_DISMISS_VELOCITY_PX_MS = 0.65');
+    expect(photoViewer).toContain('setDragY(deltaY)');
+    expect(photoViewer).toContain('translate3d(0, ${dragY}px, 0) scale(${dragScale})');
+    expect(photoViewer).toContain('const dragScale = 1 - dragProgress * DRAG_MAX_SCALE_REDUCTION');
+    expect(photoViewer).toContain('const verticalVelocity = Math.abs(deltaY) / elapsedMs');
+    expect(photoViewer).toContain('animateDismiss(deltaY < 0 ? -1 : 1)');
+    expect(photoViewer).toContain('springBack()');
+    expect(photoViewer).toContain('onPointerMove={handlePointerMove}');
+    expect(photoViewer).toContain('overlayStyle={{');
+    expect(photoViewer).toContain('backgroundColor: `rgba(0, 0, 0, ${overlayOpacity})`');
+    expect(dialog).toContain('overlayStyle?: React.CSSProperties');
+    expect(dialog).toContain('<DialogOverlay className={overlayClassName} style={overlayStyle} />');
   });
 
   it('keeps own and viewed profiles on one shared premium identity layout', () => {
