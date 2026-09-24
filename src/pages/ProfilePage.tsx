@@ -237,9 +237,9 @@ export default function ProfilePage() {
         actions={
           <>
             <Button
-              variant="default"
+              variant="outline"
               size="sm"
-              className="h-9 rounded-xl px-4 md:h-10"
+              className="h-9 rounded-xl border-border bg-muted/60 px-4 text-foreground shadow-none hover:bg-muted md:h-10"
               onClick={() => navigate('/settings')}
             >
               <Edit3 className="mr-1.5 h-4 w-4" />
