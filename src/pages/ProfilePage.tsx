@@ -22,6 +22,13 @@ import {
 
 import { FollowersFollowingDialog } from '@/components/FollowersFollowingDialog';
 import { PullToRefresh } from '@/components/PullToRefresh';
+import { ProfileCoverPickerDialog } from '@/components/profile/ProfileCoverPickerDialog';
+import { ProfileHeader } from '@/components/profile/ProfileHeader';
+import { ProfilePhotosDialog } from '@/components/profile/ProfilePhotosDialog';
+import { ProfilePostsGrid } from '@/components/profile/ProfilePostsGrid';
+import { ProfileQrDialog } from '@/components/profile/ProfileQrDialog';
+import { SavedPostsPanel } from '@/components/profile/SavedPostsPanel';
+import { StoryHighlights } from '@/components/stories/StoryHighlights';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -31,20 +38,18 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ProfileHeader } from '@/components/profile/ProfileHeader';
-import { ProfilePhotosDialog } from '@/components/profile/ProfilePhotosDialog';
-import { ProfilePostsGrid } from '@/components/profile/ProfilePostsGrid';
-import { ProfileQrDialog } from '@/components/profile/ProfileQrDialog';
-import { SavedPostsPanel } from '@/components/profile/SavedPostsPanel';
-import { StoryHighlights } from '@/components/stories/StoryHighlights';
 import { useAuth } from '@/contexts/AuthContext';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useUserReposts } from '@/hooks/useReposts';
 import { useUserProfile } from '@/hooks/useUserProfile';
 import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/integrations/supabase/client';
+import { db } from '@/lib/db';
 import { formatLocation } from '@/lib/locations';
 import { uploadMedia } from '@/lib/mediaUpload';
+import {
+  DEFAULT_PROFILE_COVER_PRESET,
+  type ProfileCoverPresetId,
+} from '@/lib/profileCovers';
 
 const DATE_LOCALES = {
   uz: uzDateLocale,
@@ -62,6 +67,8 @@ export default function ProfilePage() {
   const navigate = useNavigate();
   const coverInputRef = useRef<HTMLInputElement>(null);
   const [uploadingCover, setUploadingCover] = useState(false);
+  const [savingCoverPreset, setSavingCoverPreset] = useState(false);
+  const [showCoverPicker, setShowCoverPicker] = useState(false);
   const [activeTab, setActiveTab] = useState<ProfileTab>('posts');
   const [followDialog, setFollowDialog] = useState<{ open: boolean; type: 'followers' | 'following' }>({
     open: false,
@@ -110,14 +117,18 @@ export default function ProfilePage() {
     setUploadingCover(true);
     try {
       const uploaded = await uploadMedia(file, { type: 'avatar', visibility: 'public' });
-      const { error } = await supabase
+      const { error } = await db
         .from('profiles')
-        .update({ cover_url: uploaded.url })
+        .update({ cover_url: uploaded.url, cover_preset: null })
         .eq('id', user.id);
       if (error) throw error;
 
-      toast({ title: t('common.success'), description: t('profile.coverUpdated') });
+      toast({
+        title: t('common.success'),
+        description: t('profile.coverUpdated', { defaultValue: 'Muqova yangilandi' }),
+      });
       refresh?.();
+      setShowCoverPicker(false);
     } catch (error: any) {
       toast({
         title: t('common.error'),
@@ -130,6 +141,37 @@ export default function ProfilePage() {
     }
   };
 
+  const handleApplyCoverPreset = async (presetId: ProfileCoverPresetId) => {
+    if (!user) return;
+
+    setSavingCoverPreset(true);
+    try {
+      const { error } = await db
+        .from('profiles')
+        .update({
+          cover_url: null,
+          cover_preset: presetId === DEFAULT_PROFILE_COVER_PRESET ? null : presetId,
+        })
+        .eq('id', user.id);
+      if (error) throw error;
+
+      toast({
+        title: t('common.success'),
+        description: t('profile.coverPicker.applied', { defaultValue: 'Muqova dizayni qo‘llandi' }),
+      });
+      refresh?.();
+      setShowCoverPicker(false);
+    } catch (error: any) {
+      toast({
+        title: t('common.error'),
+        description: error?.message || t('profile.coverPicker.applyFailed', { defaultValue: 'Muqovani yangilab bo‘lmadi' }),
+        variant: 'destructive',
+      });
+    } finally {
+      setSavingCoverPreset(false);
+    }
+  };
+
   const handleRefresh = useCallback(async () => {
     refresh?.();
     refreshReposts();
@@ -139,7 +181,7 @@ export default function ProfilePage() {
   if (isLoading) {
     return (
       <div className="mx-auto max-w-4xl px-3 py-4 md:px-4 md:py-8">
-        <Skeleton className="mb-12 h-36 rounded-xl sm:mb-16 sm:h-48 md:h-64 md:rounded-2xl" />
+        <Skeleton className="mb-12 h-36 rounded-[24px] sm:mb-16 sm:h-48 md:h-64 md:rounded-[30px]" />
         <div className="-mt-12 flex items-center gap-3 px-2 sm:-mt-16 md:-mt-24 md:px-4">
           <Skeleton className="h-20 w-20 rounded-full sm:h-24 sm:w-24 md:h-28 md:w-28" />
           <div className="min-w-0 flex-1 space-y-2">
@@ -224,12 +266,14 @@ export default function ProfilePage() {
             />
             <button
               type="button"
-              onClick={() => coverInputRef.current?.click()}
-              disabled={uploadingCover}
-              className="absolute bottom-3 right-3 flex items-center gap-1.5 rounded-full bg-black/60 px-3 py-1.5 text-xs font-medium text-white shadow-sm backdrop-blur-sm transition-opacity hover:bg-black/70 disabled:opacity-60"
+              onClick={() => setShowCoverPicker(true)}
+              disabled={uploadingCover || savingCoverPreset}
+              className="absolute bottom-3 right-3 flex h-9 items-center gap-1.5 rounded-full border border-white/15 bg-black/45 px-3 text-xs font-medium text-white shadow-lg backdrop-blur-xl transition hover:bg-black/60 active:scale-[0.98] disabled:opacity-60 sm:h-10 sm:px-4 sm:text-sm"
             >
               {uploadingCover ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Camera className="h-3.5 w-3.5" />}
-              {uploadingCover ? t('common.uploading') : t('profile.changeCover')}
+              {uploadingCover
+                ? t('common.uploading')
+                : t('profile.changeCover', { defaultValue: 'Muqovani o‘zgartirish' })}
             </button>
           </>
         }
@@ -353,6 +397,17 @@ export default function ProfilePage() {
         username={profile.username}
         displayName={profile.display_name}
         avatarUrl={profile.avatar_url}
+      />
+
+      <ProfileCoverPickerDialog
+        open={showCoverPicker}
+        onOpenChange={setShowCoverPicker}
+        coverUrl={profile.cover_url}
+        coverPreset={profile.cover_preset}
+        saving={savingCoverPreset}
+        uploading={uploadingCover}
+        onApplyPreset={handleApplyCoverPreset}
+        onUploadClick={() => coverInputRef.current?.click()}
       />
 
       <ProfilePhotosDialog
