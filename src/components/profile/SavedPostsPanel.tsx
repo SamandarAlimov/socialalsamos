@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Bookmark, FolderPlus, Loader2, Plus, Settings2, Trash2 } from 'lucide-react';
+import { Bookmark, FolderPlus, Loader2, Plus, Settings2, Trash2, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { ProfilePostsGrid } from '@/components/profile/ProfilePostsGrid';
@@ -13,6 +13,13 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
 import { useSavedPostPlaylists } from '@/hooks/useSavedPostPlaylists';
@@ -27,6 +34,8 @@ interface SavedPostsPanelProps {
     is_verified?: boolean | null;
   };
 }
+
+const PLAYLIST_NAME_SUGGESTIONS = ['G‘oyalar', 'Marketing', 'Keyin ko‘raman'];
 
 function getErrorMessage(error: unknown, fallback: string) {
   const value = error as { code?: string; message?: string } | null;
@@ -81,15 +90,36 @@ export function SavedPostsPanel({ isOwnProfile, profile }: SavedPostsPanelProps)
     return allSavedPosts.filter((post) => ids.has(post.id));
   }, [allSavedPosts, playlistPostIds, selectedPlaylist]);
 
+  const trimmedPlaylistName = newPlaylistName.trim();
+  const isReservedPlaylistName = trimmedPlaylistName.toLocaleLowerCase() === 'saved';
+  const canCreatePlaylist = Boolean(trimmedPlaylistName && !isReservedPlaylistName && !saving);
+
+  const playlistNameSuggestions = useMemo(
+    () =>
+      PLAYLIST_NAME_SUGGESTIONS.filter(
+        (suggestion) =>
+          !playlists.some(
+            (playlist) => playlist.name.trim().toLocaleLowerCase() === suggestion.toLocaleLowerCase(),
+          ),
+      ),
+    [playlists],
+  );
+
   const openManageDialog = () => {
     if (!selectedPlaylist || selectedPlaylist.is_default) return;
     setDraftPostIds(new Set(playlistPostIds[selectedPlaylist.id] ?? []));
     setManageOpen(true);
   };
 
+  const handleCreateOpenChange = (open: boolean) => {
+    if (!open && saving) return;
+    setCreateOpen(open);
+    if (!open) setNewPlaylistName('');
+  };
+
   const handleCreatePlaylist = async () => {
     const name = newPlaylistName.trim();
-    if (!name) return;
+    if (!name || name.toLocaleLowerCase() === 'saved') return;
 
     setSaving(true);
     try {
@@ -208,7 +238,10 @@ export function SavedPostsPanel({ isOwnProfile, profile }: SavedPostsPanelProps)
               variant="outline"
               size="sm"
               className="h-9 rounded-full px-3"
-              onClick={() => setCreateOpen(true)}
+              onClick={() => {
+                setNewPlaylistName('');
+                setCreateOpen(true);
+              }}
             >
               <Plus className="mr-1.5 h-4 w-4" />
               Playlist
@@ -284,35 +317,105 @@ export function SavedPostsPanel({ isOwnProfile, profile }: SavedPostsPanelProps)
         />
       )}
 
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Yangi saved playlist</DialogTitle>
-            <DialogDescription>
-              Saved postlaringizni alohida mavzu yoki maqsad bo‘yicha guruhlang.
-            </DialogDescription>
-          </DialogHeader>
-          <Input
-            value={newPlaylistName}
-            onChange={(event) => setNewPlaylistName(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter' && newPlaylistName.trim()) void handleCreatePlaylist();
-            }}
-            maxLength={80}
-            placeholder="Masalan: Marketing g‘oyalari"
-            autoFocus
-          />
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setCreateOpen(false)} disabled={saving}>
-              Bekor qilish
+      <Sheet open={createOpen} onOpenChange={handleCreateOpenChange}>
+        <SheetContent
+          side="bottom"
+          hideDefaultClose
+          overlayClassName="bg-black/60 backdrop-blur-[2px]"
+          className="mx-auto w-full max-w-lg gap-0 rounded-t-[30px] border-x border-t border-border/60 bg-background p-0 pb-safe shadow-2xl sm:bottom-5 sm:rounded-[28px] sm:border"
+        >
+          <div className="mx-auto mt-2.5 h-1.5 w-10 rounded-full bg-muted-foreground/20 sm:hidden" />
+
+          <div className="px-5 pb-5 pt-4 sm:px-6 sm:pb-6 sm:pt-6">
+            <SheetHeader className="relative pr-11 text-left">
+              <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                <FolderPlus className="h-5 w-5" />
+              </div>
+              <SheetTitle className="text-[22px] font-semibold tracking-tight">Yangi playlist</SheetTitle>
+              <SheetDescription className="max-w-md text-sm leading-6">
+                Saved postlaringizni mavzu yoki maqsad bo‘yicha tartiblang.
+              </SheetDescription>
+
+              <button
+                type="button"
+                aria-label="Yopish"
+                onClick={() => handleCreateOpenChange(false)}
+                disabled={saving}
+                className="absolute right-0 top-0 flex h-9 w-9 items-center justify-center rounded-full bg-muted/70 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+              >
+                <X className="h-4.5 w-4.5" />
+              </button>
+            </SheetHeader>
+
+            <div className="mt-6 space-y-4">
+              <div>
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <label htmlFor="saved-playlist-name" className="text-sm font-medium text-foreground">
+                    Playlist nomi
+                  </label>
+                  <span className="text-xs tabular-nums text-muted-foreground">{newPlaylistName.length}/80</span>
+                </div>
+                <Input
+                  id="saved-playlist-name"
+                  value={newPlaylistName}
+                  onChange={(event) => setNewPlaylistName(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' && canCreatePlaylist) void handleCreatePlaylist();
+                  }}
+                  maxLength={80}
+                  placeholder="Masalan: Marketing g‘oyalari"
+                  aria-invalid={isReservedPlaylistName}
+                  className="h-12 rounded-2xl border-border/70 bg-muted/30 px-4 text-base shadow-none focus-visible:ring-2 focus-visible:ring-primary/20"
+                />
+                {isReservedPlaylistName ? (
+                  <p className="mt-2 text-xs font-medium text-destructive">
+                    “Saved” nomi asosiy playlist uchun band.
+                  </p>
+                ) : (
+                  <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                    Qisqa va esda qoladigan nom tanlang. Keyin postlarni qo‘shishingiz mumkin.
+                  </p>
+                )}
+              </div>
+
+              {playlistNameSuggestions.length > 0 ? (
+                <div>
+                  <p className="mb-2 text-xs font-medium text-muted-foreground">Tezkor variantlar</p>
+                  <div className="flex flex-wrap gap-2">
+                    {playlistNameSuggestions.map((suggestion) => {
+                      const selected = trimmedPlaylistName.toLocaleLowerCase() === suggestion.toLocaleLowerCase();
+                      return (
+                        <button
+                          key={suggestion}
+                          type="button"
+                          onClick={() => setNewPlaylistName(suggestion)}
+                          className={`rounded-full border px-3.5 py-2 text-sm font-medium transition-colors ${
+                            selected
+                              ? 'border-primary/40 bg-primary/10 text-primary'
+                              : 'border-border/70 bg-background text-foreground hover:bg-muted/60'
+                          }`}
+                        >
+                          {suggestion}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
+            <Button
+              type="button"
+              onClick={() => void handleCreatePlaylist()}
+              disabled={!canCreatePlaylist}
+              className="mt-6 h-12 w-full rounded-2xl text-[15px] font-semibold shadow-sm"
+            >
+              {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FolderPlus className="mr-2 h-4 w-4" />}
+              {saving ? 'Yaratilmoqda…' : 'Playlist yaratish'}
             </Button>
-            <Button onClick={() => void handleCreatePlaylist()} disabled={saving || !newPlaylistName.trim()}>
-              {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Yaratish
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </div>
+        </SheetContent>
+      </Sheet>
 
       <Dialog open={manageOpen} onOpenChange={setManageOpen}>
         <DialogContent className="sm:max-w-lg">
