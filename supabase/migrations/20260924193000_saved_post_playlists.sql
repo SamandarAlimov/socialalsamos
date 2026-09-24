@@ -172,3 +172,40 @@ join public.saved_post_playlists p
   on p.user_id = b.user_id
  and p.is_default = true
 on conflict (playlist_id, post_id) do nothing;
+
+-- Saved tab should reflect bookmark and playlist changes without a page reload.
+-- FULL identity keeps user_id/post_id available for filtered DELETE events.
+alter table public.bookmarks replica identity full;
+alter table public.saved_post_playlists replica identity full;
+alter table public.saved_post_playlist_items replica identity full;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'bookmarks'
+  ) then
+    alter publication supabase_realtime add table public.bookmarks;
+  end if;
+
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'saved_post_playlists'
+  ) then
+    alter publication supabase_realtime add table public.saved_post_playlists;
+  end if;
+
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'saved_post_playlist_items'
+  ) then
+    alter publication supabase_realtime add table public.saved_post_playlist_items;
+  end if;
+end;
+$$;
