@@ -46,6 +46,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
 import { EditPostDialog } from '@/components/EditPostDialog';
+import { SharePostDialog } from '@/components/SharePostDialog';
 import { cn } from '@/lib/utils';
 import {
   announceContentHideChange,
@@ -96,20 +97,20 @@ function SheetActionRow({
       onClick={onClick}
       className={cn(
         'flex min-h-[58px] w-full items-center gap-3 px-4 py-2.5 text-left transition-colors',
-        'border-b border-border/45 last:border-b-0 hover:bg-background/75 active:bg-muted/80',
+        'border-b border-neutral-200 last:border-b-0 hover:bg-neutral-50 active:bg-neutral-100 dark:border-neutral-800 dark:hover:bg-neutral-900 dark:active:bg-neutral-800',
         'disabled:pointer-events-none disabled:opacity-50',
         destructive && 'text-destructive',
       )}
     >
       <span
         className={cn(
-          'flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-background shadow-sm ring-1 ring-border/50',
-          destructive && 'bg-destructive/8 ring-destructive/15',
+          'flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white shadow-sm ring-1 ring-neutral-200 dark:bg-neutral-950 dark:ring-neutral-800',
+          destructive && 'bg-red-50 ring-red-100 dark:bg-red-950/40 dark:ring-red-900/60',
         )}
       >
         <Icon
           className={cn(
-            'h-[18px] w-[18px] text-foreground',
+            'h-[18px] w-[18px] text-neutral-950 dark:text-white',
             destructive && 'text-destructive',
             iconClassName,
           )}
@@ -118,7 +119,7 @@ function SheetActionRow({
       <span className="min-w-0 flex-1">
         <span className="block text-sm font-medium leading-5">{label}</span>
         {description ? (
-          <span className="mt-0.5 block text-[11px] leading-4 text-muted-foreground">
+          <span className="mt-0.5 block text-[11px] leading-4 text-neutral-500 dark:text-neutral-400">
             {description}
           </span>
         ) : null}
@@ -140,18 +141,23 @@ function QuickAction({ icon: Icon, label, onClick, active = false, iconClassName
     <button
       type="button"
       onClick={onClick}
-      className="group flex min-w-0 flex-col items-center gap-1.5 rounded-2xl px-1 py-2 text-center transition-colors hover:bg-muted/60 active:bg-muted"
+      className="group flex min-w-0 flex-col items-center gap-1.5 rounded-2xl px-1 py-2 text-center transition-colors hover:bg-neutral-50 active:bg-neutral-100 dark:hover:bg-neutral-900 dark:active:bg-neutral-800"
     >
-      <span className="flex h-12 w-12 items-center justify-center rounded-full bg-muted/75 ring-1 ring-border/45 transition-transform group-active:scale-95">
+      <span
+        className={cn(
+          'flex h-12 w-12 items-center justify-center rounded-full bg-neutral-100 ring-1 ring-neutral-200 transition-transform group-active:scale-95 dark:bg-neutral-900 dark:ring-neutral-800',
+          active && 'bg-neutral-950 text-white dark:bg-white dark:text-neutral-950',
+        )}
+      >
         <Icon
           className={cn(
-            'h-5 w-5 text-foreground',
-            active && 'fill-current',
+            'h-5 w-5 text-neutral-950 dark:text-white',
+            active && 'fill-current text-current',
             iconClassName,
           )}
         />
       </span>
-      <span className="max-w-full truncate text-[11px] font-medium text-foreground">{label}</span>
+      <span className="max-w-full truncate text-[11px] font-medium text-neutral-950 dark:text-white">{label}</span>
     </button>
   );
 }
@@ -176,6 +182,7 @@ export function PostActionsMenu({
   const { user } = useAuth();
   const navigate = useNavigate();
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [showShareDialog, setShowShareDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isPinning, setIsPinning] = useState(false);
@@ -212,19 +219,8 @@ export function PostActionsMenu({
     }
   };
 
-  const handleShare = async () => {
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: 'Alsamos post',
-          url: `${window.location.origin}/post/${postId}`,
-        });
-        return;
-      } catch (error) {
-        if ((error as Error).name === 'AbortError') return;
-      }
-    }
-    await handleCopyLink();
+  const handleShare = () => {
+    setShowShareDialog(true);
   };
 
   const handleDelete = async () => {
@@ -368,8 +364,6 @@ export function PostActionsMenu({
 
   return (
     <>
-      {/* Mobile + tablet: a native-feeling bottom sheet. Keeping the actions in
-          one large, thumb-friendly surface avoids tiny floating menus over media. */}
       <div className="lg:hidden">
         <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
           <SheetTrigger asChild>
@@ -388,19 +382,19 @@ export function PostActionsMenu({
             side="bottom"
             hideDefaultClose
             data-post-actions-sheet="true"
-            overlayClassName="bg-black/55 backdrop-blur-[1.5px]"
+            overlayClassName="bg-black/60"
             className={cn(
-              'max-h-[86dvh] w-full overflow-hidden rounded-t-[30px] border-x border-t border-border/60 bg-background/98 p-0 shadow-2xl',
+              'max-h-[86dvh] w-full overflow-hidden rounded-t-[30px] border-x border-t border-neutral-200 bg-white p-0 text-neutral-950 shadow-[0_-18px_56px_rgba(0,0,0,0.24)] dark:border-neutral-800 dark:bg-neutral-950 dark:text-white',
               'sm:left-1/2 sm:right-auto sm:w-[min(560px,calc(100vw-24px))] sm:-translate-x-1/2',
             )}
           >
             <div className="flex justify-center pb-1 pt-2.5">
-              <div className="h-1 w-11 rounded-full bg-muted-foreground/30" />
+              <div className="h-1 w-11 rounded-full bg-neutral-300 dark:bg-neutral-700" />
             </div>
 
             <SheetHeader className="px-5 pb-3 pt-1 text-left">
-              <SheetTitle className="text-base font-semibold tracking-tight">Post amallari</SheetTitle>
-              <p className="text-xs text-muted-foreground">Saqlash, ulashish va post boshqaruvlari</p>
+              <SheetTitle className="text-base font-semibold tracking-tight text-neutral-950 dark:text-white">Post amallari</SheetTitle>
+              <p className="text-xs text-neutral-500 dark:text-neutral-400">Saqlash, ulashish va post boshqaruvlari</p>
             </SheetHeader>
 
             <div className="max-h-[calc(86dvh-86px)] overflow-y-auto overscroll-contain px-3 pb-[calc(14px+env(safe-area-inset-bottom,0px))]">
@@ -431,7 +425,7 @@ export function PostActionsMenu({
 
               {isOwner ? (
                 <>
-                  <div className="overflow-hidden rounded-2xl bg-muted/35 ring-1 ring-border/50">
+                  <div className="overflow-hidden rounded-2xl bg-neutral-100 ring-1 ring-neutral-200 dark:bg-neutral-900 dark:ring-neutral-800">
                     <SheetActionRow
                       icon={BarChart3}
                       label="Analitika"
@@ -460,7 +454,7 @@ export function PostActionsMenu({
                     ) : null}
                   </div>
 
-                  <div className="mt-3 overflow-hidden rounded-2xl bg-muted/35 ring-1 ring-border/50">
+                  <div className="mt-3 overflow-hidden rounded-2xl bg-neutral-100 ring-1 ring-neutral-200 dark:bg-neutral-900 dark:ring-neutral-800">
                     <SheetActionRow
                       icon={Trash2}
                       label="Postni o‘chirish"
@@ -471,7 +465,7 @@ export function PostActionsMenu({
                   </div>
                 </>
               ) : (
-                <div className="overflow-hidden rounded-2xl bg-muted/35 ring-1 ring-border/50">
+                <div className="overflow-hidden rounded-2xl bg-neutral-100 ring-1 ring-neutral-200 dark:bg-neutral-900 dark:ring-neutral-800">
                   <SheetActionRow
                     icon={EyeOff}
                     label={isHiding ? 'Yashirilmoqda…' : 'Postni yashirish'}
@@ -493,8 +487,6 @@ export function PostActionsMenu({
         </Sheet>
       </div>
 
-      {/* Desktop keeps an anchored menu: faster with mouse/trackpad and avoids a
-          full-width mobile interaction pattern on large screens. */}
       <div className="hidden lg:block">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -510,7 +502,7 @@ export function PostActionsMenu({
           </DropdownMenuTrigger>
           <DropdownMenuContent
             align="end"
-            className="w-64 rounded-2xl border border-border/70 bg-popover/98 p-1.5 shadow-xl backdrop-blur-xl"
+            className="w-64 rounded-2xl border border-neutral-200 bg-white p-1.5 text-neutral-950 shadow-xl dark:border-neutral-800 dark:bg-neutral-950 dark:text-white"
           >
             {isOwner ? (
               <>
@@ -587,6 +579,13 @@ export function PostActionsMenu({
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+
+      <SharePostDialog
+        open={showShareDialog}
+        onOpenChange={setShowShareDialog}
+        postId={postId}
+        postContent={postContent}
+      />
 
       <EditPostDialog
         postId={postId}
