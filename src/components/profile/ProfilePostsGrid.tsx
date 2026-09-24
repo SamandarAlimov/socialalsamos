@@ -13,6 +13,7 @@ import {
 import { format, formatDistanceToNow } from 'date-fns';
 import { useAuth } from '@/contexts/AuthContext';
 import { FeedPostCard, type FeedPostCardPost } from '@/components/posts/FeedPostCard';
+import { PostMediaThumbnail } from '@/components/PostMediaThumbnail';
 import { PostViewModal } from '@/components/PostViewModal';
 import { Button } from '@/components/ui/button';
 import {
@@ -26,6 +27,10 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { useRealtimePostCounts } from '@/hooks/useRealtimePostCounts';
 import { db } from '@/lib/db';
+import {
+  getStructuredPostMediaPreviewMap,
+  type PostMediaPreview,
+} from '@/lib/postMediaPreview';
 import { formatCompactCount } from '@/lib/postMarkers';
 import { togglePostLike } from '@/lib/postLikes';
 
@@ -157,6 +162,9 @@ export function ProfilePostsGrid({
   const [bookmarkedIds, setBookmarkedIds] = useState<Set<string>>(
     () => new Set(posts.filter((post) => post.is_bookmarked).map((post) => post.id)),
   );
+  const [structuredPreviews, setStructuredPreviews] = useState<Map<string, PostMediaPreview>>(
+    () => new Map(),
+  );
 
   useEffect(() => {
     setBookmarkedIds((current) => {
@@ -261,6 +269,30 @@ export function ProfilePostsGrid({
 
   const postIds = useMemo(() => sortedPosts.map((post) => post.id), [sortedPosts]);
   const { getPostCounts } = useRealtimePostCounts(postIds, user?.id || null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (layout !== 'reels-grid' || postIds.length === 0) {
+      setStructuredPreviews(new Map());
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    void getStructuredPostMediaPreviewMap(postIds)
+      .then((previewMap) => {
+        if (!cancelled) setStructuredPreviews(previewMap);
+      })
+      .catch((error) => {
+        console.warn('Profile video preview metadata could not be loaded:', error);
+        if (!cancelled) setStructuredPreviews(new Map());
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [layout, postIds]);
 
   const toggleProfileVisibility = useCallback(async (post: Post) => {
     const postUserId = resolvePostUserId(post);
@@ -473,14 +505,17 @@ export function ProfilePostsGrid({
           </p>
           <p className="mt-1 max-w-sm text-xs leading-relaxed">
             {showHiddenProfilePosts
-              ? 'Profildan yashirgan postlaringiz shu yerda paydo bo‘ladi va ularni istalgan payt qaytarish mumkin.'
+              ? 'Profildan yashirgan postlaringiz shu yerda paydo bo‘ladi va ularni istalgan payt qaytarishingiz mumkin.'
               : 'Bu profil uchun ko‘rsatiladigan postlar hozircha yo‘q.'}
           </p>
         </div>
       ) : layout === 'reels-grid' ? (
         <div className="relative left-1/2 grid w-screen -translate-x-1/2 grid-cols-3 gap-[2px] sm:left-auto sm:w-full sm:translate-x-0 sm:gap-1.5">
           {sortedPosts.map((post) => {
-            const mediaUrl = post.media_urls?.[0] || '';
+            const structuredPreview = structuredPreviews.get(post.id);
+            const mediaUrl = structuredPreview?.url || post.media_urls?.[0] || '';
+            const posterUrl = post.thumbnail_url || structuredPreview?.poster || null;
+            const previewMediaType = structuredPreview?.mediaType || post.media_type || 'video';
             const counts = getPostCounts(post.id);
             const postUserId = resolvePostUserId(post);
             const canManageThisPost = Boolean(isOwnProfile && user?.id && postUserId === user.id);
@@ -495,28 +530,13 @@ export function ProfilePostsGrid({
                   className="absolute inset-0 h-full w-full text-left outline-none ring-ring/40 focus-visible:ring-2"
                 >
                   {mediaUrl ? (
-                    <video
-                      src={mediaUrl}
-                      poster={post.thumbnail_url || undefined}
-                      className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.025]"
-                      muted
-                      playsInline
-                      preload="auto"
-                      onLoadedMetadata={(event) => {
-                        if (post.thumbnail_url) return;
-                        const video = event.currentTarget;
-                        if (!Number.isFinite(video.duration) || video.duration <= 0) return;
-
-                        const previewTime = Math.min(0.2, Math.max(0.04, video.duration * 0.05));
-                        if (video.currentTime >= previewTime) return;
-
-                        try {
-                          video.currentTime = previewTime;
-                        } catch {
-                          // Some browsers can reject an early seek while media ranges are loading.
-                          // The decoded first frame will still be shown once enough data is available.
-                        }
-                      }}
+                    <PostMediaThumbnail
+                      url={mediaUrl}
+                      mediaType={previewMediaType}
+                      poster={posterUrl}
+                      showPlayOverlay={false}
+                      className="h-full w-full bg-black ring-0"
+                      mediaClassName="transition-transform duration-300 group-hover:scale-[1.025]"
                     />
                   ) : (
                     <div className="h-full w-full bg-muted" />
