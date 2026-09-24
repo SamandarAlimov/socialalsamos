@@ -11,6 +11,8 @@ create table if not exists public.saved_post_playlists (
     check (char_length(btrim(name)) between 1 and 80),
   constraint saved_post_playlists_default_name_check
     check (not is_default or name = 'Saved'),
+  constraint saved_post_playlists_reserved_default_name_check
+    check (is_default or lower(btrim(name)) <> 'saved'),
   constraint saved_post_playlists_id_user_key unique (id, user_id)
 );
 
