@@ -38,7 +38,6 @@ import { ProfileQrDialog } from '@/components/profile/ProfileQrDialog';
 import { StoryHighlights } from '@/components/stories/StoryHighlights';
 import { useAuth } from '@/contexts/AuthContext';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { useReposts as _unusedUseReposts } from '@/hooks/useReposts';
 import { useUserReposts } from '@/hooks/useReposts';
 import { useUserProfile } from '@/hooks/useUserProfile';
 import { useToast } from '@/hooks/use-toast';
