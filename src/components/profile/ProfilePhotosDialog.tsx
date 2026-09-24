@@ -32,6 +32,10 @@ type GalleryItem = { id: string; image_url: string; synthetic?: boolean };
 const viewerActionClass =
   'inline-flex h-11 items-center justify-center gap-2 rounded-full border border-white/10 bg-white/10 px-3 text-sm font-medium text-white backdrop-blur-xl transition hover:bg-white/15 active:scale-[0.97] disabled:pointer-events-none disabled:opacity-45 sm:px-4';
 
+const SWIPE_NAV_THRESHOLD_PX = 48;
+const SWIPE_DISMISS_THRESHOLD_PX = 72;
+const SWIPE_AXIS_DOMINANCE = 1.1;
+
 export function ProfilePhotosDialog({
   open,
   onOpenChange,
@@ -184,6 +188,11 @@ export function ProfilePhotosDialog({
     }
   };
 
+  const resetTouchGesture = () => {
+    touchStartX.current = null;
+    touchStartY.current = null;
+  };
+
   const handleTouchStart = (event: React.TouchEvent<HTMLDivElement>) => {
     touchStartX.current = event.touches[0]?.clientX ?? null;
     touchStartY.current = event.touches[0]?.clientY ?? null;
@@ -194,14 +203,32 @@ export function ProfilePhotosDialog({
     const startY = touchStartY.current;
     const endX = event.changedTouches[0]?.clientX ?? null;
     const endY = event.changedTouches[0]?.clientY ?? null;
-    touchStartX.current = null;
-    touchStartY.current = null;
+    resetTouchGesture();
 
-    if (startX == null || startY == null || endX == null || endY == null || total < 2) return;
+    if (startX == null || startY == null || endX == null || endY == null) return;
 
     const deltaX = endX - startX;
     const deltaY = endY - startY;
-    if (Math.abs(deltaX) < 48 || Math.abs(deltaX) <= Math.abs(deltaY)) return;
+    const absX = Math.abs(deltaX);
+    const absY = Math.abs(deltaY);
+
+    // Up yoki down swipe: profil photo viewer'ni yopadi. Bu bir dona rasmda ham ishlaydi.
+    if (
+      absY >= SWIPE_DISMISS_THRESHOLD_PX &&
+      absY > absX * SWIPE_AXIS_DOMINANCE
+    ) {
+      onOpenChange(false);
+      return;
+    }
+
+    // Left/right swipe faqat bir nechta profil rasmi mavjud bo'lsa navigation qiladi.
+    if (
+      total < 2 ||
+      absX < SWIPE_NAV_THRESHOLD_PX ||
+      absX <= absY * SWIPE_AXIS_DOMINANCE
+    ) {
+      return;
+    }
 
     if (deltaX > 0) goPrev();
     else goNext();
@@ -251,9 +278,10 @@ export function ProfilePhotosDialog({
           </header>
 
           <main
-            className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden px-0 pb-[calc(env(safe-area-inset-bottom)+104px)] pt-[calc(env(safe-area-inset-top)+72px)] sm:px-16 sm:pb-28 sm:pt-20"
+            className="relative flex min-h-0 flex-1 touch-none items-center justify-center overflow-hidden px-0 pb-[calc(env(safe-area-inset-bottom)+104px)] pt-[calc(env(safe-area-inset-top)+72px)] sm:px-16 sm:pb-28 sm:pt-20"
             onTouchStart={handleTouchStart}
             onTouchEnd={handleTouchEnd}
+            onTouchCancel={resetTouchGesture}
           >
             {isLoading && total === 0 ? (
               <Loader2 className="h-8 w-8 animate-spin text-white/65" />

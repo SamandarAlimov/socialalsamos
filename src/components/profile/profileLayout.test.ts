@@ -95,6 +95,17 @@ describe('profile post layouts', () => {
     expect(photoViewer).not.toContain('min-h-[50vh]');
   });
 
+  it('dismisses the fullscreen profile photo viewer with a vertical swipe in either direction', () => {
+    const photoViewer = source('components/profile/ProfilePhotosDialog.tsx');
+
+    expect(photoViewer).toContain('SWIPE_DISMISS_THRESHOLD_PX = 72');
+    expect(photoViewer).toContain('absY > absX * SWIPE_AXIS_DOMINANCE');
+    expect(photoViewer).toContain('onOpenChange(false);');
+    expect(photoViewer).toContain('onTouchCancel={resetTouchGesture}');
+    expect(photoViewer).toContain('touch-none');
+    expect(photoViewer).toContain('total < 2 ||');
+  });
+
   it('keeps own and viewed profiles on one shared premium identity layout', () => {
     const ownProfile = source('pages/ProfilePage.tsx');
     const userProfile = source('pages/UserProfilePage.tsx');
