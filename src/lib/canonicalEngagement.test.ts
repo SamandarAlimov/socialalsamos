@@ -39,6 +39,20 @@ describe('canonical public engagement counters', () => {
     expect(card).not.toContain('{post.shares_count ?? 0}');
   });
 
+  it('uses the shared premium comments and likes/views surfaces in profile feed cards', () => {
+    const card = source('components/posts/FeedPostCard.tsx');
+
+    expect(card).toContain("import { VideoCommentsSheet } from '@/components/VideoCommentsSheet'");
+    expect(card).toContain("import { PostLikesViewsDialog } from '@/components/PostLikesViewsDialog'");
+    expect(card).toContain('previewVideo={false}');
+    expect(card).toContain("openAudience('likes')");
+    expect(card).toContain("openAudience('views')");
+    expect(card).toContain('defaultTab={audienceDefaultTab}');
+    expect(card).not.toContain("import { CommentsSection } from '@/components/CommentsSection'");
+    expect(card).not.toContain("import { PostLikesDialog } from '@/components/PostLikesDialog'");
+    expect(card).not.toContain("import { PostViewsDialog } from '@/components/PostViewsDialog'");
+  });
+
   it('uses the exact post_likes count inside the likes dialog', () => {
     const dialog = source('components/PostLikesDialog.tsx');
 
