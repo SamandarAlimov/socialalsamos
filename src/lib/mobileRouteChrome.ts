@@ -38,10 +38,10 @@ export function getMobileChromeMode(pathname: string): MobileChromeMode {
   // and stole valuable viewport width/height on product pages.
   if (path === '/marketplace' || path.startsWith('/marketplace/')) return 'immersive';
 
-  // Public user profile already renders its own back affordance. Rendering the
-  // shell MobileBackHeader as well produced the duplicate "Orqaga / Back"
-  // rows seen when a profile is opened from Videos.
-  if (path.startsWith('/user/')) return 'immersive';
+  // Public profiles share the platform's compact secondary navigation instead
+  // of owning a one-off inline Back row. This keeps viewed profiles visually
+  // aligned with the canonical /profile surface while retaining a clear exit.
+  if (path.startsWith('/user/')) return 'secondary';
 
   // These full-screen/detail surfaces already own a real navigation header or
   // back affordance. Letting AppLayout add a second shell back row produces the
