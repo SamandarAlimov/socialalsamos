@@ -62,6 +62,9 @@ interface ShareShortcutProps {
   iconClassName?: string;
 }
 
+const MOBILE_SHARE_SNAP_COMPACT = 0.68;
+const MOBILE_SHARE_SNAP_EXPANDED = 0.96;
+
 function createShareEventId() {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID();
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
@@ -76,7 +79,7 @@ function ShareShortcut({ icon: Icon, label, onClick, active = false, iconClassNa
     >
       <span
         className={cn(
-          'flex h-14 w-14 items-center justify-center rounded-full bg-muted/65 text-foreground ring-1 ring-border/45 transition-colors group-hover:bg-muted',
+          'flex h-14 w-14 items-center justify-center rounded-full bg-muted text-foreground ring-1 ring-border/60 transition-colors group-hover:bg-muted/80',
           active && 'bg-foreground text-background ring-foreground',
         )}
       >
@@ -101,6 +104,7 @@ export function SharePostDialog({
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
+  const [activeSnapPoint, setActiveSnapPoint] = useState<number | string | null>(MOBILE_SHARE_SNAP_COMPACT);
 
   const shareUrl = `${window.location.origin}/post/${postId}`;
   const shareText = postContent ? postContent.substring(0, 100) : 'Check out this post!';
@@ -123,11 +127,15 @@ export function SharePostDialog({
   };
 
   useEffect(() => {
-    if (open && user) void fetchConversations();
+    if (open && user) {
+      setActiveSnapPoint(MOBILE_SHARE_SNAP_COMPACT);
+      void fetchConversations();
+    }
     if (!open) {
       setSearch('');
       setSelectedIds([]);
       setCopied(false);
+      setActiveSnapPoint(MOBILE_SHARE_SNAP_COMPACT);
     }
   }, [open, user]);
 
@@ -300,19 +308,105 @@ export function SharePostDialog({
     if (popup) void trackShare('external', name.toLowerCase());
   };
 
+  const renderRecipient = (conversation: Conversation) => {
+    const isSelected = selectedIds.includes(conversation.id);
+    const displayName =
+      conversation.type === 'private' && conversation.participant
+        ? conversation.participant.display_name || conversation.participant.username
+        : conversation.name;
+    const username =
+      conversation.type === 'private' && conversation.participant
+        ? conversation.participant.username
+        : null;
+    const avatarUrl =
+      conversation.type === 'private' && conversation.participant
+        ? conversation.participant.avatar_url
+        : conversation.avatar_url;
+    const isGroup = conversation.type === 'group' || conversation.type === 'channel';
+    const typeLabel = conversation.type === 'channel' ? 'Kanal' : conversation.type === 'group' ? 'Guruh' : username ? `@${username}` : 'Shaxsiy chat';
+
+    if (isMobile) {
+      return (
+        <button
+          key={conversation.id}
+          type="button"
+          onClick={() => toggleSelection(conversation.id)}
+          className={cn(
+            'flex w-full items-center gap-3 rounded-2xl px-2.5 py-2 text-left transition-colors active:scale-[0.995]',
+            isSelected ? 'bg-muted' : 'hover:bg-muted/70',
+          )}
+        >
+          <Avatar className="h-12 w-12 shrink-0 ring-1 ring-border/60">
+            <AvatarImage src={avatarUrl || ''} />
+            <AvatarFallback className="bg-muted text-sm">
+              {isGroup ? <Users className="h-5 w-5" /> : displayName?.[0]?.toUpperCase() || 'U'}
+            </AvatarFallback>
+          </Avatar>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-[14px] font-semibold text-foreground">{displayName || 'Unknown'}</span>
+            <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">{typeLabel}</span>
+          </span>
+          <span
+            className={cn(
+              'flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-border bg-background transition-colors',
+              isSelected && 'border-foreground bg-foreground text-background',
+            )}
+            aria-hidden
+          >
+            {isSelected && <Check className="h-3.5 w-3.5 stroke-[3]" />}
+          </span>
+        </button>
+      );
+    }
+
+    return (
+      <button
+        key={conversation.id}
+        type="button"
+        onClick={() => toggleSelection(conversation.id)}
+        className="group flex min-w-0 flex-col items-center rounded-2xl px-1 py-1.5 text-center active:scale-[0.98]"
+      >
+        <span className="relative">
+          <Avatar
+            className={cn(
+              'h-16 w-16 ring-2 ring-transparent ring-offset-2 ring-offset-background transition-all',
+              isSelected && 'ring-foreground',
+            )}
+          >
+            <AvatarImage src={avatarUrl || ''} />
+            <AvatarFallback className="bg-muted text-base">
+              {isGroup ? <Users className="h-5 w-5" /> : displayName?.[0]?.toUpperCase() || 'U'}
+            </AvatarFallback>
+          </Avatar>
+          <span
+            className={cn(
+              'absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full border-2 border-background bg-background ring-1 ring-border/70 transition-colors',
+              isSelected && 'bg-foreground text-background ring-foreground',
+            )}
+          >
+            {isSelected && <Check className="h-3 w-3 stroke-[3]" />}
+          </span>
+        </span>
+        <span className="mt-2 line-clamp-2 max-w-[92px] text-[12px] font-medium leading-4 text-foreground">
+          {displayName || 'Unknown'}
+        </span>
+      </button>
+    );
+  };
+
   const content = (
-    <div className="min-h-0">
-      <div className="relative px-4 pb-3">
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="relative flex-none px-4 pb-3">
         <Search className="pointer-events-none absolute left-8 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-muted-foreground" />
         <Input
           value={search}
           onChange={(event) => setSearch(event.target.value)}
           placeholder="Chatlarni qidirish"
-          className="h-11 rounded-2xl border-0 bg-muted/65 pl-11 pr-4 text-sm shadow-none ring-0 focus-visible:ring-1 focus-visible:ring-ring/40"
+          className="h-11 rounded-2xl border-0 bg-muted pl-11 pr-4 text-sm shadow-none ring-0 focus-visible:ring-1 focus-visible:ring-ring/40"
         />
       </div>
 
-      <ScrollArea className="h-[min(36dvh,310px)] px-3">
+      <ScrollArea className={cn('min-h-0 px-3', isMobile ? 'flex-1' : 'h-[min(36dvh,310px)]')}>
         {isLoading ? (
           <div className="flex h-44 items-center justify-center">
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -322,60 +416,19 @@ export function SharePostDialog({
             <Users className="mb-2 h-7 w-7 opacity-45" />
             <span>{search ? 'Mos chat topilmadi' : 'Hozircha ulashish uchun chat yo‘q'}</span>
           </div>
+        ) : isMobile ? (
+          <div className="space-y-1 pb-3">
+            {filteredConversations.map(renderRecipient)}
+          </div>
         ) : (
           <div className="grid grid-cols-3 gap-x-2 gap-y-4 pb-3 sm:grid-cols-4">
-            {filteredConversations.map((conversation) => {
-              const isSelected = selectedIds.includes(conversation.id);
-              const displayName =
-                conversation.type === 'private' && conversation.participant
-                  ? conversation.participant.display_name || conversation.participant.username
-                  : conversation.name;
-              const avatarUrl =
-                conversation.type === 'private' && conversation.participant
-                  ? conversation.participant.avatar_url
-                  : conversation.avatar_url;
-              const isGroup = conversation.type === 'group' || conversation.type === 'channel';
-
-              return (
-                <button
-                  key={conversation.id}
-                  type="button"
-                  onClick={() => toggleSelection(conversation.id)}
-                  className="group flex min-w-0 flex-col items-center rounded-2xl px-1 py-1.5 text-center active:scale-[0.98]"
-                >
-                  <span className="relative">
-                    <Avatar
-                      className={cn(
-                        'h-16 w-16 ring-2 ring-transparent ring-offset-2 ring-offset-background transition-all',
-                        isSelected && 'ring-foreground',
-                      )}
-                    >
-                      <AvatarImage src={avatarUrl || ''} />
-                      <AvatarFallback className="bg-muted text-base">
-                        {isGroup ? <Users className="h-5 w-5" /> : displayName?.[0]?.toUpperCase() || 'U'}
-                      </AvatarFallback>
-                    </Avatar>
-                    <span
-                      className={cn(
-                        'absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full border-2 border-background bg-background ring-1 ring-border/70 transition-colors',
-                        isSelected && 'bg-foreground text-background ring-foreground',
-                      )}
-                    >
-                      {isSelected && <Check className="h-3 w-3 stroke-[3]" />}
-                    </span>
-                  </span>
-                  <span className="mt-2 line-clamp-2 max-w-[92px] text-[12px] font-medium leading-4 text-foreground">
-                    {displayName || 'Unknown'}
-                  </span>
-                </button>
-              );
-            })}
+            {filteredConversations.map(renderRecipient)}
           </div>
         )}
       </ScrollArea>
 
       {selectedIds.length > 0 && (
-        <div className="px-4 pb-3 pt-1">
+        <div className="flex-none px-4 pb-3 pt-1">
           <Button
             type="button"
             onClick={handleSend}
@@ -388,9 +441,9 @@ export function SharePostDialog({
         </div>
       )}
 
-      <div className="mx-4 border-t border-border/60" />
+      <div className="mx-4 flex-none border-t border-border/60" />
 
-      <div className="overflow-x-auto px-3 pb-[calc(14px+env(safe-area-inset-bottom,0px))] pt-4 scrollbar-hide">
+      <div className="flex-none overflow-x-auto px-3 pb-[calc(14px+env(safe-area-inset-bottom,0px))] pt-4 scrollbar-hide">
         <div className="flex min-w-max gap-1">
           <ShareShortcut
             icon={copied ? Check : Link2}
@@ -424,13 +477,21 @@ export function SharePostDialog({
 
   if (isMobile) {
     return (
-      <Drawer open={open} onOpenChange={onOpenChange} shouldScaleBackground={false}>
+      <Drawer
+        open={open}
+        onOpenChange={onOpenChange}
+        shouldScaleBackground={false}
+        snapPoints={[MOBILE_SHARE_SNAP_COMPACT, MOBILE_SHARE_SNAP_EXPANDED]}
+        activeSnapPoint={activeSnapPoint}
+        setActiveSnapPoint={setActiveSnapPoint}
+        snapToSequentialPoint
+      >
         <DrawerContent
-          overlayClassName="bg-black/55 backdrop-blur-[1px]"
-          handleClassName="mt-3 h-1 w-10 bg-muted-foreground/25"
-          className="max-h-[88dvh] overflow-hidden rounded-t-[28px] border-x border-t border-border/65 bg-background shadow-2xl"
+          overlayClassName="bg-black/55"
+          handleClassName="mt-2.5 h-1 w-11 bg-muted-foreground/25"
+          className="mt-0 h-[96dvh] max-h-[96dvh] overflow-hidden rounded-t-[28px] border-x-0 border-b-0 border-t border-border bg-background p-0 shadow-[0_-18px_56px_rgba(0,0,0,0.22)]"
         >
-          <DrawerHeader className="px-5 pb-3 pt-3 text-left">
+          <DrawerHeader className="flex-none px-5 pb-3 pt-3 text-left">
             <DrawerTitle className="text-xl font-semibold tracking-tight">Ulashish</DrawerTitle>
           </DrawerHeader>
           {content}
@@ -441,7 +502,7 @@ export function SharePostDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="overflow-hidden p-0 sm:max-w-[560px] sm:rounded-[28px]">
+      <DialogContent className="overflow-hidden bg-background p-0 sm:max-w-[560px] sm:rounded-[28px]">
         <DialogHeader className="px-5 pb-3 pt-5">
           <DialogTitle className="text-xl font-semibold tracking-tight">Ulashish</DialogTitle>
         </DialogHeader>
