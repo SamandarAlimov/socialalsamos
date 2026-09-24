@@ -47,6 +47,11 @@ import { PostCollaboratorByline } from '@/components/PostCollaboratorByline';
 import type { WithEditState } from '@/lib/stickerPlacements';
 import { resolveStorageUrl } from '@/lib/mediaUpload';
 import { usePlatformScrollLock } from '@/hooks/usePlatformScrollLock';
+import {
+  isTallPostPreviewRatio,
+  normalizePostPreviewAspectRatio,
+  parsePostMediaAspectRatio,
+} from '@/lib/mediaAspectRatio';
 
 interface PostViewModalProps {
   post: {
@@ -114,6 +119,7 @@ export function PostViewModal({
   const [showComments, setShowComments] = useState(false);
   const [showAudience, setShowAudience] = useState(false);
   const [audienceTab, setAudienceTab] = useState<AudienceTab>('likes');
+  const [runtimeAspectRatios, setRuntimeAspectRatios] = useState<Record<string, number>>({});
 
   usePlatformScrollLock(open);
 
@@ -148,6 +154,10 @@ export function PostViewModal({
     };
   }, [post.id, post.media_urls]);
 
+  useEffect(() => {
+    setRuntimeAspectRatios({});
+  }, [post.id]);
+
   const structuredVisuals = useMemo(
     () => media.filter((item) => item.kind === 'image' || item.kind === 'video'),
     [media],
@@ -160,6 +170,7 @@ export function PostViewModal({
         kind: item.kind as 'image' | 'video',
         poster: item.thumbnail_url ?? null,
         editState: (item as typeof item & WithEditState).edit_state ?? null,
+        aspectRatio: parsePostMediaAspectRatio(item.aspect_ratio, item.width, item.height),
       }));
     }
 
@@ -175,6 +186,7 @@ export function PostViewModal({
         kind: isVideo ? ('video' as const) : ('image' as const),
         poster: null,
         editState: null,
+        aspectRatio: null,
       };
     });
   }, [post.media_type, resolvedLegacyMedia, structuredVisuals]);
@@ -183,6 +195,19 @@ export function PostViewModal({
   const hasMedia = mediaEntries.length > 0;
   const hasMultipleMedia = mediaEntries.length > 1;
   const currentEntry = mediaEntries[currentMediaIndex];
+  const currentPreviewRatio = normalizePostPreviewAspectRatio(
+    currentEntry?.aspectRatio ?? (currentEntry?.url ? runtimeAspectRatios[currentEntry.url] : null),
+  );
+  const currentPreviewIsTall = isTallPostPreviewRatio(currentPreviewRatio);
+
+  const rememberCurrentAspectRatio = useCallback((ratio: number) => {
+    if (!currentEntry?.url || !Number.isFinite(ratio) || ratio <= 0) return;
+    const normalized = normalizePostPreviewAspectRatio(ratio);
+    setRuntimeAspectRatios((current) => {
+      if (current[currentEntry.url] === normalized) return current;
+      return { ...current, [currentEntry.url]: normalized };
+    });
+  }, [currentEntry?.url]);
 
   useEffect(() => {
     setCurrentMediaIndex((index) =>
@@ -309,14 +334,21 @@ export function PostViewModal({
             poster={currentEntry.poster || undefined}
             autoPlay={open}
             aspectMode="auto"
-            className="max-h-full max-w-full"
+            onAspectRatio={rememberCurrentAspectRatio}
+            className="h-full max-h-full w-full max-w-full"
           />
         ) : (
           <img
             key={currentEntry?.url}
             src={currentEntry?.url}
             alt=""
-            className="max-h-full max-w-full animate-in object-contain fade-in duration-200"
+            onLoad={(event) => {
+              const image = event.currentTarget;
+              if (image.naturalWidth && image.naturalHeight) {
+                rememberCurrentAspectRatio(image.naturalWidth / image.naturalHeight);
+              }
+            }}
+            className="h-full w-full animate-in object-contain fade-in duration-200"
           />
         )}
 
@@ -512,8 +544,18 @@ export function PostViewModal({
                 {contentBlock}
 
                 {hasMedia && (
-                  <div className="flex h-[min(70dvh,760px)] min-h-[320px] w-full items-center justify-center bg-black sm:h-[min(74dvh,820px)]">
-                    {mediaSurface}
+                  <div className="flex w-full items-center justify-center overflow-hidden bg-black">
+                    <div
+                      className={cn(
+                        'relative flex max-w-full flex-none items-center justify-center overflow-hidden bg-black',
+                        currentPreviewIsTall
+                          ? 'h-[min(78dvh,860px)] w-auto'
+                          : 'w-full',
+                      )}
+                      style={{ aspectRatio: String(currentPreviewRatio) }}
+                    >
+                      {mediaSurface}
+                    </div>
                   </div>
                 )}
 
