@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
 import {
   ChevronLeft,
   ChevronRight,
@@ -10,6 +9,7 @@ import {
   Loader2,
   Star,
   Trash2,
+  X,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -29,6 +29,9 @@ interface ProfilePhotosDialogProps {
 
 type GalleryItem = { id: string; image_url: string; synthetic?: boolean };
 
+const viewerActionClass =
+  'inline-flex h-11 items-center justify-center gap-2 rounded-full border border-white/10 bg-white/10 px-3 text-sm font-medium text-white backdrop-blur-xl transition hover:bg-white/15 active:scale-[0.97] disabled:pointer-events-none disabled:opacity-45 sm:px-4';
+
 export function ProfilePhotosDialog({
   open,
   onOpenChange,
@@ -47,7 +50,9 @@ export function ProfilePhotosDialog({
   const [busy, setBusy] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const touchStartX = useRef<number | null>(null);
+  const touchStartY = useRef<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const thumbnailRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
   const items: GalleryItem[] = useMemo(() => {
     if (photos.length > 0) {
@@ -61,6 +66,8 @@ export function ProfilePhotosDialog({
 
   const total = items.length;
   const current = items[Math.min(index, Math.max(total - 1, 0))];
+  const isCurrentMain = Boolean(current && index === 0 && !current.synthetic);
+  const isWorking = busy || uploading;
 
   useEffect(() => {
     if (open) {
@@ -71,6 +78,11 @@ export function ProfilePhotosDialog({
 
   useEffect(() => {
     setConfirmingDelete(false);
+    thumbnailRefs.current[index]?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'nearest',
+      inline: 'center',
+    });
   }, [index]);
 
   const goPrev = useCallback(() => {
@@ -119,11 +131,12 @@ export function ProfilePhotosDialog({
       setIndex(0);
       onChanged?.();
       toast.success(
-        t('profile.photos.added', { defaultValue: "Yangi profil rasmi qo'shildi" })
+        t('profile.photos.added', { defaultValue: "Yangi profil rasmi qo'shildi" }),
       );
     } catch (error: any) {
       toast.error(
-        error?.message || t('profile.photos.addFailed', { defaultValue: "Rasmni yuklab bo'lmadi" })
+        error?.message ||
+          t('profile.photos.addFailed', { defaultValue: "Rasmni yuklab bo'lmadi" }),
       );
     }
   };
@@ -139,7 +152,7 @@ export function ProfilePhotosDialog({
     } catch (error: any) {
       toast.error(
         error?.message ||
-          t('profile.photos.mainFailed', { defaultValue: "Asosiy rasmni o'zgartirib bo'lmadi" })
+          t('profile.photos.mainFailed', { defaultValue: "Asosiy rasmni o'zgartirib bo'lmadi" }),
       );
     } finally {
       setBusy(false);
@@ -164,204 +177,260 @@ export function ProfilePhotosDialog({
     } catch (error: any) {
       toast.error(
         error?.message ||
-          t('profile.photos.deleteFailed', { defaultValue: "Rasmni o'chirib bo'lmadi" })
+          t('profile.photos.deleteFailed', { defaultValue: "Rasmni o'chirib bo'lmadi" }),
       );
     } finally {
       setBusy(false);
     }
   };
 
+  const handleTouchStart = (event: React.TouchEvent<HTMLDivElement>) => {
+    touchStartX.current = event.touches[0]?.clientX ?? null;
+    touchStartY.current = event.touches[0]?.clientY ?? null;
+  };
+
+  const handleTouchEnd = (event: React.TouchEvent<HTMLDivElement>) => {
+    const startX = touchStartX.current;
+    const startY = touchStartY.current;
+    const endX = event.changedTouches[0]?.clientX ?? null;
+    const endY = event.changedTouches[0]?.clientY ?? null;
+    touchStartX.current = null;
+    touchStartY.current = null;
+
+    if (startX == null || startY == null || endX == null || endY == null || total < 2) return;
+
+    const deltaX = endX - startX;
+    const deltaY = endY - startY;
+    if (Math.abs(deltaX) < 48 || Math.abs(deltaX) <= Math.abs(deltaY)) return;
+
+    if (deltaX > 0) goPrev();
+    else goNext();
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl border-none bg-black/95 p-0 text-white sm:rounded-2xl">
+      <DialogContent
+        hideDefaultClose
+        className="!fixed !inset-0 !left-0 !top-0 !h-[100dvh] !w-screen !max-w-none !translate-x-0 !translate-y-0 gap-0 overflow-hidden border-0 bg-black p-0 text-white shadow-none sm:rounded-none"
+      >
         <DialogTitle className="sr-only">
           {t('profile.photos.title', { defaultValue: 'Profil rasmlari' })}
         </DialogTitle>
 
-        {/* Telegram uslubidagi segmentli indikator */}
-        {total > 1 && (
-          <div className="absolute inset-x-0 top-0 z-20 flex gap-1 p-3">
-            {items.map((item, i) => (
-              <button
-                key={item.id}
-                type="button"
-                aria-label={`${i + 1}`}
-                onClick={() => setIndex(i)}
-                className={cn(
-                  'h-1 flex-1 rounded-full transition-colors',
-                  i === index ? 'bg-white' : 'bg-white/30 hover:bg-white/50'
-                )}
-              />
-            ))}
-          </div>
-        )}
+        <div className="relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-black">
+          <div className="pointer-events-none absolute inset-x-0 top-0 z-20 h-32 bg-gradient-to-b from-black/85 via-black/45 to-transparent" />
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 h-48 bg-gradient-to-t from-black/90 via-black/50 to-transparent" />
 
-        <div className="flex flex-col">
-          {/* Sarlavha */}
-          <div className="flex items-center justify-between gap-3 px-4 pb-2 pt-6">
+          <header className="absolute inset-x-0 top-0 z-40 flex items-center justify-between gap-3 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+14px)] sm:px-6">
             <div className="min-w-0">
-              <p className="truncate text-sm font-semibold">
-                {name || username || t('profile.user')}
-              </p>
-              {total > 0 && (
-                <p className="text-xs text-white/60">
-                  {index + 1} / {total}
-                  {index === 0 && total > 1 && (
-                    <span className="ml-2 rounded-full bg-white/15 px-2 py-0.5 text-[10px] uppercase tracking-wide">
-                      {t('profile.photos.main', { defaultValue: 'Asosiy' })}
-                    </span>
-                  )}
+              <div className="flex min-w-0 items-center gap-2">
+                <p className="truncate text-sm font-semibold tracking-[-0.01em] text-white sm:text-base">
+                  {name || username || t('profile.user')}
                 </p>
-              )}
+                {isCurrentMain ? (
+                  <span className="shrink-0 rounded-full border border-white/10 bg-white/10 px-2 py-0.5 text-[10px] font-medium text-white/75 backdrop-blur">
+                    {t('profile.photos.main', { defaultValue: 'Asosiy' })}
+                  </span>
+                ) : null}
+              </div>
+              {total > 0 ? (
+                <p className="mt-0.5 text-xs tabular-nums text-white/55">
+                  {index + 1} / {total}
+                </p>
+              ) : null}
             </div>
-          </div>
 
-          {/* Rasm */}
-          <div
-            className="relative flex min-h-[50vh] items-center justify-center overflow-hidden bg-black"
-            onTouchStart={(e) => {
-              touchStartX.current = e.touches[0]?.clientX ?? null;
-            }}
-            onTouchEnd={(e) => {
-              const startX = touchStartX.current;
-              const endX = e.changedTouches[0]?.clientX ?? null;
-              touchStartX.current = null;
-              if (startX == null || endX == null) return;
-              const delta = endX - startX;
-              if (Math.abs(delta) < 48) return;
-              if (delta > 0) goPrev();
-              else goNext();
-            }}
+            <button
+              type="button"
+              onClick={() => onOpenChange(false)}
+              aria-label={t('common.close', { defaultValue: 'Yopish' })}
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/10 text-white backdrop-blur-xl transition hover:bg-white/20 active:scale-95"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </header>
+
+          <main
+            className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden px-0 pb-[calc(env(safe-area-inset-bottom)+104px)] pt-[calc(env(safe-area-inset-top)+72px)] sm:px-16 sm:pb-28 sm:pt-20"
+            onTouchStart={handleTouchStart}
+            onTouchEnd={handleTouchEnd}
           >
             {isLoading && total === 0 ? (
-              <Loader2 className="h-8 w-8 animate-spin text-white/70" />
+              <Loader2 className="h-8 w-8 animate-spin text-white/65" />
             ) : current ? (
               <img
                 key={current.id}
                 src={current.image_url}
                 alt={name || username || 'profile'}
-                className="max-h-[70vh] w-full object-contain"
+                draggable={false}
+                className="max-h-full max-w-full select-none object-contain"
               />
             ) : (
-              <div className="flex flex-col items-center gap-3 py-16 text-center text-white/70">
-                <ImagePlus className="h-10 w-10" />
-                <p className="text-sm">
-                  {t('profile.photos.empty', { defaultValue: 'Profil rasmi yo\u2018q' })}
+              <div className="flex flex-col items-center gap-3 px-6 text-center text-white/60">
+                <div className="flex h-16 w-16 items-center justify-center rounded-full border border-white/10 bg-white/5">
+                  <ImagePlus className="h-7 w-7" />
+                </div>
+                <p className="text-sm font-medium text-white/80">
+                  {t('profile.photos.empty', { defaultValue: 'Profil rasmi yo‘q' })}
                 </p>
               </div>
             )}
 
-            {total > 1 && (
+            {total > 1 ? (
               <>
                 <button
                   type="button"
                   onClick={goPrev}
                   aria-label={t('common.previous', { defaultValue: 'Oldingi' })}
-                  className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-black/50 p-2 text-white transition hover:bg-black/70"
+                  className="absolute left-5 top-1/2 hidden h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-white/10 bg-black/35 text-white backdrop-blur-xl transition hover:bg-black/60 sm:flex"
                 >
-                  <ChevronLeft className="h-5 w-5" />
+                  <ChevronLeft className="h-6 w-6" />
                 </button>
                 <button
                   type="button"
                   onClick={goNext}
                   aria-label={t('common.next', { defaultValue: 'Keyingi' })}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-black/50 p-2 text-white transition hover:bg-black/70"
+                  className="absolute right-5 top-1/2 hidden h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-white/10 bg-black/35 text-white backdrop-blur-xl transition hover:bg-black/60 sm:flex"
                 >
-                  <ChevronRight className="h-5 w-5" />
+                  <ChevronRight className="h-6 w-6" />
                 </button>
               </>
-            )}
-          </div>
+            ) : null}
+          </main>
 
-          {/* Kichik rasmlar */}
-          {total > 1 && (
-            <div className="flex gap-2 overflow-x-auto px-4 py-3">
-              {items.map((item, i) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => setIndex(i)}
-                  className={cn(
-                    'h-14 w-14 flex-shrink-0 overflow-hidden rounded-xl border-2 transition',
-                    i === index ? 'border-primary' : 'border-transparent opacity-70 hover:opacity-100'
-                  )}
-                >
-                  <img src={item.image_url} alt="" className="h-full w-full object-cover" />
-                </button>
-              ))}
-            </div>
-          )}
-
-          {/* Amallar */}
-          <div className="flex flex-wrap items-center gap-2 border-t border-white/10 px-4 py-3">
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={handleDownload}
-              disabled={!current}
-              className="bg-white/10 text-white hover:bg-white/20"
-            >
-              <Download className="mr-2 h-4 w-4" />
-              {t('common.download', { defaultValue: 'Yuklab olish' })}
-            </Button>
-
-            {isOwnProfile && (
-              <>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={handleUpload}
-                />
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={uploading}
-                  className="bg-white/10 text-white hover:bg-white/20"
-                >
-                  {uploading ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <ImagePlus className="mr-2 h-4 w-4" />
-                  )}
-                  {t('profile.photos.add', { defaultValue: "Rasm qo'shish" })}
-                </Button>
-
-                {current && !current.synthetic && index !== 0 && (
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={handleSetMain}
-                    disabled={busy}
-                    className="bg-white/10 text-white hover:bg-white/20"
-                  >
-                    <Star className="mr-2 h-4 w-4" />
-                    {t('profile.photos.setMain', { defaultValue: 'Asosiy qilish' })}
-                  </Button>
-                )}
-
-                {current && !current.synthetic && (
-                  <Button
-                    variant={confirmingDelete ? 'destructive' : 'secondary'}
-                    size="sm"
-                    onClick={handleDelete}
-                    disabled={busy}
+          <footer className="absolute inset-x-0 bottom-0 z-40 flex flex-col items-center gap-3 px-3 pb-[calc(env(safe-area-inset-bottom)+14px)] sm:px-6 sm:pb-6">
+            {total > 1 ? (
+              <div className="no-scrollbar flex max-w-full items-center gap-1.5 overflow-x-auto rounded-full border border-white/10 bg-black/30 p-1.5 backdrop-blur-xl">
+                {items.map((item, itemIndex) => (
+                  <button
+                    key={item.id}
+                    ref={(element) => {
+                      thumbnailRefs.current[itemIndex] = element;
+                    }}
+                    type="button"
+                    onClick={() => setIndex(itemIndex)}
+                    aria-label={`${itemIndex + 1}`}
+                    aria-current={itemIndex === index ? 'true' : undefined}
                     className={cn(
-                      'ml-auto',
-                      !confirmingDelete && 'bg-white/10 text-white hover:bg-white/20'
+                      'h-9 w-9 shrink-0 overflow-hidden rounded-full border transition sm:h-10 sm:w-10',
+                      itemIndex === index
+                        ? 'border-white opacity-100'
+                        : 'border-transparent opacity-55 hover:opacity-85',
                     )}
                   >
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    {confirmingDelete
-                      ? t('common.confirm', { defaultValue: 'Tasdiqlash' })
-                      : t('common.delete', { defaultValue: "O'chirish" })}
-                  </Button>
-                )}
-              </>
-            )}
-          </div>
+                    <img
+                      src={item.image_url}
+                      alt=""
+                      loading="lazy"
+                      className="h-full w-full object-cover"
+                    />
+                  </button>
+                ))}
+              </div>
+            ) : null}
+
+            {confirmingDelete ? (
+              <div className="flex max-w-[calc(100vw-24px)] items-center gap-2 rounded-full border border-white/10 bg-black/70 p-1.5 pl-4 text-sm shadow-2xl backdrop-blur-xl">
+                <span className="truncate text-white/80">
+                  {t('profile.photos.deleteConfirm', { defaultValue: 'Rasm o‘chirilsinmi?' })}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setConfirmingDelete(false)}
+                  disabled={busy}
+                  className="h-9 rounded-full px-3 text-sm font-medium text-white/70 transition hover:bg-white/10 hover:text-white disabled:opacity-40"
+                >
+                  {t('common.cancel', { defaultValue: 'Bekor qilish' })}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDelete}
+                  disabled={busy}
+                  className="inline-flex h-9 items-center gap-1.5 rounded-full bg-red-500/90 px-3 text-sm font-semibold text-white transition hover:bg-red-500 disabled:opacity-50"
+                >
+                  {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                  {t('common.delete', { defaultValue: "O'chirish" })}
+                </button>
+              </div>
+            ) : null}
+
+            <div className="flex max-w-full items-center gap-1.5 overflow-x-auto rounded-full border border-white/10 bg-black/45 p-1.5 shadow-2xl backdrop-blur-2xl">
+              <button
+                type="button"
+                onClick={handleDownload}
+                disabled={!current || isWorking}
+                aria-label={t('common.download', { defaultValue: 'Yuklab olish' })}
+                className={viewerActionClass}
+              >
+                <Download className="h-4 w-4" />
+                <span className="hidden sm:inline">
+                  {t('common.download', { defaultValue: 'Yuklab olish' })}
+                </span>
+              </button>
+
+              {isOwnProfile ? (
+                <>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleUpload}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isWorking}
+                    aria-label={t('profile.photos.add', { defaultValue: "Rasm qo'shish" })}
+                    className={viewerActionClass}
+                  >
+                    {uploading ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <ImagePlus className="h-4 w-4" />
+                    )}
+                    <span className="hidden sm:inline">
+                      {t('profile.photos.add', { defaultValue: "Rasm qo'shish" })}
+                    </span>
+                  </button>
+
+                  {current && !current.synthetic && !isCurrentMain ? (
+                    <button
+                      type="button"
+                      onClick={handleSetMain}
+                      disabled={isWorking}
+                      aria-label={t('profile.photos.setMain', { defaultValue: 'Asosiy qilish' })}
+                      className={viewerActionClass}
+                    >
+                      {busy ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Star className="h-4 w-4" />
+                      )}
+                      <span className="hidden sm:inline">
+                        {t('profile.photos.setMain', { defaultValue: 'Asosiy qilish' })}
+                      </span>
+                    </button>
+                  ) : null}
+
+                  {current && !current.synthetic ? (
+                    <button
+                      type="button"
+                      onClick={handleDelete}
+                      disabled={isWorking}
+                      aria-label={t('common.delete', { defaultValue: "O'chirish" })}
+                      className={cn(viewerActionClass, 'text-red-300 hover:bg-red-500/15 hover:text-red-200')}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      <span className="hidden sm:inline">
+                        {t('common.delete', { defaultValue: "O'chirish" })}
+                      </span>
+                    </button>
+                  ) : null}
+                </>
+              ) : null}
+            </div>
+          </footer>
         </div>
       </DialogContent>
     </Dialog>
