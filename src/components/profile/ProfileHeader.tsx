@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { Calendar, Images, LinkIcon, MapPin } from 'lucide-react';
 
 import { EmojiText } from '@/components/emoji/EmojiText';
+import { ProfileCoverSurface } from '@/components/profile/ProfileCoverSurface';
 import { RichTextContent } from '@/components/RichTextContent';
 import { StoryAvatar } from '@/components/stories/StoryAvatar';
 import { VerifiedBadge } from '@/components/VerifiedBadge';
@@ -13,6 +14,7 @@ export interface ProfileHeaderProfile {
   display_name: string | null;
   avatar_url: string | null;
   cover_url: string | null;
+  cover_preset?: string | null;
   bio: string | null;
   website: string | null;
   is_verified: boolean | null;
@@ -63,13 +65,10 @@ export function ProfileHeader({
 }: ProfileHeaderProps) {
   return (
     <>
-      <div className="relative mb-12 h-36 overflow-hidden rounded-xl bg-gradient-to-r from-muted to-muted/60 sm:mb-16 sm:h-48 md:mb-16 md:h-64 md:rounded-2xl">
-        {profile.cover_url ? (
-          <img src={profile.cover_url} alt="" className="h-full w-full object-cover" />
-        ) : (
-          <div className="absolute inset-0 bg-gradient-to-br from-muted via-card to-muted/80" />
-        )}
-        <div className="absolute inset-0 bg-gradient-to-t from-background/50 to-transparent" />
+      <div className="relative mb-12 h-36 overflow-hidden rounded-[24px] border border-border/60 bg-muted shadow-[0_18px_46px_-38px_rgba(0,0,0,0.55)] sm:mb-16 sm:h-48 md:mb-16 md:h-64 md:rounded-[30px]">
+        <ProfileCoverSurface coverUrl={profile.cover_url} presetId={profile.cover_preset} />
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/10 via-transparent to-white/[0.04]" />
+        <div className="pointer-events-none absolute inset-0 rounded-[inherit] ring-1 ring-inset ring-white/10" />
         {coverAction}
       </div>
 
