@@ -23,8 +23,10 @@ describe('profile post layouts', () => {
     const userProfile = source('pages/UserProfilePage.tsx');
 
     expect(profilePosts).toContain("layout?: 'feed' | 'reels-grid'");
-    expect(profilePosts).toContain('grid grid-cols-3');
+    expect(profilePosts).toContain('grid-cols-3');
     expect(profilePosts).toContain("aspect-[3/4]");
+    expect(profilePosts).toContain('w-screen max-w-[640px]');
+    expect(profilePosts).toContain('grid w-screen -translate-x-1/2 grid-cols-3');
 
     expect(ownProfile).toContain("layout={activeTab === 'videos' ? 'reels-grid' : 'feed'}");
     expect(ownProfile).toContain('layout="feed"');
