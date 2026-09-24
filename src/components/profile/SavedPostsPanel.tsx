@@ -31,6 +31,7 @@ interface SavedPostsPanelProps {
 function getErrorMessage(error: unknown, fallback: string) {
   const value = error as { code?: string; message?: string } | null;
   if (value?.code === '23505') return 'Bu nomdagi playlist allaqachon mavjud.';
+  if (value?.code === '23514') return '“Saved” nomi default playlist uchun band.';
   return value?.message || fallback;
 }
 
@@ -280,7 +281,6 @@ export function SavedPostsPanel({ isOwnProfile, profile }: SavedPostsPanelProps)
           isOwnProfile={isOwnProfile}
           profile={profile}
           layout="feed"
-          onBookmarkChanged={refresh}
         />
       )}
 
