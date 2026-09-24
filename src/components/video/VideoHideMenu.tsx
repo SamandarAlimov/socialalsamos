@@ -1,96 +1,94 @@
-import { useState } from 'react';
-import { EyeOff, MoreHorizontal } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { useLocation, useSearchParams } from 'react-router-dom';
-import { toast } from 'sonner';
 
-import { Button } from '@/components/ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+import { PostActionsMenu } from '@/components/PostActionsMenu';
 import { useAuth } from '@/contexts/AuthContext';
-import { hideContentPost } from '@/lib/contentHides';
 import db from '@/lib/supabaseAny';
 
+interface ActiveVideoPost {
+  user_id: string;
+  content: string | null;
+  is_pinned: boolean;
+}
+
 /**
- * Videos/Reels surface keeps its player controls inside VideosPage, while the
- * canonical post id is mirrored into `?v=`. This route-aware menu gives reels
- * the same hide/not-interested capability as Home without coupling the player
- * implementation to recommendation persistence.
+ * Videos/Reels mirrors the active canonical post id into `?v=`. Resolve the
+ * lightweight post metadata here and reuse the exact same More Actions surface
+ * as Home/Profile so mobile and tablet never fall back to a one-off dropdown.
  */
 export function VideoHideMenu() {
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const { user } = useAuth();
-  const [isHiding, setIsHiding] = useState(false);
+  const [post, setPost] = useState<ActiveVideoPost | null>(null);
+  const [isBookmarked, setIsBookmarked] = useState(false);
 
   const postId =
     searchParams.get('v') ||
     searchParams.get('post') ||
     searchParams.get('id');
 
-  if (location.pathname !== '/videos' || !postId || !user?.id) return null;
+  useEffect(() => {
+    if (location.pathname !== '/videos' || !postId || !user?.id) {
+      setPost(null);
+      setIsBookmarked(false);
+      return;
+    }
 
-  const handleHide = async () => {
-    if (isHiding) return;
-    setIsHiding(true);
+    let cancelled = false;
 
-    try {
-      // Owner posts should not silently disappear from the creator's own
-      // surface. Archive is a different product action from recommendation hide.
-      const { data: post, error: postError } = await db
-        .from('posts')
-        .select('user_id')
-        .eq('id', postId)
-        .maybeSingle();
+    void (async () => {
+      const [postResult, bookmarkResult] = await Promise.all([
+        db
+          .from('posts')
+          .select('user_id, content, is_pinned')
+          .eq('id', postId)
+          .maybeSingle(),
+        db
+          .from('bookmarks')
+          .select('id')
+          .eq('post_id', postId)
+          .eq('user_id', user.id)
+          .maybeSingle(),
+      ]);
 
-      if (postError) throw postError;
-      if (String((post as any)?.user_id ?? '') === user.id) {
-        toast.info('Bu sizning postingiz', {
-          description: 'O‘z postingiz uchun yashirish emas, arxivlash alohida amal bo‘ladi.',
-        });
+      if (cancelled) return;
+
+      if (postResult.error || !postResult.data) {
+        console.error('Video actions metadata failed:', postResult.error);
+        setPost(null);
+        setIsBookmarked(false);
         return;
       }
 
-      await hideContentPost(postId, user.id, 'not_interested');
-      toast.success('Video yashirildi', {
-        description: 'Bu video Home va Videos tavsiyalarida qayta ko‘rsatilmaydi.',
+      setPost({
+        user_id: String((postResult.data as any).user_id ?? ''),
+        content: (postResult.data as any).content ?? null,
+        is_pinned: Boolean((postResult.data as any).is_pinned),
       });
-    } catch (error) {
-      console.error('Video hide failed:', error);
-      toast.error('Videoni yashirib bo‘lmadi');
-    } finally {
-      setIsHiding(false);
-    }
-  };
+      setIsBookmarked(Boolean(bookmarkResult.data));
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [location.pathname, postId, user?.id]);
+
+  if (location.pathname !== '/videos' || !postId || !user?.id || !post?.user_id) return null;
 
   return (
     <div className="pointer-events-auto fixed right-3 top-[calc(env(safe-area-inset-top,0px)+64px)] z-[46] md:right-5 md:top-5">
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            aria-label="Video amallari"
-            className="h-10 w-10 rounded-full bg-black/45 text-white shadow-lg ring-1 ring-white/15 backdrop-blur-xl hover:bg-black/60 hover:text-white"
-          >
-            <MoreHorizontal className="h-5 w-5" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-52">
-          <DropdownMenuItem
-            onClick={() => void handleHide()}
-            disabled={isHiding}
-            className="cursor-pointer"
-          >
-            <EyeOff className="mr-2 h-4 w-4" />
-            {isHiding ? 'Yashirilmoqda…' : 'Postni yashirish'}
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <PostActionsMenu
+        key={postId}
+        postId={postId}
+        postUserId={post.user_id}
+        postContent={post.content ?? undefined}
+        isPinned={post.is_pinned}
+        isBookmarked={isBookmarked}
+        triggerLabel="Video amallari"
+        triggerClassName="h-10 w-10 rounded-full bg-black/45 text-white shadow-lg ring-1 ring-white/15 backdrop-blur-xl hover:bg-black/60 hover:text-white"
+        triggerIconClassName="h-5 w-5"
+      />
     </div>
   );
 }
