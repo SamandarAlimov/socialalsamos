@@ -215,99 +215,102 @@ export default function ProfilePage() {
       {/* Profile Info */}
       <div className="relative -mt-12 sm:-mt-16 md:-mt-24 px-2 md:px-4">
         <div className="flex flex-col gap-3 md:gap-4">
-          {/* Avatar with story ring */}
-          <div className="relative self-start">
-            <StoryAvatar
-              userId={profile.id}
-              username={profile.username}
-              displayName={profile.display_name}
-              avatarUrl={profile.avatar_url}
-              isVerified={!!profile.is_verified}
-              size="xl"
-              showRing
-              className="h-20 w-20 sm:h-24 sm:w-24 md:h-28 md:w-28"
-            />
-            {(profile.avatar_url || isOwnProfile) && (
-              <button
-                type="button"
-                onClick={() => setShowPhotos(true)}
-                aria-label={t('profile.photos.title', { defaultValue: 'Profil rasmlari' })}
-                className="absolute -bottom-1 -right-1 rounded-full border border-border bg-background/90 p-1.5 shadow-sm backdrop-blur transition-colors hover:bg-accent"
-              >
-                <Images className="h-3.5 w-3.5" />
-              </button>
-            )}
-          </div>
+          <div className="flex min-w-0 items-center gap-3 md:gap-4">
+            {/* Avatar with story ring */}
+            <div className="relative shrink-0">
+              <StoryAvatar
+                userId={profile.id}
+                username={profile.username}
+                displayName={profile.display_name}
+                avatarUrl={profile.avatar_url}
+                isVerified={!!profile.is_verified}
+                size="xl"
+                showRing
+                className="h-20 w-20 sm:h-24 sm:w-24 md:h-28 md:w-28"
+              />
+              {(profile.avatar_url || isOwnProfile) && (
+                <button
+                  type="button"
+                  onClick={() => setShowPhotos(true)}
+                  aria-label={t('profile.photos.title', { defaultValue: 'Profil rasmlari' })}
+                  className="absolute -bottom-1 -right-1 rounded-full border border-border bg-background/90 p-1.5 shadow-sm backdrop-blur transition-colors hover:bg-accent"
+                >
+                  <Images className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
 
-          <div className="flex-1">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 md:gap-4">
-              <div>
-                <div className="flex items-center gap-1.5 md:gap-2">
-                  <h1 className="text-xl md:text-2xl font-bold">
+            <div className="min-w-0 flex-1">
+              <div className="flex min-w-0 items-center gap-1.5 md:gap-2">
+                <h1 className="min-w-0 flex-1 truncate text-xl font-bold md:text-2xl">
+                  <span className="block truncate">
                     <EmojiText
                       text={profile.display_name || profile.username || t('profile.user')}
                       size={22}
                     />
-                  </h1>
-                  {profile.is_verified && (
-                    <VerifiedBadge size="sm" className="md:hidden" />
-                  )}
-                  {profile.is_verified && (
-                    <VerifiedBadge size="md" className="hidden md:block" />
-                  )}
-                </div>
-                <p className="text-sm md:text-base text-muted-foreground">@{profile.username || t('profile.usernameFallback')}</p>
+                  </span>
+                </h1>
+                {profile.is_verified && (
+                  <VerifiedBadge size="sm" className="shrink-0 md:hidden" />
+                )}
+                {profile.is_verified && (
+                  <VerifiedBadge size="md" className="hidden shrink-0 md:block" />
+                )}
               </div>
-              {isOwnProfile && (
-                <div className="flex gap-2">
-                  <Button variant="default" size="sm" className="md:h-10 md:px-4" onClick={() => navigate('/settings')}>
-                    <Edit3 className="h-4 w-4 mr-1.5 md:mr-2" />
-                    <span className="text-sm">{t('profile.editProfile')}</span>
-                  </Button>
+              <p className="mt-0.5 block max-w-full truncate text-sm text-muted-foreground md:text-base">
+                @{profile.username || t('profile.usernameFallback')}
+              </p>
+            </div>
+          </div>
+
+          {isOwnProfile && (
+            <div className="flex flex-wrap gap-2">
+              <Button variant="default" size="sm" className="md:h-10 md:px-4" onClick={() => navigate('/settings')}>
+                <Edit3 className="h-4 w-4 mr-1.5 md:mr-2" />
+                <span className="text-sm">{t('profile.editProfile')}</span>
+              </Button>
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-9 w-9 md:h-10 md:w-10"
+                aria-label={t('profile.qr.title', { defaultValue: 'QR kod' })}
+                onClick={() => setShowQrDialog(true)}
+              >
+                <QrCode className="h-4 w-4 md:h-5 md:w-5" />
+              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
                   <Button
                     variant="outline"
                     size="icon"
                     className="h-9 w-9 md:h-10 md:w-10"
-                    aria-label={t('profile.qr.title', { defaultValue: 'QR kod' })}
-                    onClick={() => setShowQrDialog(true)}
+                    aria-label={t('common.more', { defaultValue: "Ko'proq" })}
                   >
-                    <QrCode className="h-4 w-4 md:h-5 md:w-5" />
+                    <MoreHorizontal className="h-4 w-4 md:h-5 md:w-5" />
                   </Button>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className="h-9 w-9 md:h-10 md:w-10"
-                        aria-label={t('common.more', { defaultValue: "Ko'proq" })}
-                      >
-                        <MoreHorizontal className="h-4 w-4 md:h-5 md:w-5" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-52">
-                      <DropdownMenuItem onClick={() => setShowPhotos(true)}>
-                        <Images className="mr-2 h-4 w-4" />
-                        {t('profile.photos.title', { defaultValue: 'Profil rasmlari' })}
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => navigate('/story-archive')}>
-                        <Archive className="mr-2 h-4 w-4" />
-                        {t('nav.storyArchive')}
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => navigate('/ads')}>
-                        <Megaphone className="mr-2 h-4 w-4" />
-                        {t('nav.ads')}
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem onClick={() => navigate('/settings')}>
-                        <Settings className="mr-2 h-4 w-4" />
-                        {t('nav.settings', { defaultValue: 'Sozlamalar' })}
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-              )}
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-52">
+                  <DropdownMenuItem onClick={() => setShowPhotos(true)}>
+                    <Images className="mr-2 h-4 w-4" />
+                    {t('profile.photos.title', { defaultValue: 'Profil rasmlari' })}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => navigate('/story-archive')}>
+                    <Archive className="mr-2 h-4 w-4" />
+                    {t('nav.storyArchive')}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => navigate('/ads')}>
+                    <Megaphone className="mr-2 h-4 w-4" />
+                    {t('nav.ads')}
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => navigate('/settings')}>
+                    <Settings className="mr-2 h-4 w-4" />
+                    {t('nav.settings', { defaultValue: 'Sozlamalar' })}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Bio */}
