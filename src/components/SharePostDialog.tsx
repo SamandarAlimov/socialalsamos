@@ -17,7 +17,6 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Check,
-  Copy,
   Facebook,
   Link2,
   Loader2,
@@ -59,7 +58,6 @@ interface ShareShortcutProps {
   label: string;
   onClick: () => void;
   active?: boolean;
-  iconClassName?: string;
 }
 
 const MOBILE_SHARE_SNAP_COMPACT = 0.68;
@@ -70,7 +68,7 @@ function createShareEventId() {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
 }
 
-function ShareShortcut({ icon: Icon, label, onClick, active = false, iconClassName }: ShareShortcutProps) {
+function ShareShortcut({ icon: Icon, label, onClick, active = false }: ShareShortcutProps) {
   return (
     <button
       type="button"
@@ -83,7 +81,7 @@ function ShareShortcut({ icon: Icon, label, onClick, active = false, iconClassNa
           active && 'bg-foreground text-background ring-foreground',
         )}
       >
-        <Icon className={cn('h-[22px] w-[22px]', iconClassName)} />
+        <Icon className="h-[22px] w-[22px]" />
       </span>
       <span className="line-clamp-2 text-[11px] font-medium leading-4 text-foreground">{label}</span>
     </button>
@@ -131,6 +129,7 @@ export function SharePostDialog({
       setActiveSnapPoint(MOBILE_SHARE_SNAP_COMPACT);
       void fetchConversations();
     }
+
     if (!open) {
       setSearch('');
       setSelectedIds([]);
@@ -154,7 +153,7 @@ export function SharePostDialog({
         return;
       }
 
-      const conversationIds = participations.map((p) => p.conversation_id);
+      const conversationIds = participations.map((item) => item.conversation_id);
       const { data: convos } = await supabase
         .from('conversations')
         .select('id, type, name, avatar_url')
@@ -166,31 +165,32 @@ export function SharePostDialog({
         return;
       }
 
-      const processedConvos: Conversation[] = [];
+      const processed: Conversation[] = [];
       for (const convo of convos) {
-        if (convo.type === 'private') {
-          const { data: participants } = await supabase
-            .from('conversation_participants')
-            .select('user_id')
-            .eq('conversation_id', convo.id)
-            .neq('user_id', user.id)
-            .limit(1);
-
-          if (participants?.length) {
-            const { data: profile } = await supabase
-              .from('profiles')
-              .select('id, username, display_name, avatar_url')
-              .eq('id', participants[0].user_id)
-              .single();
-
-            if (profile) processedConvos.push({ ...convo, participant: profile });
-          }
-        } else {
-          processedConvos.push(convo);
+        if (convo.type !== 'private') {
+          processed.push(convo);
+          continue;
         }
+
+        const { data: participants } = await supabase
+          .from('conversation_participants')
+          .select('user_id')
+          .eq('conversation_id', convo.id)
+          .neq('user_id', user.id)
+          .limit(1);
+
+        if (!participants?.length) continue;
+
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('id, username, display_name, avatar_url')
+          .eq('id', participants[0].user_id)
+          .single();
+
+        if (profile) processed.push({ ...convo, participant: profile });
       }
 
-      setConversations(processedConvos);
+      setConversations(processed);
     } catch (error) {
       console.error('Error fetching conversations:', error);
       setConversations([]);
@@ -218,7 +218,7 @@ export function SharePostDialog({
   };
 
   const handleSend = async () => {
-    if (selectedIds.length === 0 || !user) return;
+    if (!user || selectedIds.length === 0) return;
     setIsSending(true);
 
     try {
@@ -271,12 +271,14 @@ export function SharePostDialog({
   const filteredConversations = conversations.filter((conversation) => {
     const query = search.trim().toLowerCase();
     if (!query) return true;
+
     if (conversation.type === 'private' && conversation.participant) {
       return Boolean(
         conversation.participant.username?.toLowerCase().includes(query) ||
           conversation.participant.display_name?.toLowerCase().includes(query),
       );
     }
+
     return Boolean(conversation.name?.toLowerCase().includes(query));
   });
 
@@ -323,7 +325,14 @@ export function SharePostDialog({
         ? conversation.participant.avatar_url
         : conversation.avatar_url;
     const isGroup = conversation.type === 'group' || conversation.type === 'channel';
-    const typeLabel = conversation.type === 'channel' ? 'Kanal' : conversation.type === 'group' ? 'Guruh' : username ? `@${username}` : 'Shaxsiy chat';
+    const typeLabel =
+      conversation.type === 'channel'
+        ? 'Kanal'
+        : conversation.type === 'group'
+          ? 'Guruh'
+          : username
+            ? `@${username}`
+            : 'Shaxsiy chat';
 
     if (isMobile) {
       return (
@@ -342,10 +351,14 @@ export function SharePostDialog({
               {isGroup ? <Users className="h-5 w-5" /> : displayName?.[0]?.toUpperCase() || 'U'}
             </AvatarFallback>
           </Avatar>
+
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-[14px] font-semibold text-foreground">{displayName || 'Unknown'}</span>
+            <span className="block truncate text-[14px] font-semibold text-foreground">
+              {displayName || 'Unknown'}
+            </span>
             <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">{typeLabel}</span>
           </span>
+
           <span
             className={cn(
               'flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-border bg-background transition-colors',
@@ -394,84 +407,102 @@ export function SharePostDialog({
     );
   };
 
-  const content = (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div className="relative flex-none px-4 pb-3">
-        <Search className="pointer-events-none absolute left-8 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-muted-foreground" />
-        <Input
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder="Chatlarni qidirish"
-          className="h-11 rounded-2xl border-0 bg-muted pl-11 pr-4 text-sm shadow-none ring-0 focus-visible:ring-1 focus-visible:ring-ring/40"
+  const shortcutRow = (
+    <div className="overflow-x-auto px-3 py-3 scrollbar-hide">
+      <div className="flex min-w-max gap-1">
+        <ShareShortcut
+          icon={copied ? Check : Link2}
+          label={copied ? 'Nusxalandi' : 'Havolani nusxalash'}
+          active={copied}
+          onClick={() => void handleCopy()}
         />
-      </div>
-
-      <ScrollArea className={cn('min-h-0 px-3', isMobile ? 'flex-1' : 'h-[min(36dvh,310px)]')}>
-        {isLoading ? (
-          <div className="flex h-44 items-center justify-center">
-            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-          </div>
-        ) : filteredConversations.length === 0 ? (
-          <div className="flex h-44 flex-col items-center justify-center px-8 text-center text-sm text-muted-foreground">
-            <Users className="mb-2 h-7 w-7 opacity-45" />
-            <span>{search ? 'Mos chat topilmadi' : 'Hozircha ulashish uchun chat yo‘q'}</span>
-          </div>
-        ) : isMobile ? (
-          <div className="space-y-1 pb-3">
-            {filteredConversations.map(renderRecipient)}
-          </div>
-        ) : (
-          <div className="grid grid-cols-3 gap-x-2 gap-y-4 pb-3 sm:grid-cols-4">
-            {filteredConversations.map(renderRecipient)}
-          </div>
+        {typeof navigator !== 'undefined' && typeof navigator.share === 'function' && (
+          <ShareShortcut icon={Send} label="Boshqa ilovalar" onClick={() => void handleNativeShare()} />
         )}
-      </ScrollArea>
+        {externalShareOptions.map((option) => (
+          <ShareShortcut
+            key={option.name}
+            icon={option.icon}
+            label={option.name}
+            onClick={() => openExternalShare(option.name, option.url)}
+          />
+        ))}
+      </div>
+    </div>
+  );
 
-      {selectedIds.length > 0 && (
-        <div className="flex-none px-4 pb-3 pt-1">
-          <Button
-            type="button"
-            onClick={handleSend}
-            disabled={isSending}
-            className="h-11 w-full rounded-2xl bg-foreground text-background shadow-sm hover:bg-foreground/90"
-          >
-            {isSending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
-            {selectedIds.length} ta chatga yuborish
-          </Button>
+  const recipientList = (
+    <ScrollArea className={cn('min-h-0 px-3', isMobile ? 'flex-1' : 'h-[min(36dvh,310px)]')}>
+      {isLoading ? (
+        <div className="flex h-44 items-center justify-center">
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        </div>
+      ) : filteredConversations.length === 0 ? (
+        <div className="flex h-44 flex-col items-center justify-center px-8 text-center text-sm text-muted-foreground">
+          <Users className="mb-2 h-7 w-7 opacity-45" />
+          <span>{search ? 'Mos chat topilmadi' : 'Hozircha ulashish uchun chat yo‘q'}</span>
+        </div>
+      ) : isMobile ? (
+        <div className="space-y-1 pb-3">{filteredConversations.map(renderRecipient)}</div>
+      ) : (
+        <div className="grid grid-cols-3 gap-x-2 gap-y-4 pb-3 sm:grid-cols-4">
+          {filteredConversations.map(renderRecipient)}
         </div>
       )}
+    </ScrollArea>
+  );
 
+  const sendButton = selectedIds.length > 0 ? (
+    <div className="flex-none px-4 pb-3 pt-1">
+      <Button
+        type="button"
+        onClick={handleSend}
+        disabled={isSending}
+        className="h-11 w-full rounded-2xl bg-foreground text-background shadow-sm hover:bg-foreground/90"
+      >
+        {isSending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
+        {selectedIds.length} ta chatga yuborish
+      </Button>
+    </div>
+  ) : null;
+
+  const searchBox = (
+    <div className="relative flex-none px-4 pb-3">
+      <Search className="pointer-events-none absolute left-8 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-muted-foreground" />
+      <Input
+        value={search}
+        onChange={(event) => setSearch(event.target.value)}
+        placeholder="Chatlarni qidirish"
+        className="h-11 rounded-2xl border-0 bg-muted pl-11 pr-4 text-sm shadow-none ring-0 focus-visible:ring-1 focus-visible:ring-ring/40"
+      />
+    </div>
+  );
+
+  const mobileContent = (
+    <div className="flex min-h-0 flex-1 flex-col">
+      {searchBox}
+
+      {/* Quick-share destinations are intentionally above the scrollable recipient
+          list on mobile. Vaul keeps the drawer at its expanded physical height and
+          translates it between snap points, so footer actions can otherwise sit
+          below the compact viewport. These primary actions must be reachable at
+          the first detent without forcing the user to drag the sheet upward. */}
       <div className="mx-4 flex-none border-t border-border/60" />
+      <div className="flex-none">{shortcutRow}</div>
+      <div className="mx-4 mb-1 flex-none border-t border-border/60" />
 
-      <div className="flex-none overflow-x-auto px-3 pb-[calc(14px+env(safe-area-inset-bottom,0px))] pt-4 scrollbar-hide">
-        <div className="flex min-w-max gap-1">
-          <ShareShortcut
-            icon={copied ? Check : Link2}
-            label={copied ? 'Nusxalandi' : 'Havolani nusxalash'}
-            active={copied}
-            onClick={() => void handleCopy()}
-          />
-          {typeof navigator !== 'undefined' && typeof navigator.share === 'function' && (
-            <ShareShortcut icon={Send} label="Boshqa ilovalar" onClick={() => void handleNativeShare()} />
-          )}
-          {externalShareOptions.map((option) => (
-            <ShareShortcut
-              key={option.name}
-              icon={option.icon}
-              label={option.name}
-              onClick={() => openExternalShare(option.name, option.url)}
-            />
-          ))}
-          <ShareShortcut
-            icon={Copy}
-            label="Havolani ko‘rish"
-            onClick={() => {
-              void navigator.clipboard.writeText(shareUrl);
-              toast.success('Post havolasi tayyor');
-            }}
-          />
-        </div>
-      </div>
+      {sendButton}
+      {recipientList}
+    </div>
+  );
+
+  const desktopContent = (
+    <div className="flex min-h-0 flex-1 flex-col">
+      {searchBox}
+      {recipientList}
+      {sendButton}
+      <div className="mx-4 flex-none border-t border-border/60" />
+      <div className="flex-none pb-2">{shortcutRow}</div>
     </div>
   );
 
@@ -494,7 +525,7 @@ export function SharePostDialog({
           <DrawerHeader className="flex-none px-5 pb-3 pt-3 text-left">
             <DrawerTitle className="text-xl font-semibold tracking-tight">Ulashish</DrawerTitle>
           </DrawerHeader>
-          {content}
+          {mobileContent}
         </DrawerContent>
       </Drawer>
     );
@@ -506,7 +537,7 @@ export function SharePostDialog({
         <DialogHeader className="px-5 pb-3 pt-5">
           <DialogTitle className="text-xl font-semibold tracking-tight">Ulashish</DialogTitle>
         </DialogHeader>
-        {content}
+        {desktopContent}
       </DialogContent>
     </Dialog>
   );
