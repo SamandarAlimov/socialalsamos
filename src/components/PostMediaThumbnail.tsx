@@ -63,11 +63,34 @@ interface PostMediaThumbnailProps {
   className?: string;
   mediaClassName?: string;
   ariaLabel?: string;
+  /** Profile grid kabi surface'larda markaziy play badge kerak bo'lmasligi mumkin. */
+  showPlayOverlay?: boolean;
+}
+
+function seekVideoToPreviewFrame(video: HTMLVideoElement) {
+  if (!Number.isFinite(video.duration) || video.duration <= 0) return;
+
+  const previewTime = Math.min(0.15, Math.max(0.04, video.duration * 0.03));
+  if (video.currentTime >= previewTime - 0.01) return;
+
+  try {
+    video.currentTime = previewTime;
+  } catch {
+    // Browser hali seekable range bermagan bo'lsa onLoadedData yana urinadi.
+  }
 }
 
 /**
- * Search, Notifications va boshqa compact post previewlar uchun bitta renderer.
- * Video hech qachon <img src=".mp4"> sifatida chizilmaydi.
+ * Search, Notifications, Profile Videos va boshqa compact previewlar uchun
+ * universal renderer.
+ *
+ * Video preview strategiyasi browserga bog'lanmaydi:
+ *  1. canonical poster/thumbnail mavjud bo'lsa oddiy <img> bilan chiziladi;
+ *  2. poster yo'q yoki ishlamasa, video element kichik preview frame'ga seek qiladi;
+ *  3. media ham ishlamasa neytral video fallback ko'rsatiladi.
+ *
+ * Shu sabab Chrome/Android, Safari/iOS, Firefox va desktopda bir xil preview
+ * hierarchy ishlaydi va poster bor videolarda video faylni bekorga preload qilmaymiz.
  */
 export function PostMediaThumbnail({
   url,
@@ -77,16 +100,22 @@ export function PostMediaThumbnail({
   className,
   mediaClassName,
   ariaLabel = 'Postni ochish',
+  showPlayOverlay = true,
 }: PostMediaThumbnailProps) {
   const { resolvedUrl, isResolving } = useResolvedPostMediaUrl(url);
-  const { resolvedUrl: resolvedPoster } = useResolvedPostMediaUrl(poster || '');
-  const [failed, setFailed] = useState(false);
+  const {
+    resolvedUrl: resolvedPoster,
+    isResolving: isPosterResolving,
+  } = useResolvedPostMediaUrl(poster || '');
+  const [mediaFailed, setMediaFailed] = useState(false);
+  const [posterFailed, setPosterFailed] = useState(false);
   const isVideo = useMemo(
     () => isPostVideoMedia(url, mediaType),
     [mediaType, url],
   );
 
-  useEffect(() => setFailed(false), [resolvedUrl, resolvedPoster]);
+  useEffect(() => setMediaFailed(false), [resolvedUrl]);
+  useEffect(() => setPosterFailed(false), [resolvedPoster]);
 
   const handleClick = (event: MouseEvent<HTMLDivElement>) => {
     if (!onClick) return;
@@ -99,6 +128,9 @@ export function PostMediaThumbnail({
     event.preventDefault();
     onClick(event as unknown as MouseEvent<HTMLElement>);
   };
+
+  const showLoading = isResolving || Boolean(isVideo && poster && isPosterResolving);
+  const hasPoster = Boolean(isVideo && resolvedPoster && !posterFailed);
 
   return (
     <div
@@ -114,53 +146,54 @@ export function PostMediaThumbnail({
       )}
       aria-label={onClick ? ariaLabel : undefined}
     >
-      {isResolving ? (
+      {showLoading ? (
         <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-      ) : failed || !resolvedUrl ? (
-        isVideo ? (
-          <div className="flex h-full w-full items-center justify-center bg-neutral-900">
-            <Play className="h-5 w-5 fill-white text-white" />
-          </div>
-        ) : (
-          <ImageIcon className="h-5 w-5 text-muted-foreground" />
-        )
       ) : isVideo ? (
         <>
-          <video
-            src={resolvedUrl}
-            poster={resolvedPoster || undefined}
-            muted
-            playsInline
-            preload="metadata"
-            className={cn('h-full w-full object-cover', mediaClassName)}
-            onLoadedMetadata={(event) => {
-              const video = event.currentTarget;
-              if (!resolvedPoster && video.duration > 0) {
-                try {
-                  video.currentTime = Math.min(
-                    0.08,
-                    Math.max(0, video.duration - 0.05),
-                  );
-                } catch {
-                  // Safari ba'zan metadata bosqichida seek'ni bloklaydi.
-                }
-              }
-            }}
-            onError={() => setFailed(true)}
-          />
-          <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/10">
-            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-black/55 text-white shadow-sm backdrop-blur">
-              <Play className="ml-0.5 h-4 w-4 fill-current" />
+          {hasPoster ? (
+            <img
+              src={resolvedPoster}
+              alt=""
+              loading="lazy"
+              decoding="async"
+              className={cn('h-full w-full object-cover', mediaClassName)}
+              onError={() => setPosterFailed(true)}
+            />
+          ) : !mediaFailed && resolvedUrl ? (
+            <video
+              src={resolvedUrl}
+              muted
+              playsInline
+              preload="metadata"
+              className={cn('h-full w-full object-cover', mediaClassName)}
+              onLoadedMetadata={(event) => seekVideoToPreviewFrame(event.currentTarget)}
+              onLoadedData={(event) => seekVideoToPreviewFrame(event.currentTarget)}
+              onError={() => setMediaFailed(true)}
+            />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center bg-neutral-900">
+              <Play className="h-5 w-5 fill-white text-white" />
+            </div>
+          )}
+
+          {showPlayOverlay ? (
+            <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/10">
+              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-black/55 text-white shadow-sm backdrop-blur">
+                <Play className="ml-0.5 h-4 w-4 fill-current" />
+              </span>
             </span>
-          </span>
+          ) : null}
         </>
+      ) : mediaFailed || !resolvedUrl ? (
+        <ImageIcon className="h-5 w-5 text-muted-foreground" />
       ) : (
         <img
           src={resolvedUrl}
           alt=""
           loading="lazy"
+          decoding="async"
           className={cn('h-full w-full object-cover', mediaClassName)}
-          onError={() => setFailed(true)}
+          onError={() => setMediaFailed(true)}
         />
       )}
     </div>
