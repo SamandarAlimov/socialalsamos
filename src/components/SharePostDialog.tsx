@@ -9,6 +9,7 @@ import {
   Drawer,
   DrawerContent,
   DrawerHeader,
+  DrawerPortal,
   DrawerTitle,
 } from '@/components/ui/drawer';
 import { Button } from '@/components/ui/button';
@@ -83,7 +84,7 @@ function ShareShortcut({ icon: Icon, label, onClick, active = false }: ShareShor
       >
         <Icon className="h-[22px] w-[22px]" />
       </span>
-      <span className="line-clamp-2 text-[11px] font-medium leading-4 text-foreground">{label}</span>
+      <span className="line-clamp-2 min-h-8 text-[11px] font-medium leading-4 text-foreground">{label}</span>
     </button>
   );
 }
@@ -106,8 +107,6 @@ export function SharePostDialog({
 
   const shareUrl = `${window.location.origin}/post/${postId}`;
   const shareText = postContent ? postContent.substring(0, 100) : 'Check out this post!';
-  const mobileExpanded =
-    typeof activeSnapPoint === 'number' && activeSnapPoint >= MOBILE_SHARE_SNAP_EXPANDED - 0.04;
 
   const trackShare = async (
     channel: 'internal_chat' | 'copy_link' | 'external' | 'native_share',
@@ -410,7 +409,7 @@ export function SharePostDialog({
   };
 
   const shortcutRow = (
-    <div className="overflow-x-auto px-3 py-3 scrollbar-hide">
+    <div className="overflow-x-auto px-3 pt-2.5 scrollbar-hide">
       <div className="flex min-w-max gap-1">
         <ShareShortcut
           icon={copied ? Check : Link2}
@@ -445,7 +444,9 @@ export function SharePostDialog({
           <span>{search ? 'Mos chat topilmadi' : 'Hozircha ulashish uchun chat yo‘q'}</span>
         </div>
       ) : isMobile ? (
-        <div className="space-y-1 pb-3">{filteredConversations.map(renderRecipient)}</div>
+        <div className={cn('space-y-1', selectedIds.length > 0 ? 'pb-52' : 'pb-36')}>
+          {filteredConversations.map(renderRecipient)}
+        </div>
       ) : (
         <div className="grid grid-cols-3 gap-x-2 gap-y-4 pb-3 sm:grid-cols-4">
           {filteredConversations.map(renderRecipient)}
@@ -455,7 +456,7 @@ export function SharePostDialog({
   );
 
   const sendButton = selectedIds.length > 0 ? (
-    <div className="flex-none px-4 pb-3 pt-1">
+    <div className="px-4 pb-2 pt-2">
       <Button
         type="button"
         onClick={handleSend}
@@ -484,21 +485,19 @@ export function SharePostDialog({
   );
 
   const mobileContent = (
-    <div
-      className={cn(
-        'flex min-h-0 flex-none flex-col transition-[height] duration-300 ease-out',
-        mobileExpanded ? 'h-[calc(96dvh-72px)]' : 'h-[calc(68dvh-72px)]',
-      )}
-    >
+    <div className="flex min-h-0 flex-1 flex-col">
       {searchBox}
       {recipientList}
-      {sendButton}
+    </div>
+  );
 
-      {/* The quick-share strip lives at the bottom edge of the currently visible
-          detent, not at the physical bottom of the 96dvh Vaul surface. That keeps
-          it reachable in both compact and expanded states while the recipient list
-          alone consumes the extra height when the user drags the sheet upward. */}
-      <div className="mt-auto flex-none border-t border-border/60 bg-background pb-[max(env(safe-area-inset-bottom),0px)] shadow-[0_-10px_28px_rgba(0,0,0,0.04)]">
+  const mobileDock = (
+    <div
+      className="pointer-events-auto fixed inset-x-0 bottom-0 z-[6020] border-t border-border/60 bg-background shadow-[0_-10px_30px_rgba(0,0,0,0.08)]"
+      aria-label="Ulashish amallari"
+    >
+      {sendButton}
+      <div className="pb-[max(env(safe-area-inset-bottom),24px)]">
         {shortcutRow}
       </div>
     </div>
@@ -535,6 +534,8 @@ export function SharePostDialog({
           </DrawerHeader>
           {mobileContent}
         </DrawerContent>
+
+        {open ? <DrawerPortal>{mobileDock}</DrawerPortal> : null}
       </Drawer>
     );
   }
