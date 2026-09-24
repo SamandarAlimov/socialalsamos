@@ -5,6 +5,12 @@ import {
   isVideoLikeUrl,
   isVideoMediaType,
 } from './videoPostMedia';
+import {
+  isTallPostPreviewRatio,
+  normalizePostPreviewAspectRatio,
+  parsePostMediaAspectRatio,
+  POST_PREVIEW_ASPECT_RATIOS,
+} from './mediaAspectRatio';
 
 describe('video post discovery', () => {
   it('accepts legacy and MIME-like video media types', () => {
@@ -81,5 +87,36 @@ describe('video post discovery', () => {
         media_urls: ['https://cdn.example.com/photo.webp'],
       }),
     ).toBe(false);
+  });
+});
+
+describe('post preview aspect ratios', () => {
+  it('parses dimensions and serialized ratio formats', () => {
+    expect(parsePostMediaAspectRatio(null, 1920, 1080)).toBeCloseTo(16 / 9);
+    expect(parsePostMediaAspectRatio('9:16')).toBeCloseTo(9 / 16);
+    expect(parsePostMediaAspectRatio('4/5')).toBeCloseTo(4 / 5);
+    expect(parsePostMediaAspectRatio('0.75')).toBeCloseTo(3 / 4);
+  });
+
+  it('keeps canonical social ratios exact for stable previews', () => {
+    expect(normalizePostPreviewAspectRatio(16 / 9)).toBe(POST_PREVIEW_ASPECT_RATIOS.landscape);
+    expect(normalizePostPreviewAspectRatio(1)).toBe(POST_PREVIEW_ASPECT_RATIOS.square);
+    expect(normalizePostPreviewAspectRatio(4 / 5)).toBe(POST_PREVIEW_ASPECT_RATIOS.portraitFourFive);
+    expect(normalizePostPreviewAspectRatio(3 / 4)).toBe(POST_PREVIEW_ASPECT_RATIOS.portraitThreeFour);
+    expect(normalizePostPreviewAspectRatio(9 / 16)).toBe(POST_PREVIEW_ASPECT_RATIOS.portraitNineSixteen);
+  });
+
+  it('snaps tiny encoder drift and constrains pathological legacy ratios', () => {
+    expect(normalizePostPreviewAspectRatio(1080 / 1918)).toBe(9 / 16);
+    expect(normalizePostPreviewAspectRatio(3)).toBe(16 / 9);
+    expect(normalizePostPreviewAspectRatio(0.2)).toBe(9 / 16);
+  });
+
+  it('only treats true 9:16-style media as the tall viewport-capped layout', () => {
+    expect(isTallPostPreviewRatio(9 / 16)).toBe(true);
+    expect(isTallPostPreviewRatio(3 / 4)).toBe(false);
+    expect(isTallPostPreviewRatio(4 / 5)).toBe(false);
+    expect(isTallPostPreviewRatio(1)).toBe(false);
+    expect(isTallPostPreviewRatio(16 / 9)).toBe(false);
   });
 });
