@@ -11,6 +11,7 @@ export interface UserProfile {
   display_name: string | null;
   avatar_url: string | null;
   cover_url: string | null;
+  cover_preset: string | null;
   bio: string | null;
   website: string | null;
   location: string | null;
@@ -61,10 +62,11 @@ export function useUserProfile(userId?: string) {
     }
 
     try {
-      // Fetch profile
-      const { data: profileData, error: profileError } = await supabase
+      // cover_preset is intentionally read with the public profile payload. The
+      // loose db client keeps this compatible while generated types roll forward.
+      const { data: profileData, error: profileError } = await db
         .from('profiles')
-        .select(PROFILE_PUBLIC_COLUMNS)
+        .select(`${PROFILE_PUBLIC_COLUMNS}, cover_preset`)
         .eq('id', targetUserId)
         .maybeSingle();
 
