@@ -105,7 +105,7 @@ function ReelsGridSkeleton() {
 
 function FeedSkeleton() {
   return (
-    <div className="relative left-1/2 w-screen max-w-[640px] -translate-x-1/2 space-y-4 sm:left-auto sm:mx-auto sm:w-full sm:translate-x-0 md:space-y-6">
+    <div className="relative left-1/2 w-screen max-w-[640px] -translate-x-1/2 space-y-4 md:left-auto md:mx-auto md:w-full md:translate-x-0 md:space-y-6">
       {Array.from({ length: 3 }).map((_, idx) => (
         <div
           key={idx}
@@ -532,7 +532,7 @@ export function ProfilePostsGrid({
           })}
         </div>
       ) : (
-        <div className="relative left-1/2 w-screen max-w-[640px] -translate-x-1/2 space-y-4 sm:left-auto sm:mx-auto sm:w-full sm:translate-x-0 md:space-y-6">
+        <div className="relative left-1/2 w-screen max-w-[640px] -translate-x-1/2 space-y-4 md:left-auto md:mx-auto md:w-full md:translate-x-0 md:space-y-6">
           {sortedPosts.map((post) => {
             const author = post.profile || {
               ...profile,
