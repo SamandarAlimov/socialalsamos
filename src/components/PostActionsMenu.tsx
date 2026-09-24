@@ -28,12 +28,12 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from '@/components/ui/sheet';
+  Drawer,
+  DrawerContent,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerTrigger,
+} from '@/components/ui/drawer';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -365,8 +365,13 @@ export function PostActionsMenu({
   return (
     <>
       <div className="lg:hidden">
-        <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-          <SheetTrigger asChild>
+        <Drawer
+          open={sheetOpen}
+          onOpenChange={setSheetOpen}
+          shouldScaleBackground={false}
+          dismissible
+        >
+          <DrawerTrigger asChild>
             <Button
               type="button"
               variant="ghost"
@@ -376,28 +381,23 @@ export function PostActionsMenu({
             >
               <MoreHorizontal className={cn('h-4 w-4 md:h-5 md:w-5', triggerIconClassName)} />
             </Button>
-          </SheetTrigger>
+          </DrawerTrigger>
 
-          <SheetContent
-            side="bottom"
-            hideDefaultClose
+          <DrawerContent
             data-post-actions-sheet="true"
             overlayClassName="bg-black/60"
+            handleClassName="mt-2.5 h-1 w-11 bg-neutral-300 dark:bg-neutral-700"
             className={cn(
               'max-h-[86dvh] w-full overflow-hidden rounded-t-[30px] border-x border-t border-neutral-200 bg-white p-0 text-neutral-950 shadow-[0_-18px_56px_rgba(0,0,0,0.24)] dark:border-neutral-800 dark:bg-neutral-950 dark:text-white',
-              'sm:left-1/2 sm:right-auto sm:w-[min(560px,calc(100vw-24px))] sm:-translate-x-1/2',
+              'sm:mx-auto sm:w-[min(560px,calc(100vw-24px))]',
             )}
           >
-            <div className="flex justify-center pb-1 pt-2.5">
-              <div className="h-1 w-11 rounded-full bg-neutral-300 dark:bg-neutral-700" />
-            </div>
-
-            <SheetHeader className="px-5 pb-3 pt-1 text-left">
-              <SheetTitle className="text-base font-semibold tracking-tight text-neutral-950 dark:text-white">Post amallari</SheetTitle>
+            <DrawerHeader className="px-5 pb-3 pt-1 text-left">
+              <DrawerTitle className="text-base font-semibold tracking-tight text-neutral-950 dark:text-white">Post amallari</DrawerTitle>
               <p className="text-xs text-neutral-500 dark:text-neutral-400">Saqlash, ulashish va post boshqaruvlari</p>
-            </SheetHeader>
+            </DrawerHeader>
 
-            <div className="max-h-[calc(86dvh-86px)] overflow-y-auto overscroll-contain px-3 pb-[calc(14px+env(safe-area-inset-bottom,0px))]">
+            <div className="max-h-[calc(86dvh-86px)] touch-pan-y overflow-y-auto overscroll-contain px-3 pb-[calc(14px+env(safe-area-inset-bottom,0px))]">
               <div className="grid grid-cols-4 gap-1 pb-3">
                 <QuickAction
                   icon={Link}
@@ -483,8 +483,8 @@ export function PostActionsMenu({
                 </div>
               )}
             </div>
-          </SheetContent>
-        </Sheet>
+          </DrawerContent>
+        </Drawer>
       </div>
 
       <div className="hidden lg:block">
