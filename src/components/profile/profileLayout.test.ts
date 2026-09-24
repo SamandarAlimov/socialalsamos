@@ -31,4 +31,28 @@ describe('profile post layouts', () => {
     expect(userProfile).toContain("layout={activeTab === 'videos' ? 'reels-grid' : 'feed'}");
     expect(userProfile).toContain('layout="feed"');
   });
+
+  it('keeps own and viewed profiles on one shared premium identity layout', () => {
+    const ownProfile = source('pages/ProfilePage.tsx');
+    const userProfile = source('pages/UserProfilePage.tsx');
+    const sharedHeader = source('components/profile/ProfileHeader.tsx');
+
+    expect(ownProfile).toContain('<ProfileHeader');
+    expect(userProfile).toContain('<ProfileHeader');
+    expect(sharedHeader).toContain('identityTrailing');
+    expect(sharedHeader).toContain('truncate text-xl font-bold');
+    expect(userProfile).not.toContain('OnlineIndicator');
+  });
+
+  it('keeps owner-only controls off viewed profiles and canonicalizes self profile URLs', () => {
+    const ownProfile = source('pages/ProfilePage.tsx');
+    const userProfile = source('pages/UserProfilePage.tsx');
+    const chrome = source('lib/mobileRouteChrome.ts');
+
+    expect(ownProfile).toContain("id: 'saved' as const");
+    expect(userProfile).not.toContain("id: 'saved' as const");
+    expect(userProfile).toContain("navigate('/profile', { replace: true })");
+    expect(userProfile).toContain('isOwnProfile={false}');
+    expect(chrome).toContain("if (path.startsWith('/user/')) return 'secondary'");
+  });
 });
