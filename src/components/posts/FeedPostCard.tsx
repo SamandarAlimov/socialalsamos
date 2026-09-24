@@ -177,7 +177,7 @@ export function FeedPostCard({
   return (
     <article
       ref={articleRef}
-      className="animate-fade-in overflow-hidden border-y border-border/70 bg-card/95 shadow-none transition-[box-shadow,border-color] duration-200 md:rounded-3xl md:border md:shadow-sm md:hover:border-border md:hover:shadow-md"
+      className="relative left-1/2 w-screen -translate-x-1/2 animate-fade-in overflow-hidden border-y border-border/70 bg-card/95 shadow-none transition-[box-shadow,border-color] duration-200 md:left-auto md:w-auto md:translate-x-0 md:rounded-3xl md:border md:shadow-sm md:hover:border-border md:hover:shadow-md"
     >
       <div className="flex items-center justify-between p-4 md:p-5">
         <div className="flex min-w-0 items-center gap-2.5 md:gap-3">
