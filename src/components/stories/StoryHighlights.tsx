@@ -121,7 +121,7 @@ export function StoryHighlights({ userId, className }: StoryHighlightsProps) {
       <div className={cn('space-y-2', className)}>
         <div className="flex items-center justify-between">
           <h2 className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
-            <Sparkles className="h-4 w-4 text-primary" />
+            <Sparkles className="h-4 w-4 text-muted-foreground" />
             {t('profile.highlights.title', { defaultValue: 'Tanlanganlar' })}
           </h2>
           {isOwnProfile && highlights.length > 0 && (
@@ -141,7 +141,7 @@ export function StoryHighlights({ userId, className }: StoryHighlightsProps) {
           <button
             type="button"
             onClick={() => setShowCreateDialog(true)}
-            className="flex w-full items-center gap-3 rounded-2xl border border-dashed border-border p-3 text-left transition-colors hover:border-primary hover:bg-primary/5"
+            className="flex w-full items-center gap-3 rounded-2xl border border-dashed border-border p-3 text-left transition-colors hover:border-foreground/40 hover:bg-muted/50"
           >
             <span className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full border-2 border-dashed border-muted-foreground/50">
               <Plus className="h-5 w-5 text-muted-foreground" />
@@ -166,7 +166,7 @@ export function StoryHighlights({ userId, className }: StoryHighlightsProps) {
                 className="flex flex-shrink-0 flex-col items-center gap-2"
                 aria-label={t('profile.highlights.new', { defaultValue: 'Yangi' })}
               >
-                <span className="flex h-[72px] w-[72px] items-center justify-center rounded-full border-2 border-dashed border-muted-foreground/50 transition-colors hover:border-primary hover:bg-primary/5">
+                <span className="flex h-[72px] w-[72px] items-center justify-center rounded-full border-2 border-dashed border-muted-foreground/50 transition-colors hover:border-foreground/40 hover:bg-muted/50">
                   <Plus className="h-6 w-6 text-muted-foreground" />
                 </span>
                 <span className="max-w-[72px] truncate text-xs text-muted-foreground">
@@ -193,9 +193,7 @@ export function StoryHighlights({ userId, className }: StoryHighlightsProps) {
                     <span
                       className={cn(
                         'flex h-[72px] w-[72px] items-center justify-center rounded-full p-[2px]',
-                        itemCount > 0
-                          ? 'bg-gradient-to-tr from-primary via-alsamos-orange-light to-primary/60'
-                          : 'bg-muted',
+                        itemCount > 0 ? 'bg-foreground/80' : 'bg-muted',
                       )}
                     >
                       <span className="flex h-full w-full items-center justify-center overflow-hidden rounded-full border-2 border-background bg-muted">
@@ -215,7 +213,7 @@ export function StoryHighlights({ userId, className }: StoryHighlightsProps) {
                     </span>
 
                     {itemCount > 0 && (
-                      <span className="absolute -bottom-0.5 -right-0.5 flex h-5 min-w-5 items-center justify-center rounded-full border-2 border-background bg-primary px-1 text-[10px] font-semibold text-primary-foreground">
+                      <span className="absolute -bottom-0.5 -right-0.5 flex h-5 min-w-5 items-center justify-center rounded-full border-2 border-background bg-foreground px-1 text-[10px] font-semibold text-background">
                         {itemCount}
                       </span>
                     )}
@@ -281,7 +279,11 @@ export function StoryHighlights({ userId, className }: StoryHighlightsProps) {
             <Button variant="ghost" onClick={() => setShowCreateDialog(false)}>
               {t('common.cancel', { defaultValue: 'Bekor qilish' })}
             </Button>
-            <Button onClick={handleCreateHighlight} disabled={!newHighlightName.trim() || isSaving}>
+            <Button
+              onClick={handleCreateHighlight}
+              disabled={!newHighlightName.trim() || isSaving}
+              className="bg-foreground text-background shadow-none hover:bg-foreground/90"
+            >
               {isSaving
                 ? t('common.loading', { defaultValue: 'Yuklanmoqda...' })
                 : t('common.create', { defaultValue: 'Yaratish' })}
@@ -308,7 +310,11 @@ export function StoryHighlights({ userId, className }: StoryHighlightsProps) {
             <Button variant="ghost" onClick={() => setShowEditDialog(false)}>
               {t('common.cancel', { defaultValue: 'Bekor qilish' })}
             </Button>
-            <Button onClick={handleEditHighlight} disabled={!newHighlightName.trim() || isSaving}>
+            <Button
+              onClick={handleEditHighlight}
+              disabled={!newHighlightName.trim() || isSaving}
+              className="bg-foreground text-background shadow-none hover:bg-foreground/90"
+            >
               {isSaving
                 ? t('common.loading', { defaultValue: 'Yuklanmoqda...' })
                 : t('common.save', { defaultValue: 'Saqlash' })}
