@@ -47,6 +47,23 @@ html[data-touch-ui='true'] [role='tab'] {
   touch-action: manipulation;
 }
 
+/*
+ * The mobile share dock is a fixed horizontal carousel. iOS can otherwise
+ * classify a swipe that starts on one of its buttons as a tap/overlay drag.
+ * Reserve that surface for our axis-locked horizontal scroller fallback.
+ */
+html[data-touch-ui='true'] [data-share-shortcuts-scroll='true'],
+html[data-touch-ui='true'] [data-share-shortcuts-scroll='true'] * {
+  touch-action: none !important;
+}
+
+html[data-touch-ui='true'] [data-share-shortcuts-scroll='true'] {
+  overflow-x: scroll !important;
+  overflow-y: hidden !important;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
 /* Safari/Chrome must not start a ghost image/link drag during long press. */
 html[data-touch-ui='true'] img,
 html[data-touch-ui='true'] svg,
