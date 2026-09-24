@@ -44,6 +44,7 @@ interface Post {
   formatted_content?: unknown;
   media_urls: string[] | null;
   media_type: string | null;
+  thumbnail_url?: string | null;
   likes_count: number;
   comments_count: number;
   shares_count?: number;
@@ -496,10 +497,26 @@ export function ProfilePostsGrid({
                   {mediaUrl ? (
                     <video
                       src={mediaUrl}
+                      poster={post.thumbnail_url || undefined}
                       className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.025]"
                       muted
                       playsInline
-                      preload="metadata"
+                      preload="auto"
+                      onLoadedMetadata={(event) => {
+                        if (post.thumbnail_url) return;
+                        const video = event.currentTarget;
+                        if (!Number.isFinite(video.duration) || video.duration <= 0) return;
+
+                        const previewTime = Math.min(0.2, Math.max(0.04, video.duration * 0.05));
+                        if (video.currentTime >= previewTime) return;
+
+                        try {
+                          video.currentTime = previewTime;
+                        } catch {
+                          // Some browsers can reject an early seek while media ranges are loading.
+                          // The decoded first frame will still be shown once enough data is available.
+                        }
+                      }}
                     />
                   ) : (
                     <div className="h-full w-full bg-muted" />
