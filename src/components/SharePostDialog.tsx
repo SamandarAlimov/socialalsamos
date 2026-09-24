@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -62,7 +62,7 @@ interface ShareShortcutProps {
 }
 
 const MOBILE_SHARE_SNAP_COMPACT = 0.68;
-const MOBILE_SHARE_SNAP_EXPANDED = 0.96;
+const MOBILE_SHARE_SNAP_EXPANDED = 1;
 
 function createShareEventId() {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID();
@@ -104,37 +104,9 @@ export function SharePostDialog({
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
   const [activeSnapPoint, setActiveSnapPoint] = useState<number | string | null>(MOBILE_SHARE_SNAP_COMPACT);
-  const mobileSwipeStartY = useRef<number | null>(null);
 
   const shareUrl = `${window.location.origin}/post/${postId}`;
   const shareText = postContent ? postContent.substring(0, 100) : 'Check out this post!';
-
-  const handleMobileSwipeStart = (event: React.TouchEvent<HTMLElement>) => {
-    if (
-      typeof activeSnapPoint === 'number' &&
-      activeSnapPoint >= MOBILE_SHARE_SNAP_EXPANDED - 0.02
-    ) {
-      mobileSwipeStartY.current = null;
-      return;
-    }
-    mobileSwipeStartY.current = event.touches[0]?.clientY ?? null;
-  };
-
-  const handleMobileSwipeMove = (event: React.TouchEvent<HTMLElement>) => {
-    const startY = mobileSwipeStartY.current;
-    const touch = event.touches[0];
-    if (startY === null || !touch) return;
-
-    if (touch.clientY - startY <= -24) {
-      mobileSwipeStartY.current = null;
-      if (event.cancelable) event.preventDefault();
-      setActiveSnapPoint(MOBILE_SHARE_SNAP_EXPANDED);
-    }
-  };
-
-  const handleMobileSwipeEnd = () => {
-    mobileSwipeStartY.current = null;
-  };
 
   const trackShare = async (
     channel: 'internal_chat' | 'copy_link' | 'external' | 'native_share',
@@ -164,7 +136,6 @@ export function SharePostDialog({
       setSelectedIds([]);
       setCopied(false);
       setActiveSnapPoint(MOBILE_SHARE_SNAP_COMPACT);
-      mobileSwipeStartY.current = null;
     }
   }, [open, user]);
 
@@ -438,8 +409,12 @@ export function SharePostDialog({
   };
 
   const shortcutRow = (
-    <div className="overflow-x-auto px-3 pt-2.5 scrollbar-hide">
-      <div className="flex min-w-max gap-1">
+    <div
+      data-share-shortcuts-scroll="true"
+      className="w-full overflow-x-scroll overscroll-x-contain px-3 pt-2.5 scrollbar-hide [touch-action:pan-x]"
+      style={{ WebkitOverflowScrolling: 'touch' }}
+    >
+      <div className="flex w-max min-w-full gap-1 pr-4">
         <ShareShortcut
           icon={copied ? Check : Link2}
           label={copied ? 'Nusxalandi' : 'Havolani nusxalash'}
@@ -524,10 +499,6 @@ export function SharePostDialog({
     <div
       className="pointer-events-auto fixed inset-x-0 bottom-0 z-[6020] border-t border-border/60 bg-background shadow-[0_-10px_30px_rgba(0,0,0,0.08)]"
       aria-label="Ulashish amallari"
-      onTouchStartCapture={handleMobileSwipeStart}
-      onTouchMoveCapture={handleMobileSwipeMove}
-      onTouchEndCapture={handleMobileSwipeEnd}
-      onTouchCancelCapture={handleMobileSwipeEnd}
     >
       {sendButton}
       <div className="pb-[max(env(safe-area-inset-bottom),24px)]">
@@ -560,11 +531,7 @@ export function SharePostDialog({
         <DrawerContent
           overlayClassName="bg-black/55"
           handleClassName="mt-2.5 h-1 w-11 bg-muted-foreground/25"
-          className="mt-0 h-[96dvh] max-h-[96dvh] overflow-hidden rounded-t-[28px] border-x-0 border-b-0 border-t border-border bg-background p-0 shadow-[0_-18px_56px_rgba(0,0,0,0.22)]"
-          onTouchStartCapture={handleMobileSwipeStart}
-          onTouchMoveCapture={handleMobileSwipeMove}
-          onTouchEndCapture={handleMobileSwipeEnd}
-          onTouchCancelCapture={handleMobileSwipeEnd}
+          className="mt-0 h-[100dvh] max-h-[100dvh] overflow-hidden rounded-t-[28px] border-x-0 border-b-0 border-t border-border bg-background p-0 shadow-[0_-18px_56px_rgba(0,0,0,0.22)]"
         >
           <DrawerHeader className="flex-none px-5 pb-3 pt-3 text-left">
             <DrawerTitle className="text-xl font-semibold tracking-tight">Ulashish</DrawerTitle>
