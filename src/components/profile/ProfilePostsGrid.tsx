@@ -91,7 +91,7 @@ function formatFeedPostTime(dateString: string) {
 
 function ReelsGridSkeleton() {
   return (
-    <div className="grid grid-cols-3 gap-[2px] sm:gap-1.5">
+    <div className="relative left-1/2 grid w-screen -translate-x-1/2 grid-cols-3 gap-[2px] sm:left-auto sm:w-full sm:translate-x-0 sm:gap-1.5">
       {Array.from({ length: 9 }).map((_, idx) => (
         <div
           key={idx}
@@ -105,11 +105,11 @@ function ReelsGridSkeleton() {
 
 function FeedSkeleton() {
   return (
-    <div className="relative left-1/2 w-[calc(100vw-24px)] max-w-[640px] -translate-x-1/2 space-y-4 sm:left-auto sm:mx-auto sm:w-full sm:translate-x-0 md:space-y-6">
+    <div className="relative left-1/2 w-screen max-w-[640px] -translate-x-1/2 space-y-4 sm:left-auto sm:mx-auto sm:w-full sm:translate-x-0 md:space-y-6">
       {Array.from({ length: 3 }).map((_, idx) => (
         <div
           key={idx}
-          className="overflow-hidden rounded-2xl border border-border/70 bg-card/95 md:rounded-3xl"
+          className="overflow-hidden border-y border-border/70 bg-card/95 md:rounded-3xl md:border"
           style={{ animationDelay: `${idx * 90}ms` }}
         >
           <div className="flex items-center gap-3 p-4 md:p-5">
@@ -477,7 +477,7 @@ export function ProfilePostsGrid({
           </p>
         </div>
       ) : layout === 'reels-grid' ? (
-        <div className="grid grid-cols-3 gap-[2px] sm:gap-1.5">
+        <div className="relative left-1/2 grid w-screen -translate-x-1/2 grid-cols-3 gap-[2px] sm:left-auto sm:w-full sm:translate-x-0 sm:gap-1.5">
           {sortedPosts.map((post) => {
             const mediaUrl = post.media_urls?.[0] || '';
             const counts = getPostCounts(post.id);
@@ -532,7 +532,7 @@ export function ProfilePostsGrid({
           })}
         </div>
       ) : (
-        <div className="relative left-1/2 w-[calc(100vw-24px)] max-w-[640px] -translate-x-1/2 space-y-4 sm:left-auto sm:mx-auto sm:w-full sm:translate-x-0 md:space-y-6">
+        <div className="relative left-1/2 w-screen max-w-[640px] -translate-x-1/2 space-y-4 sm:left-auto sm:mx-auto sm:w-full sm:translate-x-0 md:space-y-6">
           {sortedPosts.map((post) => {
             const author = post.profile || {
               ...profile,
