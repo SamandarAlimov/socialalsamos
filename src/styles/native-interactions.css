@@ -48,20 +48,22 @@ html[data-touch-ui='true'] [role='tab'] {
 }
 
 /*
- * The mobile share dock is a fixed horizontal carousel. iOS can otherwise
- * classify a swipe that starts on one of its buttons as a tap/overlay drag.
- * Reserve that surface for our axis-locked horizontal scroller fallback.
+ * The mobile share dock is a real native horizontal scroller. Keep this rule
+ * more specific than the generic button/a touch policy above so a swipe that
+ * starts directly on a shortcut icon still belongs to the carousel on iOS.
+ * `data-vaul-no-drag` on the React surface keeps the drawer from stealing it.
  */
 html[data-touch-ui='true'] [data-share-shortcuts-scroll='true'],
 html[data-touch-ui='true'] [data-share-shortcuts-scroll='true'] * {
-  touch-action: none !important;
+  touch-action: pan-x !important;
 }
 
 html[data-touch-ui='true'] [data-share-shortcuts-scroll='true'] {
-  overflow-x: scroll !important;
+  overflow-x: auto !important;
   overflow-y: hidden !important;
   overscroll-behavior-x: contain;
   -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
 }
 
 /* Safari/Chrome must not start a ghost image/link drag during long press. */
