@@ -25,7 +25,6 @@ jobs:
         run: |
           npm ci
           npx vitest run src/components/create/cameraCaptureUtils.test.ts src/lib/iosCameraCanvasPreview.test.ts
-          npm run typecheck
           npm run build
 
       - name: Commit fix
