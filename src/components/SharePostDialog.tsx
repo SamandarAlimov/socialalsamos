@@ -106,6 +106,8 @@ export function SharePostDialog({
 
   const shareUrl = `${window.location.origin}/post/${postId}`;
   const shareText = postContent ? postContent.substring(0, 100) : 'Check out this post!';
+  const mobileExpanded =
+    typeof activeSnapPoint === 'number' && activeSnapPoint >= MOBILE_SHARE_SNAP_EXPANDED - 0.04;
 
   const trackShare = async (
     channel: 'internal_chat' | 'copy_link' | 'external' | 'native_share',
@@ -472,6 +474,9 @@ export function SharePostDialog({
       <Input
         value={search}
         onChange={(event) => setSearch(event.target.value)}
+        onFocus={() => {
+          if (isMobile) setActiveSnapPoint(MOBILE_SHARE_SNAP_EXPANDED);
+        }}
         placeholder="Chatlarni qidirish"
         className="h-11 rounded-2xl border-0 bg-muted pl-11 pr-4 text-sm shadow-none ring-0 focus-visible:ring-1 focus-visible:ring-ring/40"
       />
@@ -479,20 +484,23 @@ export function SharePostDialog({
   );
 
   const mobileContent = (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div
+      className={cn(
+        'flex min-h-0 flex-none flex-col transition-[height] duration-300 ease-out',
+        mobileExpanded ? 'h-[calc(96dvh-72px)]' : 'h-[calc(68dvh-72px)]',
+      )}
+    >
       {searchBox}
-
-      {/* Quick-share destinations are intentionally above the scrollable recipient
-          list on mobile. Vaul keeps the drawer at its expanded physical height and
-          translates it between snap points, so footer actions can otherwise sit
-          below the compact viewport. These primary actions must be reachable at
-          the first detent without forcing the user to drag the sheet upward. */}
-      <div className="mx-4 flex-none border-t border-border/60" />
-      <div className="flex-none">{shortcutRow}</div>
-      <div className="mx-4 mb-1 flex-none border-t border-border/60" />
-
-      {sendButton}
       {recipientList}
+      {sendButton}
+
+      {/* The quick-share strip lives at the bottom edge of the currently visible
+          detent, not at the physical bottom of the 96dvh Vaul surface. That keeps
+          it reachable in both compact and expanded states while the recipient list
+          alone consumes the extra height when the user drags the sheet upward. */}
+      <div className="mt-auto flex-none border-t border-border/60 bg-background pb-[max(env(safe-area-inset-bottom),0px)] shadow-[0_-10px_28px_rgba(0,0,0,0.04)]">
+        {shortcutRow}
+      </div>
     </div>
   );
 
