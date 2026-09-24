@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Check, ImagePlus, Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { Navigate } from 'react-router-dom';
 
 import { ProfileCoverSurface } from '@/components/profile/ProfileCoverSurface';
 import { Button } from '@/components/ui/button';
@@ -47,6 +48,10 @@ export function ProfileCoverPickerDialog({
   }, [coverPreset, open]);
 
   const isWorking = saving || uploading;
+
+  if (open) {
+    return <Navigate to="/profile/cover" />;
+  }
 
   const applyPreset = async () => {
     await onApplyPreset(selectedPreset);

@@ -28,6 +28,7 @@ import PostPermalinkPage from "./pages/PostPermalinkPage";
 import PostInsightsPage from "./pages/PostInsightsPage";
 import MessagesPage from "./pages/MessagesPage";
 import ProfilePage from "./pages/ProfilePage";
+import ProfileCoverPage from "./pages/ProfileCoverPage";
 import UserProfilePage from "./pages/UserProfilePage";
 import SettingsLandingPage from "./pages/SettingsLandingPage";
 import SettingsHubPage from "./pages/SettingsHubPage";
@@ -197,6 +198,7 @@ function AppRoutes() {
         <Route path="/stickers/moderation" element={<StickerModerationPage />} />
         <Route path="/stickers/:slug" element={<StickerPacksPage />} />
         <Route path="/profile" element={<ProfilePage />} />
+        <Route path="/profile/cover" element={<ProfileCoverPage />} />
         <Route path="/user/:username" element={<UserProfileRoute />} />
         <Route path="/settings" element={<SettingsLandingPage />} />
         <Route path="/settings/payment" element={<Navigate to="/payment" replace />} />
