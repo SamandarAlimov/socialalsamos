@@ -34,14 +34,29 @@ describe('profile post layouts', () => {
     expect(userProfile).toContain('layout="feed"');
   });
 
-  it('renders a real preview frame for profile videos instead of a metadata-only black tile', () => {
+  it('uses a canonical poster-first video preview pipeline instead of browser-specific preload behavior', () => {
     const profilePosts = source('components/profile/ProfilePostsGrid.tsx');
+    const thumbnail = source('components/PostMediaThumbnail.tsx');
+    const attachments = source('hooks/usePostAttachments.ts');
 
-    expect(profilePosts).toContain('poster={post.thumbnail_url || undefined}');
-    expect(profilePosts).toContain('preload="auto"');
-    expect(profilePosts).toContain('onLoadedMetadata');
-    expect(profilePosts).toContain('video.currentTime = previewTime');
-    expect(profilePosts).not.toContain('preload="metadata"');
+    expect(profilePosts).toContain('getStructuredPostMediaPreviewMap(postIds)');
+    expect(profilePosts).toContain('structuredPreview?.poster');
+    expect(profilePosts).toContain('<PostMediaThumbnail');
+    expect(profilePosts).toContain('showPlayOverlay={false}');
+    expect(profilePosts).not.toContain('preload="auto"');
+
+    expect(thumbnail).toContain('const hasPoster');
+    expect(thumbnail).toContain('src={resolvedPoster}');
+    expect(thumbnail).toContain('decoding="async"');
+    expect(thumbnail).toContain('preload="metadata"');
+    expect(thumbnail).toContain('onLoadedMetadata');
+    expect(thumbnail).toContain('onLoadedData');
+    expect(thumbnail).toContain('video.currentTime = previewTime');
+    expect(thumbnail).toContain('setPosterFailed(true)');
+
+    // New uploads should keep producing a real thumbnail in structured media metadata.
+    expect(attachments).toContain('captureVideoPoster');
+    expect(attachments).toContain('thumbnailStorageUrl');
   });
 
   it('keeps own and viewed profiles on one shared premium identity layout', () => {
