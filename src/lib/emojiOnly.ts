@@ -15,9 +15,18 @@ const EMOJI_CHAR =
 const EMOJI_ONLY =
   /^(?:\p{Extended_Pictographic}|\p{Emoji_Presentation}|\p{Regional_Indicator}|\p{Emoji_Modifier}|\p{Emoji_Modifier_Base}|[\u200d\ufe0f\ufe0e\u20e3\u0023\u002a\u0030-\u0039\s])+$/u;
 
+type GraphemeSegment = { segment: string };
+type GraphemeSegmenter = {
+  segment(input: string): Iterable<GraphemeSegment>;
+};
+type GraphemeSegmenterConstructor = new (
+  locales?: string | string[],
+  options?: { granularity: 'grapheme' },
+) => GraphemeSegmenter;
+
 /** Split a string into grapheme clusters (emoji-safe). */
 export function splitGraphemes(text: string): string[] {
-  const Seg = (Intl as unknown as { Segmenter?: typeof Intl.Segmenter }).Segmenter;
+  const Seg = (Intl as unknown as { Segmenter?: GraphemeSegmenterConstructor }).Segmenter;
   if (Seg) {
     const seg = new Seg(undefined, { granularity: 'grapheme' });
     return Array.from(seg.segment(text), (s) => s.segment);
