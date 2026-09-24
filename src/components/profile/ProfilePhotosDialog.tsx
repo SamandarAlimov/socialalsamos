@@ -28,13 +28,28 @@ interface ProfilePhotosDialogProps {
 }
 
 type GalleryItem = { id: string; image_url: string; synthetic?: boolean };
+type GestureAxis = 'pending' | 'vertical' | 'horizontal';
+
+type PointerGesture = {
+  pointerId: number;
+  startX: number;
+  startY: number;
+  startedAt: number;
+  axis: GestureAxis;
+};
 
 const viewerActionClass =
   'inline-flex h-11 items-center justify-center gap-2 rounded-full border border-white/10 bg-white/10 px-3 text-sm font-medium text-white backdrop-blur-xl transition hover:bg-white/15 active:scale-[0.97] disabled:pointer-events-none disabled:opacity-45 sm:px-4';
 
+const GESTURE_START_THRESHOLD_PX = 8;
+const GESTURE_AXIS_DOMINANCE = 1.08;
 const SWIPE_NAV_THRESHOLD_PX = 48;
-const SWIPE_DISMISS_THRESHOLD_PX = 72;
-const SWIPE_AXIS_DOMINANCE = 1.1;
+const DRAG_DISMISS_DISTANCE_PX = 120;
+const DRAG_DISMISS_MIN_DISTANCE_PX = 44;
+const DRAG_DISMISS_VELOCITY_PX_MS = 0.65;
+const DRAG_PROGRESS_DISTANCE_PX = 320;
+const DRAG_MAX_SCALE_REDUCTION = 0.14;
+const DISMISS_ANIMATION_MS = 240;
 
 export function ProfilePhotosDialog({
   open,
@@ -53,8 +68,11 @@ export function ProfilePhotosDialog({
   const [index, setIndex] = useState(0);
   const [busy, setBusy] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
-  const touchStartX = useRef<number | null>(null);
-  const touchStartY = useRef<number | null>(null);
+  const [dragY, setDragY] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const [isDismissing, setIsDismissing] = useState(false);
+  const gestureRef = useRef<PointerGesture | null>(null);
+  const dismissTimerRef = useRef<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const thumbnailRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
@@ -72,13 +90,36 @@ export function ProfilePhotosDialog({
   const current = items[Math.min(index, Math.max(total - 1, 0))];
   const isCurrentMain = Boolean(current && index === 0 && !current.synthetic);
   const isWorking = busy || uploading;
+  const dragProgress = Math.min(Math.abs(dragY) / DRAG_PROGRESS_DISTANCE_PX, 1);
+  const dragScale = 1 - dragProgress * DRAG_MAX_SCALE_REDUCTION;
+  const chromeOpacity = Math.max(0.12, 1 - dragProgress * 1.15);
+  const overlayOpacity = Math.max(0.2, 0.88 - dragProgress * 0.62);
+  const surfaceOpacity = Math.max(0.08, 1 - dragProgress * 0.86);
 
   useEffect(() => {
+    if (dismissTimerRef.current !== null) {
+      window.clearTimeout(dismissTimerRef.current);
+      dismissTimerRef.current = null;
+    }
+
+    gestureRef.current = null;
+    setDragY(0);
+    setIsDragging(false);
+    setIsDismissing(false);
+
     if (open) {
       setIndex(0);
       setConfirmingDelete(false);
     }
   }, [open]);
+
+  useEffect(() => {
+    return () => {
+      if (dismissTimerRef.current !== null) {
+        window.clearTimeout(dismissTimerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     setConfirmingDelete(false);
@@ -188,67 +229,183 @@ export function ProfilePhotosDialog({
     }
   };
 
-  const resetTouchGesture = () => {
-    touchStartX.current = null;
-    touchStartY.current = null;
+  const springBack = () => {
+    gestureRef.current = null;
+    setIsDragging(false);
+    setIsDismissing(false);
+    setDragY(0);
   };
 
-  const handleTouchStart = (event: React.TouchEvent<HTMLDivElement>) => {
-    touchStartX.current = event.touches[0]?.clientX ?? null;
-    touchStartY.current = event.touches[0]?.clientY ?? null;
+  const animateDismiss = (direction: number) => {
+    const viewportHeight = Math.max(window.innerHeight || 0, 720);
+    gestureRef.current = null;
+    setIsDragging(false);
+    setIsDismissing(true);
+    setDragY(direction * viewportHeight * 1.08);
+
+    if (dismissTimerRef.current !== null) {
+      window.clearTimeout(dismissTimerRef.current);
+    }
+    dismissTimerRef.current = window.setTimeout(() => {
+      dismissTimerRef.current = null;
+      onOpenChange(false);
+    }, DISMISS_ANIMATION_MS);
   };
 
-  const handleTouchEnd = (event: React.TouchEvent<HTMLDivElement>) => {
-    const startX = touchStartX.current;
-    const startY = touchStartY.current;
-    const endX = event.changedTouches[0]?.clientX ?? null;
-    const endY = event.changedTouches[0]?.clientY ?? null;
-    resetTouchGesture();
+  const handlePointerDown = (event: React.PointerEvent<HTMLElement>) => {
+    if (isDismissing || !event.isPrimary) return;
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
+    if ((event.target as Element | null)?.closest('[data-photo-viewer-control]')) return;
 
-    if (startX == null || startY == null || endX == null || endY == null) return;
+    gestureRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      startedAt: performance.now(),
+      axis: 'pending',
+    };
+    setIsDragging(false);
+    setDragY(0);
 
-    const deltaX = endX - startX;
-    const deltaY = endY - startY;
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } catch {
+      // Pointer capture is best-effort; the gesture still works without it.
+    }
+  };
+
+  const handlePointerMove = (event: React.PointerEvent<HTMLElement>) => {
+    const gesture = gestureRef.current;
+    if (!gesture || gesture.pointerId !== event.pointerId || isDismissing) return;
+
+    const deltaX = event.clientX - gesture.startX;
+    const deltaY = event.clientY - gesture.startY;
     const absX = Math.abs(deltaX);
     const absY = Math.abs(deltaY);
 
-    // Up yoki down swipe: profil photo viewer'ni yopadi. Bu bir dona rasmda ham ishlaydi.
-    if (
-      absY >= SWIPE_DISMISS_THRESHOLD_PX &&
-      absY > absX * SWIPE_AXIS_DOMINANCE
-    ) {
-      onOpenChange(false);
-      return;
+    if (gesture.axis === 'pending') {
+      if (Math.max(absX, absY) < GESTURE_START_THRESHOLD_PX) return;
+
+      if (absY > absX * GESTURE_AXIS_DOMINANCE) {
+        gesture.axis = 'vertical';
+        setIsDragging(true);
+      } else if (absX > absY * GESTURE_AXIS_DOMINANCE) {
+        gesture.axis = 'horizontal';
+      } else {
+        return;
+      }
     }
 
-    // Left/right swipe faqat bir nechta profil rasmi mavjud bo'lsa navigation qiladi.
-    if (
-      total < 2 ||
-      absX < SWIPE_NAV_THRESHOLD_PX ||
-      absX <= absY * SWIPE_AXIS_DOMINANCE
-    ) {
-      return;
+    if (gesture.axis === 'vertical') {
+      event.preventDefault();
+      setDragY(deltaY);
     }
-
-    if (deltaX > 0) goPrev();
-    else goNext();
   };
+
+  const handlePointerEnd = (event: React.PointerEvent<HTMLElement>) => {
+    const gesture = gestureRef.current;
+    if (!gesture || gesture.pointerId !== event.pointerId) return;
+
+    const deltaX = event.clientX - gesture.startX;
+    const deltaY = event.clientY - gesture.startY;
+    const absX = Math.abs(deltaX);
+    const absY = Math.abs(deltaY);
+    const elapsedMs = Math.max(performance.now() - gesture.startedAt, 1);
+    const verticalVelocity = Math.abs(deltaY) / elapsedMs;
+
+    try {
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      }
+    } catch {
+      // Ignore browsers that do not expose pointer capture consistently.
+    }
+
+    if (
+      gesture.axis === 'vertical' ||
+      (gesture.axis === 'pending' && absY > absX * GESTURE_AXIS_DOMINANCE)
+    ) {
+      const shouldDismiss =
+        absY >= DRAG_DISMISS_DISTANCE_PX ||
+        (absY >= DRAG_DISMISS_MIN_DISTANCE_PX &&
+          verticalVelocity >= DRAG_DISMISS_VELOCITY_PX_MS);
+
+      if (shouldDismiss) {
+        animateDismiss(deltaY < 0 ? -1 : 1);
+      } else {
+        springBack();
+      }
+      return;
+    }
+
+    gestureRef.current = null;
+    setIsDragging(false);
+
+    if (
+      gesture.axis === 'horizontal' &&
+      total > 1 &&
+      absX >= SWIPE_NAV_THRESHOLD_PX &&
+      absX > absY * GESTURE_AXIS_DOMINANCE
+    ) {
+      if (deltaX > 0) goPrev();
+      else goNext();
+    }
+  };
+
+  const handlePointerCancel = () => {
+    if (!gestureRef.current) return;
+    springBack();
+  };
+
+  const mediaTransition = isDragging
+    ? 'none'
+    : isDismissing
+      ? `transform ${DISMISS_ANIMATION_MS}ms cubic-bezier(0.32, 0.72, 0, 1), opacity ${DISMISS_ANIMATION_MS}ms ease`
+      : 'transform 280ms cubic-bezier(0.22, 1, 0.36, 1), opacity 220ms ease';
+  const chromeTransition = isDragging
+    ? 'none'
+    : isDismissing
+      ? `opacity ${DISMISS_ANIMATION_MS}ms ease`
+      : 'opacity 220ms ease';
+  const backdropTransition = isDragging
+    ? 'none'
+    : isDismissing
+      ? `background-color ${DISMISS_ANIMATION_MS}ms ease`
+      : 'background-color 260ms ease';
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         hideDefaultClose
-        className="!fixed !inset-0 !left-0 !top-0 !h-[100dvh] !w-screen !max-w-none !translate-x-0 !translate-y-0 gap-0 overflow-hidden border-0 bg-black p-0 text-white shadow-none sm:rounded-none"
+        overlayClassName="!bg-transparent"
+        overlayStyle={{
+          backgroundColor: `rgba(0, 0, 0, ${overlayOpacity})`,
+          transition: backdropTransition,
+        }}
+        style={{
+          backgroundColor: `rgba(0, 0, 0, ${surfaceOpacity})`,
+          transition: backdropTransition,
+        }}
+        className="!fixed !inset-0 !left-0 !top-0 !h-[100dvh] !w-screen !max-w-none !translate-x-0 !translate-y-0 gap-0 overflow-hidden border-0 bg-transparent p-0 text-white shadow-none sm:rounded-none"
       >
         <DialogTitle className="sr-only">
           {t('profile.photos.title', { defaultValue: 'Profil rasmlari' })}
         </DialogTitle>
 
-        <div className="relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-black">
-          <div className="pointer-events-none absolute inset-x-0 top-0 z-20 h-32 bg-gradient-to-b from-black/85 via-black/45 to-transparent" />
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 h-48 bg-gradient-to-t from-black/90 via-black/50 to-transparent" />
+        <div className="relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-transparent">
+          <div
+            className="pointer-events-none absolute inset-x-0 top-0 z-20 h-32 bg-gradient-to-b from-black/85 via-black/45 to-transparent"
+            style={{ opacity: chromeOpacity, transition: chromeTransition }}
+          />
+          <div
+            className="pointer-events-none absolute inset-x-0 bottom-0 z-20 h-48 bg-gradient-to-t from-black/90 via-black/50 to-transparent"
+            style={{ opacity: chromeOpacity, transition: chromeTransition }}
+          />
 
-          <header className="absolute inset-x-0 top-0 z-40 flex items-center justify-between gap-3 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+14px)] sm:px-6">
+          <header
+            className="absolute inset-x-0 top-0 z-40 flex items-center justify-between gap-3 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+14px)] sm:px-6"
+            style={{ opacity: chromeOpacity, transition: chromeTransition }}
+          >
             <div className="min-w-0">
               <div className="flex min-w-0 items-center gap-2">
                 <p className="truncate text-sm font-semibold tracking-[-0.01em] text-white sm:text-base">
@@ -269,6 +426,7 @@ export function ProfilePhotosDialog({
 
             <button
               type="button"
+              data-photo-viewer-control
               onClick={() => onOpenChange(false)}
               aria-label={t('common.close', { defaultValue: 'Yopish' })}
               className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/10 text-white backdrop-blur-xl transition hover:bg-white/20 active:scale-95"
@@ -279,46 +437,60 @@ export function ProfilePhotosDialog({
 
           <main
             className="relative flex min-h-0 flex-1 touch-none items-center justify-center overflow-hidden px-0 pb-[calc(env(safe-area-inset-bottom)+104px)] pt-[calc(env(safe-area-inset-top)+72px)] sm:px-16 sm:pb-28 sm:pt-20"
-            onTouchStart={handleTouchStart}
-            onTouchEnd={handleTouchEnd}
-            onTouchCancel={resetTouchGesture}
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerEnd}
+            onPointerCancel={handlePointerCancel}
           >
-            {isLoading && total === 0 ? (
-              <Loader2 className="h-8 w-8 animate-spin text-white/65" />
-            ) : current ? (
-              <img
-                key={current.id}
-                src={current.image_url}
-                alt={name || username || 'profile'}
-                draggable={false}
-                className="max-h-full max-w-full select-none object-contain"
-              />
-            ) : (
-              <div className="flex flex-col items-center gap-3 px-6 text-center text-white/60">
-                <div className="flex h-16 w-16 items-center justify-center rounded-full border border-white/10 bg-white/5">
-                  <ImagePlus className="h-7 w-7" />
+            <div
+              className="relative flex h-full w-full items-center justify-center will-change-transform"
+              style={{
+                transform: `translate3d(0, ${dragY}px, 0) scale(${dragScale})`,
+                opacity: 1 - dragProgress * 0.08,
+                transition: mediaTransition,
+              }}
+            >
+              {isLoading && total === 0 ? (
+                <Loader2 className="h-8 w-8 animate-spin text-white/65" />
+              ) : current ? (
+                <img
+                  key={current.id}
+                  src={current.image_url}
+                  alt={name || username || 'profile'}
+                  draggable={false}
+                  className="pointer-events-none max-h-full max-w-full select-none object-contain"
+                />
+              ) : (
+                <div className="flex flex-col items-center gap-3 px-6 text-center text-white/60">
+                  <div className="flex h-16 w-16 items-center justify-center rounded-full border border-white/10 bg-white/5">
+                    <ImagePlus className="h-7 w-7" />
+                  </div>
+                  <p className="text-sm font-medium text-white/80">
+                    {t('profile.photos.empty', { defaultValue: 'Profil rasmi yo‘q' })}
+                  </p>
                 </div>
-                <p className="text-sm font-medium text-white/80">
-                  {t('profile.photos.empty', { defaultValue: 'Profil rasmi yo‘q' })}
-                </p>
-              </div>
-            )}
+              )}
+            </div>
 
             {total > 1 ? (
               <>
                 <button
                   type="button"
+                  data-photo-viewer-control
                   onClick={goPrev}
                   aria-label={t('common.previous', { defaultValue: 'Oldingi' })}
                   className="absolute left-5 top-1/2 hidden h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-white/10 bg-black/35 text-white backdrop-blur-xl transition hover:bg-black/60 sm:flex"
+                  style={{ opacity: chromeOpacity, transition: chromeTransition }}
                 >
                   <ChevronLeft className="h-6 w-6" />
                 </button>
                 <button
                   type="button"
+                  data-photo-viewer-control
                   onClick={goNext}
                   aria-label={t('common.next', { defaultValue: 'Keyingi' })}
                   className="absolute right-5 top-1/2 hidden h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-white/10 bg-black/35 text-white backdrop-blur-xl transition hover:bg-black/60 sm:flex"
+                  style={{ opacity: chromeOpacity, transition: chromeTransition }}
                 >
                   <ChevronRight className="h-6 w-6" />
                 </button>
@@ -326,7 +498,10 @@ export function ProfilePhotosDialog({
             ) : null}
           </main>
 
-          <footer className="absolute inset-x-0 bottom-0 z-40 flex flex-col items-center gap-3 px-3 pb-[calc(env(safe-area-inset-bottom)+14px)] sm:px-6 sm:pb-6">
+          <footer
+            className="absolute inset-x-0 bottom-0 z-40 flex flex-col items-center gap-3 px-3 pb-[calc(env(safe-area-inset-bottom)+14px)] sm:px-6 sm:pb-6"
+            style={{ opacity: chromeOpacity, transition: chromeTransition }}
+          >
             {total > 1 ? (
               <div className="no-scrollbar flex max-w-full items-center gap-1.5 overflow-x-auto rounded-full border border-white/10 bg-black/30 p-1.5 backdrop-blur-xl">
                 {items.map((item, itemIndex) => (
