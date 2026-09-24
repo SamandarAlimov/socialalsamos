@@ -7,15 +7,17 @@ function source(path: string) {
 }
 
 describe('responsive post more actions', () => {
-  it('uses a bottom sheet on mobile/tablet and an anchored menu on desktop', () => {
+  it('uses a swipe-dismiss drawer on mobile/tablet and an anchored menu on desktop', () => {
     const actions = source('components/PostActionsMenu.tsx');
 
     expect(actions).toContain('data-post-actions-sheet="true"');
-    expect(actions).toContain('side="bottom"');
+    expect(actions).toContain('<Drawer');
+    expect(actions).toContain('dismissible');
     expect(actions).toContain('lg:hidden');
     expect(actions).toContain('hidden lg:block');
     expect(actions).toContain('env(safe-area-inset-bottom,0px)');
-    expect(actions).toContain('overlayClassName="bg-black/55');
+    expect(actions).toContain('overlayClassName="bg-black/60"');
+    expect(actions).toContain('touch-pan-y');
   });
 
   it('keeps core post actions available in the sheet', () => {
