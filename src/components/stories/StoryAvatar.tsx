@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -48,6 +48,10 @@ interface StoryAvatarProps {
   showRing?: boolean;
   className?: string;
   onClick?: (e: React.MouseEvent) => void;
+  /** Story mavjud bo'lganda uzoq bosish uchun ikkilamchi action. */
+  onLongPress?: () => void;
+  /** Uzoq bosish chegarasi. Default: 500ms. */
+  longPressDelayMs?: number;
 }
 
 const sizeClasses = {
@@ -83,6 +87,8 @@ const badgeSizeForAvatar = {
   xl: 'lg',
 } as const;
 
+const LONG_PRESS_MOVE_TOLERANCE_PX = 12;
+
 export function StoryAvatar({
   userId,
   hasUnviewed,
@@ -95,16 +101,29 @@ export function StoryAvatar({
   showRing = true,
   className,
   onClick,
+  onLongPress,
+  longPressDelayMs = 500,
 }: StoryAvatarProps) {
   const { user } = useAuth();
   const [hasStory, setHasStory] = useState(false);
   const [hasUnviewedStory, setHasUnviewedStory] = useState(Boolean(hasUnviewed));
   const [storyGroup, setStoryGroup] = useState<StoryGroup | null>(null);
   const [showViewer, setShowViewer] = useState(false);
+  const longPressTimerRef = useRef<number | null>(null);
+  const longPressResetTimerRef = useRef<number | null>(null);
+  const longPressTriggeredRef = useRef(false);
+  const pointerStartRef = useRef<{ pointerId: number; x: number; y: number } | null>(null);
 
   useEffect(() => {
     checkForStories();
   }, [userId, user?.id]);
+
+  useEffect(() => {
+    return () => {
+      if (longPressTimerRef.current !== null) window.clearTimeout(longPressTimerRef.current);
+      if (longPressResetTimerRef.current !== null) window.clearTimeout(longPressResetTimerRef.current);
+    };
+  }, []);
 
   const checkForStories = async () => {
     if (!userId) return;
@@ -157,9 +176,77 @@ export function StoryAvatar({
     }
   };
 
+  const clearLongPressTimer = () => {
+    if (longPressTimerRef.current !== null) {
+      window.clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+    pointerStartRef.current = null;
+  };
+
+  const scheduleLongPressSuppressionReset = () => {
+    if (!longPressTriggeredRef.current) return;
+    if (longPressResetTimerRef.current !== null) {
+      window.clearTimeout(longPressResetTimerRef.current);
+    }
+    // Pointerup'dan keyin keladigan synthetic click'ni yutish uchun qisqa oynacha.
+    longPressResetTimerRef.current = window.setTimeout(() => {
+      longPressTriggeredRef.current = false;
+      longPressResetTimerRef.current = null;
+    }, 250);
+  };
+
+  const handlePointerDown = (event: React.PointerEvent<HTMLButtonElement>) => {
+    // Long-press faqat story oddiy tap actionini egallab turgan holatda kerak.
+    if (!hasStory || !onLongPress) return;
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
+
+    if (longPressResetTimerRef.current !== null) {
+      window.clearTimeout(longPressResetTimerRef.current);
+      longPressResetTimerRef.current = null;
+    }
+    clearLongPressTimer();
+    longPressTriggeredRef.current = false;
+    pointerStartRef.current = {
+      pointerId: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+    };
+
+    longPressTimerRef.current = window.setTimeout(() => {
+      longPressTimerRef.current = null;
+      pointerStartRef.current = null;
+      longPressTriggeredRef.current = true;
+      onLongPress();
+    }, longPressDelayMs);
+  };
+
+  const handlePointerMove = (event: React.PointerEvent<HTMLButtonElement>) => {
+    const start = pointerStartRef.current;
+    if (!start || start.pointerId !== event.pointerId) return;
+
+    const distance = Math.hypot(event.clientX - start.x, event.clientY - start.y);
+    if (distance > LONG_PRESS_MOVE_TOLERANCE_PX) clearLongPressTimer();
+  };
+
+  const handlePointerEnd = () => {
+    clearLongPressTimer();
+    scheduleLongPressSuppressionReset();
+  };
+
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    
+
+    if (longPressTriggeredRef.current) {
+      e.preventDefault();
+      longPressTriggeredRef.current = false;
+      if (longPressResetTimerRef.current !== null) {
+        window.clearTimeout(longPressResetTimerRef.current);
+        longPressResetTimerRef.current = null;
+      }
+      return;
+    }
+
     if (hasStory && storyGroup) {
       setShowViewer(true);
     } else if (onClick) {
@@ -183,26 +270,35 @@ export function StoryAvatar({
   return (
     <>
       <button
+        type="button"
         onClick={handleClick}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerEnd}
+        onPointerCancel={handlePointerEnd}
+        onPointerLeave={handlePointerEnd}
+        onContextMenu={(event) => {
+          if (hasStory && onLongPress) event.preventDefault();
+        }}
         className={cn(
-          "relative rounded-full transition-transform hover:scale-105",
+          'relative rounded-full transition-transform hover:scale-105',
           sizeClasses[size],
           hasStory && showRing ? (
             hasUnviewedStory
-              ? "bg-gradient-to-tr from-alsamos-orange-light to-alsamos-orange-dark"
-              : "bg-muted"
-          ) : "",
+              ? 'bg-gradient-to-tr from-alsamos-orange-light to-alsamos-orange-dark'
+              : 'bg-muted'
+          ) : '',
           hasStory && showRing && ringPadding[size],
           className
         )}
       >
         <div className={cn(
-          "h-full w-full",
-          hasStory && showRing && "bg-background rounded-full p-[1.5px]"
+          'h-full w-full',
+          hasStory && showRing && 'rounded-full bg-background p-[1.5px]'
         )}>
           <Avatar className="h-full w-full">
             <AvatarImage src={avatarUrl || ''} />
-            <AvatarFallback className={cn("font-semibold leading-none", fallbackTextClasses[size])}>
+            <AvatarFallback className={cn('font-semibold leading-none', fallbackTextClasses[size])}>
               {displayName?.[0] || username?.[0] || 'U'}
             </AvatarFallback>
           </Avatar>
