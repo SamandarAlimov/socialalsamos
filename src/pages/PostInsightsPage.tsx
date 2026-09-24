@@ -37,6 +37,26 @@ import { cn } from '@/lib/utils';
 
 const windows = [7, 28, 90] as const;
 
+type InsightTone = 'neutral' | 'sky' | 'violet' | 'emerald' | 'amber' | 'red';
+
+const iconToneClasses: Record<InsightTone, string> = {
+  neutral: 'bg-foreground text-background',
+  sky: 'bg-sky-500/10 text-sky-600 dark:text-sky-400',
+  violet: 'bg-violet-500/10 text-violet-600 dark:text-violet-400',
+  emerald: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
+  amber: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
+  red: 'bg-red-500/10 text-red-600 dark:text-red-400',
+};
+
+const barToneClasses: Record<InsightTone, string> = {
+  neutral: 'bg-foreground',
+  sky: 'bg-sky-500',
+  violet: 'bg-violet-500',
+  emerald: 'bg-emerald-500',
+  amber: 'bg-amber-500',
+  red: 'bg-red-500',
+};
+
 function compact(value: number): string {
   return new Intl.NumberFormat(undefined, { notation: 'compact', maximumFractionDigits: 1 }).format(value);
 }
@@ -60,21 +80,37 @@ function shortDate(value: string): string {
   return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' }).format(date);
 }
 
+function sourceTone(source: string): InsightTone {
+  const normalized = source.toLowerCase();
+  if (normalized.includes('video') || normalized.includes('reel')) return 'violet';
+  if (normalized.includes('home') || normalized.includes('feed')) return 'sky';
+  if (normalized.includes('discover') || normalized.includes('explore')) return 'emerald';
+  if (normalized.includes('search')) return 'amber';
+  return 'neutral';
+}
+
+function deviceTone(device: string): InsightTone {
+  const normalized = device.toLowerCase();
+  if (normalized.includes('mobile') || normalized.includes('phone')) return 'sky';
+  if (normalized.includes('tablet')) return 'violet';
+  return 'neutral';
+}
+
 function MetricCard({
   icon: Icon,
   label,
   value,
   detail,
-  accent = false,
+  tone = 'neutral',
 }: {
   icon: typeof Eye;
   label: string;
   value: string;
   detail?: string;
-  accent?: boolean;
+  tone?: InsightTone;
 }) {
   return (
-    <Card className={cn('overflow-hidden border-border/70 bg-card/95 shadow-sm', accent && 'ring-1 ring-primary/15')}>
+    <Card className="overflow-hidden border-border/70 bg-card/95 shadow-sm">
       <CardContent className="p-4 md:p-5">
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -82,10 +118,7 @@ function MetricCard({
             <p className="mt-1 text-2xl font-bold tracking-tight tabular-nums md:text-3xl">{value}</p>
             {detail && <p className="mt-1 text-[11px] text-muted-foreground md:text-xs">{detail}</p>}
           </div>
-          <span className={cn(
-            'flex h-10 w-10 items-center justify-center rounded-2xl',
-            accent ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground',
-          )}>
+          <span className={cn('flex h-10 w-10 items-center justify-center rounded-2xl', iconToneClasses[tone])}>
             <Icon className="h-5 w-5" />
           </span>
         </div>
@@ -94,7 +127,17 @@ function MetricCard({
   );
 }
 
-function BreakdownBar({ label, value, count }: { label: string; value: number; count?: number }) {
+function BreakdownBar({
+  label,
+  value,
+  count,
+  tone = 'neutral',
+}: {
+  label: string;
+  value: number;
+  count?: number;
+  tone?: InsightTone;
+}) {
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between gap-4 text-sm">
@@ -105,7 +148,7 @@ function BreakdownBar({ label, value, count }: { label: string; value: number; c
       </div>
       <div className="h-2 overflow-hidden rounded-full bg-muted">
         <div
-          className="h-full rounded-full bg-primary transition-[width] duration-500"
+          className={cn('h-full rounded-full transition-[width] duration-500', barToneClasses[tone])}
           style={{ width: `${Math.max(0, Math.min(100, value))}%` }}
         />
       </div>
@@ -113,16 +156,46 @@ function BreakdownBar({ label, value, count }: { label: string; value: number; c
   );
 }
 
-function InteractionItem({ icon: Icon, label, value }: { icon: typeof Heart; label: string; value: number }) {
+function InteractionItem({
+  icon: Icon,
+  label,
+  value,
+  tone = 'neutral',
+}: {
+  icon: typeof Heart;
+  label: string;
+  value: number;
+  tone?: InsightTone;
+}) {
   return (
     <div className="flex items-center justify-between gap-3 rounded-2xl border border-border/60 bg-muted/15 px-3.5 py-3">
       <div className="flex items-center gap-2.5">
-        <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-background shadow-sm">
-          <Icon className="h-4 w-4 text-muted-foreground" />
+        <span className={cn('flex h-8 w-8 items-center justify-center rounded-xl', iconToneClasses[tone])}>
+          <Icon className="h-4 w-4" />
         </span>
         <span className="text-sm font-medium">{label}</span>
       </div>
       <span className="font-semibold tabular-nums">{compact(value)}</span>
+    </div>
+  );
+}
+
+function WatchMetric({
+  label,
+  value,
+  tone = 'neutral',
+}: {
+  label: string;
+  value: string;
+  tone?: InsightTone;
+}) {
+  return (
+    <div className="rounded-2xl border border-border/50 bg-muted/20 p-3.5">
+      <div className="flex items-center gap-2">
+        <span className={cn('h-2 w-2 rounded-full', barToneClasses[tone])} />
+        <p className="text-xs text-muted-foreground">{label}</p>
+      </div>
+      <p className="mt-1.5 font-bold tabular-nums">{value}</p>
     </div>
   );
 }
@@ -173,7 +246,9 @@ export default function PostInsightsPage() {
         <p className="mt-2 text-sm text-muted-foreground">{error || 'Post statistikasi mavjud emas.'}</p>
         <div className="mt-5 flex gap-2">
           <Button variant="outline" onClick={() => navigate(-1)}>Orqaga</Button>
-          <Button onClick={() => void refresh()}><RefreshCcw className="mr-2 h-4 w-4" />Qayta urinish</Button>
+          <Button className="bg-foreground text-background hover:bg-foreground/90" onClick={() => void refresh()}>
+            <RefreshCcw className="mr-2 h-4 w-4" />Qayta urinish
+          </Button>
         </div>
       </div>
     );
@@ -194,7 +269,7 @@ export default function PostInsightsPage() {
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <h1 className="truncate text-lg font-bold tracking-tight md:text-2xl">Post analitikasi</h1>
-              <span className="hidden rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary sm:inline">Insights</span>
+              <span className="hidden rounded-full border border-border/70 bg-muted/50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground sm:inline">Insights</span>
             </div>
             <p className="truncate text-[11px] text-muted-foreground md:text-xs">Qamrov, faollik, auditoriya va retention</p>
           </div>
@@ -238,10 +313,10 @@ export default function PostInsightsPage() {
       </section>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <MetricCard icon={Eye} label="Ko‘rishlar" value={compact(data.overview.views)} detail="Postning jami ko‘rishlari" accent />
-        <MetricCard icon={Users} label="Qamrov" value={compact(data.overview.reach)} detail="Noyob akkauntlar" />
-        <MetricCard icon={Sparkles} label="Interaksiyalar" value={compact(data.overview.interactions)} detail="Like, izoh, share, repost, save" />
-        <MetricCard icon={TrendingUp} label="Engagement rate" value={percent(data.overview.engagement_rate)} detail="Qamrovga nisbatan faollik" />
+        <MetricCard icon={Eye} label="Ko‘rishlar" value={compact(data.overview.views)} detail="Postning jami ko‘rishlari" />
+        <MetricCard icon={Users} label="Qamrov" value={compact(data.overview.reach)} detail="Noyob akkauntlar" tone="sky" />
+        <MetricCard icon={Sparkles} label="Interaksiyalar" value={compact(data.overview.interactions)} detail="Like, izoh, share, repost, save" tone="violet" />
+        <MetricCard icon={TrendingUp} label="Engagement rate" value={percent(data.overview.engagement_rate)} detail="Qamrovga nisbatan faollik" tone="emerald" />
       </div>
 
       <Card className="overflow-hidden rounded-3xl border-border/70 shadow-sm">
@@ -251,7 +326,9 @@ export default function PostInsightsPage() {
               <CardTitle className="text-base md:text-lg">Natija dinamikasi</CardTitle>
               <p className="mt-1 text-xs text-muted-foreground">Ko‘rishlar va interaksiyalar — oxirgi {days} kun</p>
             </div>
-            <BarChart3 className="h-5 w-5 text-primary" />
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-muted text-muted-foreground">
+              <BarChart3 className="h-4.5 w-4.5" />
+            </div>
           </div>
         </CardHeader>
         <CardContent className="h-[270px] px-1 pb-3 pt-2 sm:px-4 md:h-[320px]">
@@ -259,8 +336,8 @@ export default function PostInsightsPage() {
             <AreaChart data={chartData} margin={{ top: 8, right: 14, left: -20, bottom: 0 }}>
               <defs>
                 <linearGradient id="viewsGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.28} />
-                  <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0.02} />
+                  <stop offset="0%" stopColor="hsl(var(--foreground))" stopOpacity={0.16} />
+                  <stop offset="100%" stopColor="hsl(var(--foreground))" stopOpacity={0.01} />
                 </linearGradient>
               </defs>
               <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="3 5" vertical={false} />
@@ -269,8 +346,8 @@ export default function PostInsightsPage() {
               <Tooltip
                 contentStyle={{ borderRadius: 16, border: '1px solid hsl(var(--border))', background: 'hsl(var(--popover))', color: 'hsl(var(--popover-foreground))' }}
               />
-              <Area type="monotone" dataKey="views" name="Ko‘rishlar" stroke="hsl(var(--primary))" strokeWidth={2.5} fill="url(#viewsGradient)" />
-              <Line type="monotone" dataKey="interactions" name="Interaksiyalar" stroke="hsl(var(--foreground))" strokeWidth={1.5} dot={false} />
+              <Area type="monotone" dataKey="views" name="Ko‘rishlar" stroke="hsl(var(--foreground))" strokeWidth={2.5} fill="url(#viewsGradient)" />
+              <Line type="monotone" dataKey="interactions" name="Interaksiyalar" stroke="#0ea5e9" strokeWidth={1.8} dot={false} />
             </AreaChart>
           </ResponsiveContainer>
         </CardContent>
@@ -283,11 +360,11 @@ export default function PostInsightsPage() {
             <p className="text-xs text-muted-foreground">Foydalanuvchilar post bilan qanday ishladi</p>
           </CardHeader>
           <CardContent className="grid gap-2.5 sm:grid-cols-2">
-            <InteractionItem icon={Heart} label="Like" value={data.overview.likes} />
-            <InteractionItem icon={MessageCircle} label="Izoh" value={data.overview.comments} />
-            <InteractionItem icon={Share2} label="Ulashish" value={data.overview.shares} />
-            <InteractionItem icon={Repeat2} label="Repost" value={data.overview.reposts} />
-            <InteractionItem icon={Bookmark} label="Saqlash" value={data.overview.saves} />
+            <InteractionItem icon={Heart} label="Like" value={data.overview.likes} tone="red" />
+            <InteractionItem icon={MessageCircle} label="Izoh" value={data.overview.comments} tone="sky" />
+            <InteractionItem icon={Share2} label="Ulashish" value={data.overview.shares} tone="violet" />
+            <InteractionItem icon={Repeat2} label="Repost" value={data.overview.reposts} tone="emerald" />
+            <InteractionItem icon={Bookmark} label="Saqlash" value={data.overview.saves} tone="amber" />
             <InteractionItem icon={MousePointerClick} label="Profilga o‘tish" value={data.overview.profile_clicks} />
           </CardContent>
         </Card>
@@ -303,7 +380,7 @@ export default function PostInsightsPage() {
                 <div
                   className="relative flex h-44 w-44 items-center justify-center rounded-full"
                   style={{
-                    background: `conic-gradient(hsl(var(--primary)) 0 ${followerPct}%, hsl(var(--muted-foreground) / 0.22) ${followerPct}% 100%)`,
+                    background: `conic-gradient(hsl(var(--foreground)) 0 ${followerPct}%, hsl(var(--muted-foreground) / 0.18) ${followerPct}% 100%)`,
                   }}
                 >
                   <div className="flex h-32 w-32 flex-col items-center justify-center rounded-full bg-card">
@@ -313,7 +390,7 @@ export default function PostInsightsPage() {
                 </div>
                 <div className="w-full max-w-xs space-y-5">
                   <BreakdownBar label="Followerlar" value={data.audience.followers_percentage} count={data.audience.followers} />
-                  <BreakdownBar label="Yangi auditoriya" value={data.audience.non_followers_percentage} count={data.audience.non_followers} />
+                  <BreakdownBar label="Yangi auditoriya" value={data.audience.non_followers_percentage} count={data.audience.non_followers} tone="sky" />
                 </div>
               </div>
             ) : (
@@ -331,7 +408,13 @@ export default function PostInsightsPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             {data.sources.length > 0 ? data.sources.map((item) => (
-              <BreakdownBar key={item.source} label={item.source || 'unknown'} value={item.percentage} count={item.sessions} />
+              <BreakdownBar
+                key={item.source}
+                label={item.source || 'unknown'}
+                value={item.percentage}
+                count={item.sessions}
+                tone={sourceTone(item.source || '')}
+              />
             )) : (
               <div className="rounded-2xl border border-dashed border-border p-5 text-sm text-muted-foreground">
                 Manba analitikasi yangi qualified ko‘rishlar bilan avtomatik yig‘iladi.
@@ -347,7 +430,13 @@ export default function PostInsightsPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             {data.devices.length > 0 ? data.devices.map((item) => (
-              <BreakdownBar key={item.device} label={item.device || 'unknown'} value={item.percentage} count={item.sessions} />
+              <BreakdownBar
+                key={item.device}
+                label={item.device || 'unknown'}
+                value={item.percentage}
+                count={item.sessions}
+                tone={deviceTone(item.device || '')}
+              />
             )) : (
               <div className="rounded-2xl border border-dashed border-border p-5 text-sm text-muted-foreground">
                 Qurilma kesimi yangi analytics sessionlari bilan to‘ldiriladi.
@@ -365,15 +454,17 @@ export default function PostInsightsPage() {
                 <CardTitle className="text-base md:text-lg">Video retention</CardTitle>
                 <p className="mt-1 text-xs text-muted-foreground">Tomoshabinlar videoning qaysi qismigacha yetib bordi</p>
               </div>
-              <Clock3 className="h-5 w-5 text-primary" />
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-muted text-muted-foreground">
+                <Clock3 className="h-4.5 w-4.5" />
+              </div>
             </div>
           </CardHeader>
           <CardContent className="space-y-5">
             <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-              <div className="rounded-2xl bg-muted/30 p-3.5"><p className="text-xs text-muted-foreground">Watch time</p><p className="mt-1 font-bold tabular-nums">{duration(data.watch.total_watch_ms)}</p></div>
-              <div className="rounded-2xl bg-muted/30 p-3.5"><p className="text-xs text-muted-foreground">O‘rtacha watch</p><p className="mt-1 font-bold tabular-nums">{duration(data.watch.average_watch_ms)}</p></div>
-              <div className="rounded-2xl bg-muted/30 p-3.5"><p className="text-xs text-muted-foreground">Skip rate</p><p className="mt-1 font-bold tabular-nums">{percent(data.watch.skip_rate)}</p></div>
-              <div className="rounded-2xl bg-muted/30 p-3.5"><p className="text-xs text-muted-foreground">Completion</p><p className="mt-1 font-bold tabular-nums">{percent(data.watch.completion_rate)}</p></div>
+              <WatchMetric label="Watch time" value={duration(data.watch.total_watch_ms)} />
+              <WatchMetric label="O‘rtacha watch" value={duration(data.watch.average_watch_ms)} tone="sky" />
+              <WatchMetric label="Skip rate" value={percent(data.watch.skip_rate)} tone="red" />
+              <WatchMetric label="Completion" value={percent(data.watch.completion_rate)} tone="emerald" />
             </div>
 
             {retentionData.length > 0 ? (
@@ -387,7 +478,7 @@ export default function PostInsightsPage() {
                       formatter={(value) => [`${value}%`, 'Retention']}
                       contentStyle={{ borderRadius: 16, border: '1px solid hsl(var(--border))', background: 'hsl(var(--popover))', color: 'hsl(var(--popover-foreground))' }}
                     />
-                    <Line type="monotone" dataKey="rate" stroke="hsl(var(--primary))" strokeWidth={3} dot={{ r: 2.5, fill: 'hsl(var(--primary))' }} activeDot={{ r: 5 }} />
+                    <Line type="monotone" dataKey="rate" stroke="#10b981" strokeWidth={3} dot={{ r: 2.5, fill: '#10b981' }} activeDot={{ r: 5 }} />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
