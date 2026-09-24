@@ -1,19 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Bookmark, Heart, MessageCircle, Share2 } from 'lucide-react';
+import { Bookmark, Eye, Heart, MessageCircle, Share2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { CommentsSection } from '@/components/CommentsSection';
 import { PollDisplay, parsePollFromContent } from '@/components/PollDisplay';
 import { PostActionsMenu } from '@/components/PostActionsMenu';
 import { PostAuthorAvatars } from '@/components/PostAuthorAvatars';
 import { PostCollaboratorByline } from '@/components/PostCollaboratorByline';
 import { PostExtras } from '@/components/PostExtras';
-import { PostLikesDialog } from '@/components/PostLikesDialog';
+import { PostLikesViewsDialog } from '@/components/PostLikesViewsDialog';
 import { PostMusicCard } from '@/components/PostMusicCard';
-import { PostViewsDialog } from '@/components/PostViewsDialog';
 import { RepostButton } from '@/components/RepostButton';
 import { RichText } from '@/components/RichText';
 import { SharePostDialog } from '@/components/SharePostDialog';
 import { VerifiedBadge } from '@/components/VerifiedBadge';
+import { VideoCommentsSheet } from '@/components/VideoCommentsSheet';
 import { usePostViews } from '@/hooks/usePostViews';
 import { cn } from '@/lib/utils';
 import {
@@ -96,7 +95,8 @@ export function FeedPostCard({
   const navigate = useNavigate();
   const articleRef = useRef<HTMLElement | null>(null);
   const [showComments, setShowComments] = useState(false);
-  const [showLikesDialog, setShowLikesDialog] = useState(false);
+  const [showAudienceDialog, setShowAudienceDialog] = useState(false);
+  const [audienceDefaultTab, setAudienceDefaultTab] = useState<'likes' | 'views'>('likes');
   const [showShareDialog, setShowShareDialog] = useState(false);
   const { recordView, markEngaged, markProfileClick } = usePostViews();
 
@@ -172,6 +172,12 @@ export function FeedPostCard({
     } else if (post.user_id) {
       navigate(`/user/${post.user_id}`);
     }
+  };
+
+  const openAudience = (tab: 'likes' | 'views') => {
+    markEngaged(post.id);
+    setAudienceDefaultTab(tab);
+    setShowAudienceDialog(true);
   };
 
   return (
@@ -276,7 +282,7 @@ export function FeedPostCard({
             </button>
             <button
               type="button"
-              onClick={() => setShowLikesDialog(true)}
+              onClick={() => openAudience('likes')}
               className={cn(
                 'text-xs font-medium hover:underline md:text-sm',
                 isLiked ? 'text-red-500' : 'text-muted-foreground',
@@ -289,7 +295,7 @@ export function FeedPostCard({
             type="button"
             onClick={() => {
               markEngaged(post.id);
-              setShowComments((current) => !current);
+              setShowComments(true);
             }}
             className={cn(
               'flex items-center gap-1.5 transition-colors touch-feedback md:gap-2',
@@ -297,7 +303,7 @@ export function FeedPostCard({
             )}
             aria-label="Izohlar"
           >
-            <MessageCircle className={cn('h-5 w-5', showComments && 'fill-current')} />
+            <MessageCircle className="h-5 w-5" />
             <span className="text-xs font-medium md:text-sm">{commentsCount}</span>
           </button>
           <button
@@ -320,12 +326,15 @@ export function FeedPostCard({
           />
         </div>
         <div className="flex items-center gap-3">
-          <PostViewsDialog
-            postId={post.id}
-            viewsCount={viewsCount}
-            iconClassName="h-5 w-5"
-            textClassName="text-xs md:text-sm"
-          />
+          <button
+            type="button"
+            onClick={() => openAudience('views')}
+            className="flex items-center gap-1.5 text-muted-foreground transition-colors touch-feedback hover:text-foreground md:gap-2"
+            aria-label="Ko‘rishlar"
+          >
+            <Eye className="h-5 w-5" />
+            <span className="text-xs font-medium md:text-sm">{viewsCount}</span>
+          </button>
           <button
             type="button"
             onClick={() => {
@@ -346,13 +355,21 @@ export function FeedPostCard({
         </div>
       </div>
 
-      {showComments && <CommentsSection postId={post.id} />}
-
-      <PostLikesDialog
+      <VideoCommentsSheet
+        isOpen={showComments}
+        onClose={() => setShowComments(false)}
         postId={post.id}
-        open={showLikesDialog}
-        onOpenChange={setShowLikesDialog}
+        commentsCount={commentsCount}
+        previewVideo={false}
+      />
+
+      <PostLikesViewsDialog
+        postId={post.id}
+        open={showAudienceDialog}
+        onOpenChange={setShowAudienceDialog}
         likesCount={likesCount}
+        viewsCount={viewsCount}
+        defaultTab={audienceDefaultTab}
       />
 
       <SharePostDialog
