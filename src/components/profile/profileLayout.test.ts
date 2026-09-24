@@ -59,6 +59,25 @@ describe('profile post layouts', () => {
     expect(attachments).toContain('thumbnailStorageUrl');
   });
 
+  it('routes profile avatar tap and long-press without conflicting with story playback', () => {
+    const sharedHeader = source('components/profile/ProfileHeader.tsx');
+    const storyAvatar = source('components/stories/StoryAvatar.tsx');
+
+    // No story: normal avatar tap reaches the profile photo viewer.
+    // Story present: StoryAvatar owns normal tap, while long-press still reaches photos.
+    expect(sharedHeader).toContain('onClick={onPhotos}');
+    expect(sharedHeader).toContain('onLongPress={onPhotos}');
+    expect(storyAvatar).toContain('if (!hasStory || !onLongPress) return;');
+    expect(storyAvatar).toContain('longPressTriggeredRef.current = true');
+    expect(storyAvatar).toContain('onPointerDown={handlePointerDown}');
+    expect(storyAvatar).toContain('onPointerMove={handlePointerMove}');
+    expect(storyAvatar).toContain('onPointerUp={handlePointerEnd}');
+    expect(storyAvatar).toContain('onPointerCancel={handlePointerEnd}');
+    expect(storyAvatar).toContain('if (longPressTriggeredRef.current)');
+    expect(storyAvatar).toContain('setShowViewer(true)');
+    expect(storyAvatar).toContain('else if (onClick)');
+  });
+
   it('keeps own and viewed profiles on one shared premium identity layout', () => {
     const ownProfile = source('pages/ProfilePage.tsx');
     const userProfile = source('pages/UserProfilePage.tsx');
