@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -83,5 +85,29 @@ describe('camera capture compatibility helpers', () => {
   it('maps common recorder MIME types to file extensions', () => {
     expect(extensionForMime('video/mp4')).toBe('mp4');
     expect(extensionForMime('video/webm;codecs=vp8')).toBe('webm');
+  });
+});
+
+
+describe('Create camera flashlight contract', () => {
+  it('keeps Create flashlight compatible with iOS/WebKit', () => {
+    const hook = readFileSync(
+      resolve(process.cwd(), 'src/components/create/useCameraCapture.ts'),
+      'utf8',
+    );
+    const recorder = readFileSync(
+      resolve(process.cwd(), 'src/components/create/CameraVideoRecorder.tsx'),
+      'utf8',
+    );
+
+    expect(hook).toContain('getSupportedConstraints');
+    expect(hook).toContain("facingMode: { exact: 'environment' }");
+    expect(hook).toContain("if (!track || facingMode !== 'environment') return false;");
+    expect(hook).toContain('setTorchSupported(true);');
+    expect(hook).not.toContain('if (!track || !torchSupported) return false;');
+
+    expect(recorder).toContain("if (facingMode === 'environment')");
+    expect(recorder).not.toContain('if (camera.torchSupported)');
+    expect(recorder).toContain('softwareFlash && !camera.torchEnabled');
   });
 });
