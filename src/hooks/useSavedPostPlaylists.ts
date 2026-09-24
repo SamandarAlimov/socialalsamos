@@ -103,7 +103,7 @@ export function useSavedPostPlaylists() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<unknown>(null);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (showLoading = true) => {
     if (!user?.id) {
       setPlaylists([]);
       setAllSavedPosts([]);
@@ -112,7 +112,7 @@ export function useSavedPostPlaylists() {
       return;
     }
 
-    setIsLoading(true);
+    if (showLoading) setIsLoading(true);
     setError(null);
 
     try {
@@ -203,13 +203,38 @@ export function useSavedPostPlaylists() {
       console.error('Saved post playlists load failed', nextError);
       setError(nextError);
     } finally {
-      setIsLoading(false);
+      if (showLoading) setIsLoading(false);
     }
   }, [user?.id]);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const scheduleRefresh = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        void refresh(false);
+      }, 120);
+    };
+
+    const filter = `user_id=eq.${user.id}`;
+    const channel = db
+      .channel(`saved-post-playlists:${user.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'bookmarks', filter }, scheduleRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'saved_post_playlists', filter }, scheduleRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'saved_post_playlist_items', filter }, scheduleRefresh)
+      .subscribe();
+
+    return () => {
+      if (timer) clearTimeout(timer);
+      void db.removeChannel(channel);
+    };
+  }, [refresh, user?.id]);
 
   const defaultPlaylist = useMemo(
     () => playlists.find((playlist) => playlist.is_default) ?? null,
@@ -230,7 +255,7 @@ export function useSavedPostPlaylists() {
       .single();
 
     if (result.error) throw result.error;
-    await refresh();
+    await refresh(false);
     return result.data as SavedPostPlaylist;
   }, [refresh, user?.id]);
 
@@ -248,7 +273,7 @@ export function useSavedPostPlaylists() {
       .eq('is_default', false);
 
     if (result.error) throw result.error;
-    await refresh();
+    await refresh(false);
   }, [playlists, refresh, user?.id]);
 
   const updatePlaylistPosts = useCallback(async (playlistId: string, postIds: string[]) => {
@@ -281,7 +306,7 @@ export function useSavedPostPlaylists() {
       if (deleteResult.error) throw deleteResult.error;
     }
 
-    await refresh();
+    await refresh(false);
   }, [allSavedPosts, playlistPostIds, playlists, refresh, user?.id]);
 
   return {
