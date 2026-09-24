@@ -1,0 +1,256 @@
+name: Canonical post datetime migration
+
+on:
+  push:
+    branches:
+      - fix/canonical-post-datetime
+
+permissions:
+  contents: write
+
+jobs:
+  migrate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/canonical-post-datetime
+          fetch-depth: 0
+
+      - name: Apply canonical post datetime formatter
+        shell: bash
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          import re
+
+          def read(path: str) -> str:
+              return Path(path).read_text(encoding='utf-8')
+
+          def write(path: str, text: str) -> None:
+              Path(path).write_text(text, encoding='utf-8')
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              text = read(path)
+              count = text.count(old)
+              if count != 1:
+                  raise RuntimeError(f'{path}: expected 1 occurrence, found {count}: {old[:90]!r}')
+              write(path, text.replace(old, new, 1))
+
+          helper = """const POST_MONTHS = [
+            'Jan',
+            'Feb',
+            'Mar',
+            'Apr',
+            'May',
+            'Jun',
+            'Jul',
+            'Aug',
+            'Sep',
+            'Oct',
+            'Nov',
+            'Dec',
+          ] as const;
+
+          function twoDigits(value: number): string {
+            return String(value).padStart(2, '0');
+          }
+
+          /**
+           * Canonical timestamp used anywhere an Alsamos post is rendered.
+           *
+           * Example: `13 Sep 2026, 16:57`.
+           * The browser's local timezone is intentionally used, matching the
+           * user's device while keeping the visible shape identical everywhere.
+           */
+          export function formatPostDateTime(value: string | Date | null | undefined): string {
+            if (!value) return '—';
+
+            const date = value instanceof Date ? value : new Date(value);
+            if (Number.isNaN(date.getTime())) return '—';
+
+            return `${date.getDate()} ${POST_MONTHS[date.getMonth()]} ${date.getFullYear()}, ${twoDigits(date.getHours())}:${twoDigits(date.getMinutes())}`;
+          }
+          """
+          write('src/lib/postDateTime.ts', helper)
+
+          # Home feed: remove relative/short timestamps and keep the existing card API.
+          replace_once(
+              'src/pages/HomePage.tsx',
+              "import { format, formatDistanceToNow } from 'date-fns';",
+              "import { formatPostDateTime } from '@/lib/postDateTime';",
+          )
+          home = read('src/pages/HomePage.tsx')
+          home, count = re.subn(
+              r"  const formatPostTime = \(dateString: string\) => \{.*?\n  \};",
+              "  const formatPostTime = formatPostDateTime;",
+              home,
+              count=1,
+              flags=re.S,
+          )
+          if count != 1:
+              raise RuntimeError(f'HomePage.tsx: expected formatPostTime block once, found {count}')
+          write('src/pages/HomePage.tsx', home)
+
+          # Shared profile/feed post card owns its timestamp instead of accepting arbitrary formatters.
+          replace_once(
+              'src/components/posts/FeedPostCard.tsx',
+              "import { cn } from '@/lib/utils';",
+              "import { cn } from '@/lib/utils';\nimport { formatPostDateTime } from '@/lib/postDateTime';",
+          )
+          replace_once(
+              'src/components/posts/FeedPostCard.tsx',
+              "  formatTime: (date: string) => string;\n",
+              "",
+          )
+          replace_once(
+              'src/components/posts/FeedPostCard.tsx',
+              "  formatTime,\n",
+              "",
+          )
+          replace_once(
+              'src/components/posts/FeedPostCard.tsx',
+              "· {formatTime(post.created_at)}",
+              "· {formatPostDateTime(post.created_at)}",
+          )
+
+          # Profile feed no longer carries a private relative-time implementation.
+          replace_once(
+              'src/components/profile/ProfilePostsGrid.tsx',
+              "import { format, formatDistanceToNow } from 'date-fns';\n",
+              "",
+          )
+          profile = read('src/components/profile/ProfilePostsGrid.tsx')
+          profile, count = re.subn(
+              r"/\*\* Home bilan aynan bir xil vaqt ko‘rinishi\. \*/\nfunction formatFeedPostTime\(dateString: string\) \{.*?\n\}\n\n",
+              "",
+              profile,
+              count=1,
+              flags=re.S,
+          )
+          if count != 1:
+              raise RuntimeError(f'ProfilePostsGrid.tsx: expected legacy date formatter once, found {count}')
+          profile = profile.replace("                formatTime={formatFeedPostTime}\n", "", 1)
+          write('src/components/profile/ProfilePostsGrid.tsx', profile)
+
+          # Full post preview already had the desired shape; move it onto the canonical helper
+          # and remove truncation so the full timestamp remains visible on narrow screens.
+          replace_once(
+              'src/components/PostViewModal.tsx',
+              "import { format } from 'date-fns';",
+              "import { formatPostDateTime } from '@/lib/postDateTime';",
+          )
+          replace_once(
+              'src/components/PostViewModal.tsx',
+              "        <p className=\"truncate text-xs text-muted-foreground\">",
+              "        <p className=\"text-xs leading-snug text-muted-foreground\">",
+          )
+          replace_once(
+              'src/components/PostViewModal.tsx',
+              "          {format(new Date(post.created_at), 'd MMM yyyy, HH:mm')}",
+              "          {formatPostDateTime(post.created_at)}",
+          )
+
+          # Channel posts.
+          replace_once(
+              'src/components/channels/ChannelView.tsx',
+              "import { formatDistanceToNow } from 'date-fns';",
+              "import { formatPostDateTime } from '@/lib/postDateTime';",
+          )
+          replace_once(
+              'src/components/channels/ChannelView.tsx',
+              "{formatDistanceToNow(new Date(post.created_at), { addSuffix: true })}",
+              "{formatPostDateTime(post.created_at)}",
+          )
+
+          # Videos are posts too: watch page must show the same exact publication timestamp.
+          replace_once(
+              'src/components/video/VideoWatchPanel.tsx',
+              "import { formatDistanceToNow } from 'date-fns';",
+              "import { formatPostDateTime } from '@/lib/postDateTime';",
+          )
+          replace_once(
+              'src/components/video/VideoWatchPanel.tsx',
+              "{formatDistanceToNow(new Date(video.created_at), { addSuffix: true })}",
+              "{formatPostDateTime(video.created_at)}",
+          )
+
+          # Admin post/content tables use the same visible date shape as the public app.
+          replace_once(
+              'src/components/admin/AdminContentManagement.tsx',
+              "import { format } from 'date-fns';\n",
+              "",
+          )
+          replace_once(
+              'src/components/admin/AdminContentManagement.tsx',
+              "import { PROFILE_PUBLIC_COLUMNS } from '@/lib/profileFields';",
+              "import { PROFILE_PUBLIC_COLUMNS } from '@/lib/profileFields';\nimport { formatPostDateTime } from '@/lib/postDateTime';",
+          )
+          admin = read('src/components/admin/AdminContentManagement.tsx')
+          admin, count = re.subn(
+              r"function dateTime\(value: string\) \{\n  try \{\n    return format\(new Date\(value\), 'dd\.MM\.yyyy HH:mm'\);\n  \} catch \{\n    return '—';\n  \}\n\}",
+              "function dateTime(value: string) {\n  return formatPostDateTime(value);\n}",
+              admin,
+              count=1,
+          )
+          if count != 1:
+              raise RuntimeError(f'AdminContentManagement.tsx: expected dateTime formatter once, found {count}')
+          write('src/components/admin/AdminContentManagement.tsx', admin)
+
+          # CI regression: exact formatter output plus source-level coverage of every post surface.
+          test_path = 'src/lib/canonicalEngagement.test.ts'
+          test = read(test_path)
+          import_line = "import { formatPostDateTime } from './postDateTime';\n"
+          if import_line not in test:
+              test = test.replace(
+                  "import { describe, expect, it } from 'vitest';\n",
+                  "import { describe, expect, it } from 'vitest';\n" + import_line,
+                  1,
+              )
+          marker = "describe('canonical post timestamps'"
+          if marker not in test:
+              test += """
+
+          describe('canonical post timestamps', () => {
+            it('renders the requested full post date and time shape', () => {
+              expect(formatPostDateTime(new Date(2026, 8, 13, 16, 57))).toBe('13 Sep 2026, 16:57');
+              expect(formatPostDateTime('not-a-date')).toBe('—');
+            });
+
+            it('uses one canonical formatter across public post surfaces', () => {
+              const home = source('pages/HomePage.tsx');
+              const card = source('components/posts/FeedPostCard.tsx');
+              const modal = source('components/PostViewModal.tsx');
+              const channel = source('components/channels/ChannelView.tsx');
+              const video = source('components/video/VideoWatchPanel.tsx');
+
+              expect(home).toContain('const formatPostTime = formatPostDateTime;');
+              expect(card).toContain('formatPostDateTime(post.created_at)');
+              expect(modal).toContain('formatPostDateTime(post.created_at)');
+              expect(channel).toContain('formatPostDateTime(post.created_at)');
+              expect(video).toContain('formatPostDateTime(video.created_at)');
+              expect(home).not.toContain(" + "' ago'" + ");
+              expect(channel).not.toContain('formatDistanceToNow(new Date(post.created_at)');
+              expect(video).not.toContain('formatDistanceToNow(new Date(video.created_at)');
+            });
+          });
+          """
+          write(test_path, test)
+          PY
+
+      - name: Verify changes
+        run: |
+          npm ci
+          npx vitest run src/lib/canonicalEngagement.test.ts
+          npm run typecheck
+          npm run build
+
+      - name: Commit migration
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/lib/postDateTime.ts src/lib/canonicalEngagement.test.ts src/pages/HomePage.tsx src/components/posts/FeedPostCard.tsx src/components/profile/ProfilePostsGrid.tsx src/components/PostViewModal.tsx src/components/channels/ChannelView.tsx src/components/video/VideoWatchPanel.tsx src/components/admin/AdminContentManagement.tsx
+          git commit -m "fix: show full post timestamps everywhere"
+          git push origin HEAD:fix/canonical-post-datetime
