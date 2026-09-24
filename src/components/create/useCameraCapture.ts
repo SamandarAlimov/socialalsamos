@@ -44,6 +44,25 @@ function shouldStopConstraintFallback(error: unknown) {
   return name === 'NotAllowedError' || name === 'SecurityError';
 }
 
+function trackSupportsTorch(
+  track: MediaStreamTrack,
+  requestedFacingMode: 'user' | 'environment',
+) {
+  const capabilities = track.getCapabilities?.() as
+    | (MediaTrackCapabilities & { torch?: boolean })
+    | undefined;
+  if (typeof capabilities?.torch === 'boolean') return capabilities.torch;
+
+  // Safari/WebKit has shipped torch support in versions where capability
+  // reporting can still be incomplete. The supported-constraint signal is
+  // therefore a safe fallback for the rear camera; toggleTorch still probes
+  // the live track and gracefully falls back if the hardware rejects it.
+  const supportedConstraints = navigator.mediaDevices?.getSupportedConstraints?.() as
+    | { torch?: boolean }
+    | undefined;
+  return requestedFacingMode === 'environment' && Boolean(supportedConstraints?.torch);
+}
+
 async function waitForVideoDimensions(video: HTMLVideoElement, timeoutMs = 2500) {
   if (video.videoWidth > 0 && video.videoHeight > 0 && video.readyState >= 2) return true;
 
@@ -165,6 +184,16 @@ export function useCameraCapture(options: UseCameraCaptureOptions) {
 
     try {
       const videoCandidates: MediaTrackConstraints[] = [
+        ...(facingMode === 'environment'
+          ? [
+              {
+                facingMode: { exact: 'environment' },
+                width: { ideal: 1280 },
+                height: { ideal: 1280 },
+                frameRate: { ideal: 30 },
+              } as MediaTrackConstraints,
+            ]
+          : []),
         {
           facingMode: { ideal: facingMode },
           width: { ideal: 1280 },
@@ -217,11 +246,12 @@ export function useCameraCapture(options: UseCameraCaptureOptions) {
 
       streamRef.current = stream;
       const videoTrack = stream.getVideoTracks()[0];
-      if (videoTrack?.getCapabilities) {
-        const capabilities = videoTrack.getCapabilities() as MediaTrackCapabilities & {
-          torch?: boolean;
-        };
-        setTorchSupported(Boolean(capabilities.torch));
+      if (videoTrack) {
+        const activeFacingMode = videoTrack.getSettings?.().facingMode;
+        const isRearTrack = activeFacingMode
+          ? activeFacingMode === 'environment'
+          : facingMode === 'environment';
+        setTorchSupported(isRearTrack && trackSupportsTorch(videoTrack, facingMode));
       }
 
       const video = videoRef.current;
@@ -538,12 +568,34 @@ export function useCameraCapture(options: UseCameraCaptureOptions) {
 
   const toggleTorch = useCallback(async () => {
     const track = streamRef.current?.getVideoTracks()[0];
-    if (!track || !torchSupported) return false;
+    if (!track || facingMode !== 'environment') return false;
     const next = !torchEnabled;
+    const torchConstraint = { torch: next } as MediaTrackConstraintSet;
+
     try {
-      await track.applyConstraints({
-        advanced: [{ torch: next } as MediaTrackConstraintSet],
-      });
+      const currentConstraints = track.getConstraints?.() ?? {};
+      const retainedAdvanced = (currentConstraints.advanced ?? []).filter(
+        (constraint) => !('torch' in constraint),
+      );
+
+      try {
+        // Preserve the active rear-camera constraints when possible so Safari
+        // does not unnecessarily recapture/reconfigure the source.
+        await track.applyConstraints({
+          ...currentConstraints,
+          advanced: [...retainedAdvanced, torchConstraint],
+        });
+      } catch (preservedConstraintError) {
+        // Some iOS/WebView versions reject re-applying unrelated constraints
+        // while still accepting the torch constraint itself.
+        console.warn(
+          'Camera torch retrying with a minimal constraint set:',
+          preservedConstraintError,
+        );
+        await track.applyConstraints({ advanced: [torchConstraint] });
+      }
+
+      setTorchSupported(true);
       setTorchEnabled(next);
       return true;
     } catch (error) {
@@ -552,7 +604,7 @@ export function useCameraCapture(options: UseCameraCaptureOptions) {
       setTorchEnabled(false);
       return false;
     }
-  }, [torchEnabled, torchSupported]);
+  }, [facingMode, torchEnabled]);
 
   const retake = useCallback(() => {
     setRecordedUrl((current) => {

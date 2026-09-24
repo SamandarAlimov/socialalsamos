@@ -190,14 +190,24 @@ export function CameraVideoRecorder({
 
   const toggleFlash = useCallback(() => {
     if (camera.isRecording) return;
-    if (camera.torchSupported) {
+
+    if (facingMode === 'environment') {
+      // Capability reporting is not reliable enough on every iPhone/WebView.
+      // Probe the live rear track whenever the user explicitly taps Flash.
       void camera.toggleTorch().then((changed) => {
-        if (changed) setSoftwareFlash(false);
+        if (changed) {
+          setSoftwareFlash(false);
+          return;
+        }
+        setSoftwareFlash((current) => !current);
       });
       return;
     }
+
+    // Front cameras have no hardware LED. Use the display as a visible light
+    // source instead of showing an enabled icon that has no effect.
     setSoftwareFlash((current) => !current);
-  }, [camera]);
+  }, [camera.isRecording, camera.toggleTorch, facingMode]);
 
   const confirmCapture = useCallback(() => {
     if (camera.capturedPhoto) {
@@ -702,6 +712,13 @@ export function CameraVideoRecorder({
                       }}
                     />
                   ))}
+
+                  {softwareFlash && !camera.torchEnabled && (
+                    <div
+                      aria-hidden="true"
+                      className="pointer-events-none absolute inset-0 z-[9] bg-white/30 mix-blend-screen"
+                    />
+                  )}
 
                   {gridEnabled && (
                     <div className="pointer-events-none absolute inset-0 z-10 grid grid-cols-3 grid-rows-3">
