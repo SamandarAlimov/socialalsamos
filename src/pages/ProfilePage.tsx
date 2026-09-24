@@ -35,6 +35,7 @@ import { ProfileHeader } from '@/components/profile/ProfileHeader';
 import { ProfilePhotosDialog } from '@/components/profile/ProfilePhotosDialog';
 import { ProfilePostsGrid } from '@/components/profile/ProfilePostsGrid';
 import { ProfileQrDialog } from '@/components/profile/ProfileQrDialog';
+import { SavedPostsPanel } from '@/components/profile/SavedPostsPanel';
 import { StoryHighlights } from '@/components/stories/StoryHighlights';
 import { useAuth } from '@/contexts/AuthContext';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -200,6 +201,14 @@ export default function ProfilePage() {
     </DropdownMenu>
   );
 
+  const profileIdentity = {
+    id: profile.id,
+    username: profile.username,
+    avatar_url: profile.avatar_url,
+    display_name: profile.display_name,
+    is_verified: profile.is_verified,
+  };
+
   const pageContent = (
     <div className="mx-auto max-w-4xl px-3 pb-24 pt-4 md:px-4 md:pb-8 md:pt-8">
       <ProfileHeader
@@ -285,7 +294,9 @@ export default function ProfilePage() {
           ))}
         </div>
 
-        {activeTab === 'reposts' ? (
+        {activeTab === 'saved' ? (
+          <SavedPostsPanel isOwnProfile={isOwnProfile} profile={profileIdentity} />
+        ) : activeTab === 'reposts' ? (
           repostsLoading ? (
             <div className="mt-4 space-y-3">
               {[0, 1, 2].map((item) => <Skeleton key={item} className="h-40 rounded-2xl" />)}
@@ -301,13 +312,7 @@ export default function ProfilePage() {
               <ProfilePostsGrid
                 posts={repostPosts}
                 isOwnProfile={isOwnProfile}
-                profile={{
-                  id: profile.id,
-                  username: profile.username,
-                  avatar_url: profile.avatar_url,
-                  display_name: profile.display_name,
-                  is_verified: profile.is_verified,
-                }}
+                profile={profileIdentity}
                 layout="feed"
               />
             </div>
@@ -325,13 +330,7 @@ export default function ProfilePage() {
             <ProfilePostsGrid
               posts={filteredPosts}
               isOwnProfile={isOwnProfile}
-              profile={{
-                id: profile.id,
-                username: profile.username,
-                avatar_url: profile.avatar_url,
-                display_name: profile.display_name,
-                is_verified: profile.is_verified,
-              }}
+              profile={profileIdentity}
               onLike={likePost}
               onDelete={deletePost}
               onPin={pinPost}
