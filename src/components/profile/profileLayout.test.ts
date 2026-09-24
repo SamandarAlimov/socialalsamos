@@ -114,6 +114,28 @@ describe('profile post layouts', () => {
     expect(dialog).toContain('<DialogOverlay className={overlayClassName} style={overlayStyle} />');
   });
 
+  it('keeps a premium cover on every profile and offers a ten-design collection', () => {
+    const ownProfile = source('pages/ProfilePage.tsx');
+    const sharedHeader = source('components/profile/ProfileHeader.tsx');
+    const coverSurface = source('components/profile/ProfileCoverSurface.tsx');
+    const coverPicker = source('components/profile/ProfileCoverPickerDialog.tsx');
+    const coverPresets = source('lib/profileCovers.ts');
+    const userProfileHook = source('hooks/useUserProfile.ts');
+
+    expect(coverPresets).toContain("DEFAULT_PROFILE_COVER_PRESET: ProfileCoverPresetId = 'graphite-halo'");
+    expect(coverPresets.match(/id: '/g)?.length).toBe(10);
+    expect(sharedHeader).toContain('<ProfileCoverSurface coverUrl={profile.cover_url} presetId={profile.cover_preset} />');
+    expect(coverSurface).toContain('resolveProfileCoverPreset(presetId)');
+    expect(coverPicker).toContain('PROFILE_COVER_PRESETS.map');
+    expect(coverPicker).toContain("defaultValue: 'Alsamos kolleksiyasi'");
+    expect(ownProfile).toContain('<ProfileCoverPickerDialog');
+    expect(ownProfile).toContain('cover_url: null');
+    expect(ownProfile).toContain('cover_preset: presetId === DEFAULT_PROFILE_COVER_PRESET ? null : presetId');
+    expect(ownProfile).toContain('cover_url: uploaded.url, cover_preset: null');
+    expect(userProfileHook).toContain('cover_preset: string | null');
+    expect(userProfileHook).toContain('`${PROFILE_PUBLIC_COLUMNS}, cover_preset`');
+  });
+
   it('keeps own and viewed profiles on one shared premium identity layout', () => {
     const ownProfile = source('pages/ProfilePage.tsx');
     const userProfile = source('pages/UserProfilePage.tsx');
