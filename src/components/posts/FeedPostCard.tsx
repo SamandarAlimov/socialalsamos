@@ -15,6 +15,7 @@ import { VerifiedBadge } from '@/components/VerifiedBadge';
 import { VideoCommentsSheet } from '@/components/VideoCommentsSheet';
 import { usePostViews } from '@/hooks/usePostViews';
 import { cn } from '@/lib/utils';
+import { formatPostDateTime } from '@/lib/postDateTime';
 import {
   parseLocationFromContent,
   parseMusicFromContent,
@@ -61,7 +62,6 @@ export interface FeedPostCardCounts {
 interface FeedPostCardProps {
   post: FeedPostCardPost;
   onLike: () => void;
-  formatTime: (date: string) => string;
   realtimeCounts: FeedPostCardCounts;
   onDelete?: () => void;
   onPin?: () => void;
@@ -82,7 +82,6 @@ interface FeedPostCardProps {
 export function FeedPostCard({
   post,
   onLike,
-  formatTime,
   realtimeCounts,
   onDelete,
   onPin,
@@ -211,7 +210,7 @@ export function FeedPostCard({
               <span className="cursor-pointer hover:underline" onClick={handleUserClick}>
                 @{post.profile?.username || 'user'}
               </span>{' '}
-              · {formatTime(post.created_at)}
+              · {formatPostDateTime(post.created_at)}
             </p>
           </div>
         </div>

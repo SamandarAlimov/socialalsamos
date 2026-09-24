@@ -28,7 +28,7 @@ import { Channel, useChannels } from '@/hooks/useChannels';
 import { useWebRTC } from '@/hooks/useWebRTC';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { formatDistanceToNow } from 'date-fns';
+import { formatPostDateTime } from '@/lib/postDateTime';
 import { motion } from 'framer-motion';
 import { ChannelLiveOverlay } from '@/components/channels/ChannelLiveOverlay';
 
@@ -360,7 +360,7 @@ export function ChannelView({ channel, onBack }: ChannelViewProps) {
                   <div className="flex-1">
                     <span className="text-sm font-semibold">{channel.name}</span>
                     <p className="text-[11px] text-muted-foreground">
-                      {formatDistanceToNow(new Date(post.created_at), { addSuffix: true })}
+                      {formatPostDateTime(post.created_at)}
                     </p>
                   </div>
                 </div>
