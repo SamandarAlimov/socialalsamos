@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Dialog,
   DialogContent,
@@ -9,7 +10,6 @@ import {
   Drawer,
   DrawerContent,
   DrawerHeader,
-  DrawerPortal,
   DrawerTitle,
 } from '@/components/ui/drawer';
 import { Button } from '@/components/ui/button';
@@ -74,7 +74,7 @@ function ShareShortcut({ icon: Icon, label, onClick, active = false }: ShareShor
     <button
       type="button"
       onClick={onClick}
-      className="group flex w-[76px] shrink-0 flex-col items-center gap-2 rounded-2xl py-1 text-center active:scale-[0.97]"
+      className="group flex w-[76px] shrink-0 touch-pan-x flex-col items-center gap-2 rounded-2xl py-1 text-center active:scale-[0.97]"
     >
       <span
         className={cn(
@@ -411,10 +411,13 @@ export function SharePostDialog({
   const shortcutRow = (
     <div
       data-share-shortcuts-scroll="true"
-      className="w-full overflow-x-scroll overscroll-x-contain px-3 pt-2.5 scrollbar-hide [touch-action:pan-x]"
+      data-vaul-no-drag="true"
+      className="w-full overflow-x-auto overscroll-x-contain px-3 pt-2.5 scrollbar-hide touch-pan-x select-none"
       style={{ WebkitOverflowScrolling: 'touch' }}
+      onTouchMove={(event) => event.stopPropagation()}
+      onPointerMove={(event) => event.stopPropagation()}
     >
-      <div className="flex w-max min-w-full gap-1 pr-4">
+      <div className="flex w-max min-w-full touch-pan-x gap-1 pr-6">
         <ShareShortcut
           icon={copied ? Check : Link2}
           label={copied ? 'Nusxalandi' : 'Havolani nusxalash'}
@@ -499,6 +502,7 @@ export function SharePostDialog({
     <div
       className="pointer-events-auto fixed inset-x-0 bottom-0 z-[6020] border-t border-border/60 bg-background shadow-[0_-10px_30px_rgba(0,0,0,0.08)]"
       aria-label="Ulashish amallari"
+      data-vaul-no-drag="true"
     >
       {sendButton}
       <div className="pb-[max(env(safe-area-inset-bottom),24px)]">
@@ -519,28 +523,30 @@ export function SharePostDialog({
 
   if (isMobile) {
     return (
-      <Drawer
-        open={open}
-        onOpenChange={onOpenChange}
-        shouldScaleBackground={false}
-        snapPoints={[MOBILE_SHARE_SNAP_COMPACT, MOBILE_SHARE_SNAP_EXPANDED]}
-        activeSnapPoint={activeSnapPoint}
-        setActiveSnapPoint={setActiveSnapPoint}
-        snapToSequentialPoint
-      >
-        <DrawerContent
-          overlayClassName="bg-black/55"
-          handleClassName="mt-2.5 h-1 w-11 bg-muted-foreground/25"
-          className="mt-0 h-[100dvh] max-h-[100dvh] overflow-hidden rounded-t-[28px] border-x-0 border-b-0 border-t border-border bg-background p-0 shadow-[0_-18px_56px_rgba(0,0,0,0.22)]"
+      <>
+        <Drawer
+          open={open}
+          onOpenChange={onOpenChange}
+          shouldScaleBackground={false}
+          snapPoints={[MOBILE_SHARE_SNAP_COMPACT, MOBILE_SHARE_SNAP_EXPANDED]}
+          activeSnapPoint={activeSnapPoint}
+          setActiveSnapPoint={setActiveSnapPoint}
+          snapToSequentialPoint
         >
-          <DrawerHeader className="flex-none px-5 pb-3 pt-3 text-left">
-            <DrawerTitle className="text-xl font-semibold tracking-tight">Ulashish</DrawerTitle>
-          </DrawerHeader>
-          {mobileContent}
-        </DrawerContent>
+          <DrawerContent
+            overlayClassName="bg-black/55"
+            handleClassName="mt-2.5 h-1 w-11 bg-muted-foreground/25"
+            className="mt-0 h-[100dvh] max-h-[100dvh] overflow-hidden rounded-t-[28px] border-x-0 border-b-0 border-t border-border bg-background p-0 shadow-[0_-18px_56px_rgba(0,0,0,0.22)]"
+          >
+            <DrawerHeader className="flex-none px-5 pb-3 pt-3 text-left">
+              <DrawerTitle className="text-xl font-semibold tracking-tight">Ulashish</DrawerTitle>
+            </DrawerHeader>
+            {mobileContent}
+          </DrawerContent>
+        </Drawer>
 
-        {open ? <DrawerPortal>{mobileDock}</DrawerPortal> : null}
-      </Drawer>
+        {open && typeof document !== 'undefined' ? createPortal(mobileDock, document.body) : null}
+      </>
     );
   }
 
