@@ -86,6 +86,8 @@ export function ProfileHeader({
                 size="xl"
                 showRing
                 className="h-20 w-20 sm:h-24 sm:w-24 md:h-28 md:w-28"
+                onClick={onPhotos}
+                onLongPress={onPhotos}
               />
               {(profile.avatar_url || onPhotos) && onPhotos ? (
                 <button
