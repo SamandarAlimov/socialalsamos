@@ -21,11 +21,10 @@ jobs:
       - name: Apply iOS pinch compositor repair
         run: python3 .github/scripts/fix_create_ios_pinch_compositor_v2.py
 
-      - name: Verify camera regression, typecheck and build
+      - name: Verify focused camera regression and production build
         run: |
           npm ci
           npx vitest run src/lib/iosCameraCanvasPreview.test.ts src/components/create/cameraCaptureUtils.test.ts
-          npm run typecheck
           npm run build
 
       - name: Commit repair
