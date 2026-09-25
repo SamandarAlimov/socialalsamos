@@ -35,6 +35,28 @@ describe('mobile route chrome', () => {
     expect(phoneEditor).toContain('min-w-0 w-full max-w-full flex-1');
   });
 
+  it('keeps profile editing compact and gives username a link-blue @ prefix', () => {
+    const settingsPage = readFileSync(
+      resolve(process.cwd(), 'src/pages/SettingsHubPage.tsx'),
+      'utf8',
+    );
+    const locationPicker = readFileSync(
+      resolve(process.cwd(), 'src/components/settings/LocationPicker.tsx'),
+      'utf8',
+    );
+    const phoneEditor = readFileSync(
+      resolve(process.cwd(), 'src/components/settings/ProfilePhoneEditor.tsx'),
+      'utf8',
+    );
+
+    expect(settingsPage).toContain('text-blue-600 dark:text-blue-400">@</span>');
+    expect(settingsPage).toContain('<SectionCard title="Qo‘shimcha ma’lumotlar">');
+    expect(settingsPage).not.toContain('Profilingizni ishonchli va to‘liq ko‘rsatadigan qo‘shimcha ma’lumotlar.');
+    expect(locationPicker).not.toContain('Joriy joylashuv shart emas');
+    expect(locationPicker).not.toContain('Alsamos Xarita ma’lumotlari');
+    expect(phoneEditor).not.toContain('Raqam o‘zgartirilsa, avvalgi tasdiqlash holati bekor qilinadi.');
+  });
+
   it('lets the complete AI workspace own its chrome', () => {
     expect(getMobileChromeMode('/ai')).toBe('immersive');
     expect(getMobileChromeMode('/ai/')).toBe('immersive');
