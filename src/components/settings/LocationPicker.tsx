@@ -243,10 +243,6 @@ export function LocationPicker({ value, onChange, className }: LocationPickerPro
         </Button>
       </div>
 
-      <p className="max-w-full break-words text-xs leading-relaxed text-muted-foreground">
-        Joriy joylashuv shart emas — xaritani ochib istalgan hududga suring, masshtabni o‘zgartiring va kerakli nuqtani bosing.
-      </p>
-
       {mapOpen && (
         <div className="relative h-72 min-w-0 w-full max-w-full overflow-hidden rounded-2xl border border-border/60 bg-muted shadow-sm sm:h-80">
           <AlsamosMapSurface
@@ -274,10 +270,6 @@ export function LocationPicker({ value, onChange, className }: LocationPickerPro
           )}
         </div>
       )}
-
-      <span className="block max-w-full break-words text-xs leading-relaxed text-muted-foreground">
-        Alsamos Xarita ma’lumotlari
-      </span>
 
       <ProfilePhoneEditor className="mt-4 min-w-0 w-full max-w-full" />
     </div>
