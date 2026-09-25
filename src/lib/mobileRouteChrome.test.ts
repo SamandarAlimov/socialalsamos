@@ -18,6 +18,18 @@ describe('mobile route chrome', () => {
     expect(getMobileChromeMode('/settings/devices')).toBe('immersive');
   });
 
+  it('keeps the settings landing header compact with its own back action', () => {
+    const settingsLanding = readFileSync(
+      resolve(process.cwd(), 'src/pages/SettingsLandingPage.tsx'),
+      'utf8',
+    );
+
+    expect(settingsLanding).toContain("ArrowLeft");
+    expect(settingsLanding).toContain("onClick={() => navigate(-1)}");
+    expect(settingsLanding).not.toContain('Profilni ko‘rish');
+    expect(settingsLanding).not.toContain('Bu bo‘lim faqat sizning admin rolingiz va ruxsatlaringizga mos ravishda ko‘rinadi.');
+  });
+
   it('opens profile editing directly instead of the settings landing page', () => {
     const profilePage = readFileSync(
       resolve(process.cwd(), 'src/pages/ProfilePage.tsx'),
