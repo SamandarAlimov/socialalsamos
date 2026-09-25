@@ -30,6 +30,27 @@ describe('mobile route chrome', () => {
     expect(settingsLanding).not.toContain('Bu bo‘lim faqat sizning admin rolingiz va ruxsatlaringizga mos ravishda ko‘rinadi.');
   });
 
+  it('keeps platform/admin tools concise and brands settings as Alsamos Superapp', () => {
+    const settingsLanding = readFileSync(
+      resolve(process.cwd(), 'src/pages/SettingsLandingPage.tsx'),
+      'utf8',
+    );
+    const settingsHub = readFileSync(
+      resolve(process.cwd(), 'src/pages/SettingsHubPage.tsx'),
+      'utf8',
+    );
+
+    expect(settingsLanding).not.toContain('Kampaniyalar, targeting va reklama natijalari');
+    expect(settingsLanding).not.toContain('Kreativ va kampaniya variantlarini solishtirish');
+    expect(settingsLanding).not.toContain('Muammo, taklif va support murojaatlarini boshqarish');
+    expect(settingsLanding).not.toContain('Platforma boshqaruvi va moderatsiya markazi');
+    expect(settingsLanding).not.toContain('Foydalanuvchi murojaatlarini ko‘rish va javob berish');
+    expect(settingsLanding).not.toContain('Reklama materiallarini tekshirish va moderatsiya qilish');
+    expect(settingsLanding).not.toContain('Reklama xavfsizligi, risk va integrity nazorati');
+    expect(settingsHub).toContain('Alsamos Superapp v1.0.0');
+    expect(settingsHub).not.toContain('Alsamos Social v1.0.0');
+  });
+
   it('opens profile editing directly instead of the settings landing page', () => {
     const profilePage = readFileSync(
       resolve(process.cwd(), 'src/pages/ProfilePage.tsx'),
