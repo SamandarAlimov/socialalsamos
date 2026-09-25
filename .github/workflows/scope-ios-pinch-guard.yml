@@ -1,0 +1,33 @@
+name: Scope iOS pinch guard
+
+on:
+  push:
+    branches:
+      - fix/create-ios-pinch-compositor-v2
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/create-ios-pinch-compositor-v2
+          fetch-depth: 0
+      - name: Scope guard to iOS/WebKit
+        run: python3 .github/scripts/scope_ios_pinch_guard.py
+      - name: Verify focused regressions and build
+        run: |
+          npm ci
+          npx vitest run src/lib/iosCameraCanvasPreview.test.ts src/components/create/cameraCaptureUtils.test.ts
+          npm run build
+      - name: Commit fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/components/create/useCameraCapture.ts src/hooks/useCameraFilterRail.ts src/lib/iosCameraCanvasPreview.test.ts
+          git commit -m "fix(create): keep pinch guard iOS-specific"
+          git push origin HEAD:fix/create-ios-pinch-compositor-v2
