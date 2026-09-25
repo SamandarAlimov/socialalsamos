@@ -18,6 +18,16 @@ describe('mobile route chrome', () => {
     expect(getMobileChromeMode('/settings/devices')).toBe('immersive');
   });
 
+  it('opens profile editing directly instead of the settings landing page', () => {
+    const profilePage = readFileSync(
+      resolve(process.cwd(), 'src/pages/ProfilePage.tsx'),
+      'utf8',
+    );
+
+    expect(profilePage).toContain("onClick={() => navigate('/settings/profile')}");
+    expect(profilePage).toContain("<DropdownMenuItem onClick={() => navigate('/settings')}>");
+  });
+
   it('contains profile location and phone editors inside narrow settings cards', () => {
     const locationPicker = readFileSync(
       resolve(process.cwd(), 'src/components/settings/LocationPicker.tsx'),
