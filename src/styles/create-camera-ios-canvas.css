@@ -11,6 +11,55 @@
  * is intentionally capability-driven through html.alsamos-camera-canvas-preview.
  */
 
+/*
+ * The zoom HUD is created dynamically by useCameraFilterRail/createCameraZoom.
+ * It used to be a tiny translucent pill with backdrop-filter + translateX + an
+ * opacity transition. During active pinch WebKit can promote that small backdrop
+ * layer with the camera viewport backing store, stretching the pill into the
+ * giant dark rounded panel reported by users. Keep the HUD entirely on the normal
+ * paint path: opaque background, no backdrop sampling, no transform and no
+ * animated opacity interpolation. left/right + auto margins preserve centering.
+ *
+ * These declarations are !important on purpose: the HUD properties are written
+ * inline and Compose camera styles can be loaded later through the route chunk.
+ */
+html.alsamos-camera-canvas-preview [data-camera-zoom-badge='true'],
+html.alsamos-camera-canvas-preview [data-live-camera-zoom-badge='true'] {
+  left: 0 !important;
+  right: 0 !important;
+  width: max-content !important;
+  margin-inline: auto !important;
+  transform: none !important;
+  filter: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  background: #11151b !important;
+  border-radius: 10px !important;
+  transition: none !important;
+  will-change: auto !important;
+  isolation: auto !important;
+  contain: none !important;
+}
+
+/* Camera chrome should not create extra backdrop compositor surfaces over a live
+ * camera. The footer itself is already non-blurred; this also covers its pill,
+ * the page close control and Tailwind backdrop-blur controls inside the recorder.
+ * Their backgrounds remain visible, so the UI changes only by losing blur. */
+html.alsamos-camera-canvas-preview .create-page .create-mode-tabs,
+html.alsamos-camera-canvas-preview .create-page .create-page-close,
+html.alsamos-camera-canvas-preview
+  [data-camera-recorder-root='true']
+  [class*='backdrop-blur'],
+html.alsamos-camera-canvas-preview
+  [data-camera-recorder-root='true']
+  button[aria-label='Qurilmadan tanlash'],
+html.alsamos-camera-canvas-preview
+  [data-camera-recorder-root='true']
+  button[aria-label='Kamerani aylantirish'] {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
 /* Never put visual filters directly on the live hardware camera. Processed
  * lenses are painted by Canvas2D, which also keeps capture and preview WYSIWYG. */
 html.alsamos-camera-canvas-preview
