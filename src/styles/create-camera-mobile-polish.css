@@ -4,19 +4,6 @@
  * Chromium/Firefox WebViews, landscape devices and coarse-pointer tablets.
  * Desktop keeps the normal AppLayout presentation. */
 
-/* Edge-to-edge Create surfaces paint underneath translucent system chrome when
- * the host supports it. Keep the document/root backing surface dark as a safe
- * fallback on browsers/PWAs whose status bar cannot become transparent. */
-html[data-alsamos-immersive-status],
-html[data-alsamos-immersive-status] body,
-html[data-alsamos-immersive-status] #root {
-  background: #000 !important;
-}
-
-html[data-alsamos-immersive-status] body {
-  overscroll-behavior: none;
-}
-
 [data-camera-recorder-root='true'] {
   min-width: 0;
   min-height: 0;
