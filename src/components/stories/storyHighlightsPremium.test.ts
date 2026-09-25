@@ -43,7 +43,9 @@ describe('premium story highlights', () => {
     expect(archive).toContain('Tanlanganlarga');
     expect(archive).toContain('<AddToHighlightDialog');
 
-    expect(addDialog).toContain('{story && !open ? (');
+    expect(addDialog).toContain(".select('user_id')");
+    expect(addDialog).toContain('setCanQuickAdd(data?.user_id === user.id)');
+    expect(addDialog).toContain('{story && !open && canQuickAdd ? (');
     expect(addDialog).toContain('onClick={() => onOpenChange(true)}');
     expect(addDialog).toContain('Storini Tanlanganlarga qo‘shish');
     expect(addDialog).toContain("selectedHighlightId === 'new'");
