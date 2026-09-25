@@ -659,22 +659,18 @@ export default function SettingsHubPage() {
               </div>
             </SectionCard>
 
-            <div className={cn('flex flex-col gap-3 rounded-2xl border p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between', isProfileDirty ? 'border-amber-500/30 bg-amber-500/5' : 'border-border bg-card')}>
-              <div>
-                <p className="text-sm font-semibold">{isProfileDirty ? 'Saqlanmagan o‘zgarishlar bor' : 'Profil ma’lumotlari saqlangan'}</p>
-                <p className="mt-0.5 text-xs text-muted-foreground">{isProfileDirty ? 'O‘zgarishlarni profilingizga qo‘llash uchun saqlang.' : 'Yangi o‘zgarish kiritsangiz, bu yerda saqlash holati ko‘rinadi.'}</p>
-              </div>
-              <Button onClick={handleSaveProfile} disabled={!isProfileDirty || saving} className="shrink-0">
+            <div className="flex justify-end">
+              <Button onClick={handleSaveProfile} disabled={!isProfileDirty || saving}>
                 {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
                 O‘zgarishlarni saqlash
               </Button>
             </div>
 
-            <SectionCard title="Profil ishonchliligi" description="Tasdiqlash foydalanuvchilarga rasmiy hisobni tezroq tanishga yordam beradi.">
+            <SectionCard title="Profil ishonchliligi">
               <div className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between md:p-5">
                 <div className="flex min-w-0 items-center gap-3">
                   <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-sky-500/10"><BadgeCheck className="h-5 w-5 text-sky-600" /></div>
-                  <div><p className="text-sm font-medium">Tasdiqlangan nishon</p><p className="mt-0.5 text-xs text-muted-foreground">Shaxs yoki brend sifatida tasdiqlash uchun so‘rov yuboring.</p></div>
+                  <p className="text-sm font-medium">Tasdiqlangan nishon</p>
                 </div>
                 <Button variant="outline" onClick={() => setVerificationDialogOpen(true)}>So‘rov yuborish</Button>
               </div>
