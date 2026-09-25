@@ -605,7 +605,7 @@ export default function SettingsHubPage() {
               </div>
             </section>
 
-            <SectionCard title="Asosiy ma’lumotlar" description="Odamlar profilingizda ko‘radigan asosiy identifikatsiya ma’lumotlari.">
+            <SectionCard title="Asosiy ma’lumotlar">
               <div className="grid gap-5 p-4 md:p-5">
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div>
