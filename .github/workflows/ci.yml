@@ -60,7 +60,7 @@ jobs:
         run: npx vitest run src/lib/canonicalEngagement.test.ts
 
       - name: Create regression tests
-        run: npx vitest run src/lib/videoPipeline.test.ts src/lib/storyPublishing.test.ts src/lib/createMediaDraftStore.test.ts src/lib/reelDraft.test.ts src/lib/storyDraft.test.ts src/components/create/cameraCaptureUtils.test.ts src/lib/iosCameraCanvasPreview.test.ts
+        run: npx vitest run src/lib/videoPipeline.test.ts src/lib/storyPublishing.test.ts src/lib/createMediaDraftStore.test.ts src/lib/reelDraft.test.ts src/lib/storyDraft.test.ts src/components/create/cameraCaptureUtils.test.ts src/lib/iosCameraCanvasPreview.test.ts src/components/stories/storyHighlightsPremium.test.ts
 
       - name: Mobile chrome regression tests
         run: npx vitest run src/lib/mobileRouteChrome.test.ts src/lib/notificationNavigation.test.ts src/components/settings/LocationPicker.test.ts
