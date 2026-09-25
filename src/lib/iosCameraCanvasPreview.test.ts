@@ -85,6 +85,41 @@ describe('cross-browser camera Canvas2D preview compatibility', () => {
     expect(css).toContain('border-radius: 0 !important');
   });
 
+  it('keeps the per-gesture zoom HUD off the backdrop compositor path', () => {
+    const css = readFileSync(
+      resolve(process.cwd(), 'src/styles/create-camera-ios-canvas.css'),
+      'utf8',
+    );
+
+    expect(css).toContain("[data-camera-zoom-badge='true']");
+    expect(css).toContain("[data-live-camera-zoom-badge='true']");
+    expect(css).toMatch(
+      /\[data-camera-zoom-badge='true'\][\s\S]*?backdrop-filter:\s*none\s*!important;/,
+    );
+    expect(css).toMatch(
+      /\[data-camera-zoom-badge='true'\][\s\S]*?transform:\s*none\s*!important;/,
+    );
+    expect(css).toMatch(
+      /\[data-camera-zoom-badge='true'\][\s\S]*?background:\s*#11151b\s*!important;/,
+    );
+    expect(css).toMatch(
+      /\[data-camera-zoom-badge='true'\][\s\S]*?transition:\s*none\s*!important;/,
+    );
+  });
+
+  it('removes remaining camera-chrome backdrop surfaces while the camera compatibility path is active', () => {
+    const css = readFileSync(
+      resolve(process.cwd(), 'src/styles/create-camera-ios-canvas.css'),
+      'utf8',
+    );
+
+    expect(css).toContain('.create-page .create-mode-tabs');
+    expect(css).toContain('.create-page .create-page-close');
+    expect(css).toContain("[class*='backdrop-blur']");
+    expect(css).toMatch(/backdrop-filter:\s*none\s*!important;/);
+    expect(css).toMatch(/-webkit-backdrop-filter:\s*none\s*!important;/);
+  });
+
   it('keeps existing recorder hooks frozen while the generic canvas path owns zoom', () => {
     const capture = readFileSync(
       resolve(process.cwd(), 'src/components/create/useCameraCapture.ts'),
