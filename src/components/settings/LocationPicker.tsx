@@ -140,9 +140,12 @@ export function LocationPicker({ value, onChange, className }: LocationPickerPro
   const mapZoom = coords ? 15 : 2;
 
   return (
-    <div className={cn('min-w-0 w-full max-w-full overflow-hidden space-y-2.5', className)}>
+    <div
+      className={cn('box-border min-w-0 w-full max-w-full overflow-x-hidden space-y-2.5', className)}
+      style={{ contain: 'inline-size' }}
+    >
       {value ? (
-        <div className="flex min-w-0 w-full max-w-full items-center gap-2 overflow-hidden rounded-xl border border-border bg-muted/40 px-3 py-2.5">
+        <div className="box-border flex min-w-0 w-full max-w-full items-center gap-2 overflow-hidden rounded-xl border border-border bg-muted/40 px-3 py-2.5">
           <MapPin className="h-4 w-4 shrink-0 text-primary" />
           <span
             className="min-w-0 flex-1 truncate text-sm font-medium"
@@ -166,8 +169,8 @@ export function LocationPicker({ value, onChange, className }: LocationPickerPro
         </div>
       ) : null}
 
-      <div className="relative min-w-0 w-full max-w-full">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+      <div className="relative box-border min-w-0 w-full max-w-full overflow-hidden">
+        <Search className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
           value={query}
           onChange={(event) => setQuery(event.target.value)}
@@ -176,12 +179,12 @@ export function LocationPicker({ value, onChange, className }: LocationPickerPro
           autoComplete="off"
         />
         {search.loading && (
-          <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground" />
+          <Loader2 className="absolute right-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground" />
         )}
       </div>
 
       {query.trim().length >= 2 && search.places.length > 0 && (
-        <div className="min-w-0 w-full max-w-full overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+        <div className="box-border min-w-0 w-full max-w-full overflow-hidden rounded-xl border border-border bg-card shadow-sm">
           {search.places.slice(0, 6).map((place, index) => {
             const ui = categoryUi(place.categoryId);
             const Icon = ui.Icon;
@@ -191,7 +194,7 @@ export function LocationPicker({ value, onChange, className }: LocationPickerPro
                 type="button"
                 onClick={() => applyPlace(place)}
                 className={cn(
-                  'flex min-w-0 w-full max-w-full items-start gap-2.5 overflow-hidden px-3 py-2.5 text-left transition-colors hover:bg-accent/60',
+                  'box-border flex min-w-0 w-full max-w-full items-start gap-2.5 overflow-hidden px-3 py-2.5 text-left transition-colors hover:bg-accent/60',
                   index !== 0 && 'border-t border-border/60',
                 )}
               >
@@ -214,12 +217,12 @@ export function LocationPicker({ value, onChange, className }: LocationPickerPro
         <p className="max-w-full break-words text-xs text-destructive">{error || search.error}</p>
       )}
 
-      <div className="grid min-w-0 w-full max-w-full grid-cols-1 gap-2 sm:grid-cols-2">
+      <div className="box-border grid min-w-0 w-full max-w-full grid-cols-1 gap-2 overflow-hidden sm:grid-cols-2">
         <Button
           type="button"
           variant="outline"
           size="sm"
-          className="w-full min-w-0 justify-center rounded-full"
+          className="w-full min-w-0 max-w-full justify-center rounded-full"
           disabled={locating}
           onClick={useCurrentLocation}
         >
@@ -235,7 +238,7 @@ export function LocationPicker({ value, onChange, className }: LocationPickerPro
           type="button"
           variant={mapOpen ? 'secondary' : 'outline'}
           size="sm"
-          className="w-full min-w-0 justify-center rounded-full"
+          className="w-full min-w-0 max-w-full justify-center rounded-full"
           onClick={() => setMapOpen((open) => !open)}
         >
           <MapPinned className="mr-1.5 h-3.5 w-3.5 shrink-0" />
@@ -244,7 +247,7 @@ export function LocationPicker({ value, onChange, className }: LocationPickerPro
       </div>
 
       {mapOpen && (
-        <div className="relative h-72 min-w-0 w-full max-w-full overflow-hidden rounded-2xl border border-border/60 bg-muted shadow-sm sm:h-80">
+        <div className="relative box-border h-72 min-w-0 w-full max-w-full overflow-hidden rounded-2xl border border-border/60 bg-muted shadow-sm sm:h-80">
           <AlsamosMapSurface
             center={mapCenter}
             referenceCenter={mapCenter}

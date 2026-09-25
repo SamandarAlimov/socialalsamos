@@ -27,15 +27,22 @@ describe('mobile route chrome', () => {
       resolve(process.cwd(), 'src/components/settings/ProfilePhoneEditor.tsx'),
       'utf8',
     );
+    const input = readFileSync(
+      resolve(process.cwd(), 'src/components/ui/input.tsx'),
+      'utf8',
+    );
 
-    expect(locationPicker).toContain("'min-w-0 w-full max-w-full overflow-hidden space-y-2.5'");
-    expect(locationPicker).toContain('grid min-w-0 w-full max-w-full grid-cols-1 gap-2');
+    expect(locationPicker).toContain("'box-border min-w-0 w-full max-w-full overflow-x-hidden space-y-2.5'");
+    expect(locationPicker).toContain("style={{ contain: 'inline-size' }}");
+    expect(locationPicker).toContain('box-border grid min-w-0 w-full max-w-full grid-cols-1 gap-2 overflow-hidden');
     expect(locationPicker).toContain('min-w-0 flex-1 truncate text-sm font-medium');
     expect(phoneEditor).toContain("'min-w-0 w-full max-w-full overflow-hidden border-t");
     expect(phoneEditor).toContain('min-w-0 w-full max-w-full flex-1');
+    expect(input).toContain('relative min-w-0 w-full max-w-full');
+    expect(input).toContain('h-11 min-w-0 w-full max-w-full');
   });
 
-  it('keeps profile editing compact and gives username a link-blue @ prefix', () => {
+  it('keeps profile editing compact and gives username a visible link-blue @ prefix', () => {
     const settingsPage = readFileSync(
       resolve(process.cwd(), 'src/pages/SettingsHubPage.tsx'),
       'utf8',
@@ -48,8 +55,14 @@ describe('mobile route chrome', () => {
       resolve(process.cwd(), 'src/components/settings/ProfilePhoneEditor.tsx'),
       'utf8',
     );
+    const input = readFileSync(
+      resolve(process.cwd(), 'src/components/ui/input.tsx'),
+      'utf8',
+    );
 
-    expect(settingsPage).toContain('text-blue-600 dark:text-blue-400">@</span>');
+    expect(input).toContain('props.id === "username"');
+    expect(input).toContain('text-blue-600 dark:text-blue-400">@</span>');
+    expect(input).toContain('pointer-events-none absolute left-3 top-1/2 z-10');
     expect(settingsPage).toContain('<SectionCard title="Qo‘shimcha ma’lumotlar">');
     expect(settingsPage).not.toContain('Profilingizni ishonchli va to‘liq ko‘rsatadigan qo‘shimcha ma’lumotlar.');
     expect(locationPicker).not.toContain('Joriy joylashuv shart emas');
