@@ -251,13 +251,50 @@ function nearestFilterButton(rail: HTMLElement): HTMLButtonElement | null {
   }, null);
 }
 
+function syncFilterRailGeometry(rail: HTMLElement) {
+  const firstButton = rail.querySelector<HTMLButtonElement>(FILTER_BUTTON_SELECTOR);
+  const railWidth = rail.clientWidth;
+  const buttonWidth = firstButton?.offsetWidth ?? 0;
+  if (!firstButton || railWidth <= 0 || buttonWidth <= 0) return false;
+
+  // The first and last filter must be able to sit exactly below the centered
+  // shutter on every viewport. Fixed padding (112px/100px) only happened to
+  // work for one narrow rail width and left the first "Normal" lens visibly
+  // offset on wider phones, tablets and desktop. Derive the side runway from
+  // the live rail/button geometry instead.
+  const sidePadding = Math.max(0, (railWidth - buttonWidth) / 2);
+  const value = `${sidePadding}px`;
+  rail.style.setProperty('padding-left', value, 'important');
+  rail.style.setProperty('padding-right', value, 'important');
+  rail.style.setProperty('scroll-padding-left', value, 'important');
+  rail.style.setProperty('scroll-padding-right', value, 'important');
+  return true;
+}
+
+function centerFilterButton(
+  rail: HTMLElement,
+  button: HTMLButtonElement,
+  behavior: ScrollBehavior = 'auto',
+) {
+  const target = button.offsetLeft + button.offsetWidth / 2 - rail.clientWidth / 2;
+  const maxScroll = Math.max(0, rail.scrollWidth - rail.clientWidth);
+  const left = Math.min(maxScroll, Math.max(0, target));
+
+  if (behavior === 'auto') {
+    rail.scrollLeft = left;
+    return;
+  }
+  rail.scrollTo({ left, behavior });
+}
+
 function centerActiveFilter(rail: HTMLElement) {
+  if (!syncFilterRailGeometry(rail)) return;
   const active = rail.querySelector<HTMLButtonElement>(
     `${FILTER_BUTTON_SELECTOR}[aria-pressed="true"]`,
   );
   if (!active) return;
   setFilterPreview(rail, active);
-  active.scrollIntoView({ behavior: 'auto', block: 'nearest', inline: 'center' });
+  centerFilterButton(rail, active);
 }
 
 function polishFilterRail(rail: HTMLElement) {
@@ -282,11 +319,6 @@ function polishFilterRail(rail: HTMLElement) {
   rail.style.setProperty(
     'column-gap',
     compactViewport ? '22px' : '18px',
-    'important',
-  );
-  rail.style.setProperty(
-    'padding-inline',
-    compactViewport ? '112px' : '100px',
     'important',
   );
 }
@@ -397,8 +429,16 @@ export function useCameraFilterRail(rootRef: RefObject<HTMLElement>) {
 
       let commitTimer = 0;
       let frame = 0;
+      let layoutFrame = 0;
       polishFilterRail(rail);
       const detachShutterDragBridge = attachShutterDragBridge(rail);
+
+      const queueLayoutSync = () => {
+        window.cancelAnimationFrame(layoutFrame);
+        layoutFrame = window.requestAnimationFrame(() => {
+          centerActiveFilter(rail);
+        });
+      };
 
       const updateNearest = () => {
         window.cancelAnimationFrame(frame);
@@ -423,14 +463,39 @@ export function useCameraFilterRail(rootRef: RefObject<HTMLElement>) {
         commitNearest();
       };
 
+      const onFilterClick = (event: Event) => {
+        const target = event.target instanceof Element ? event.target : null;
+        const button = target?.closest<HTMLButtonElement>(FILTER_BUTTON_SELECTOR) ?? null;
+        if (!button || !rail.contains(button)) return;
+
+        window.cancelAnimationFrame(layoutFrame);
+        layoutFrame = window.requestAnimationFrame(() => {
+          syncFilterRailGeometry(rail);
+          setFilterPreview(rail, button);
+          centerFilterButton(rail, button, 'smooth');
+        });
+      };
+
+      const resizeObserver =
+        typeof ResizeObserver === 'function'
+          ? new ResizeObserver(() => queueLayoutSync())
+          : null;
+      resizeObserver?.observe(rail);
+
       rail.addEventListener('scroll', onScroll, { passive: true });
-      window.requestAnimationFrame(() => centerActiveFilter(rail));
+      rail.addEventListener('click', onFilterClick);
+      window.addEventListener('resize', queueLayoutSync, { passive: true });
+      queueLayoutSync();
 
       cleanups.set(rail, () => {
         window.clearTimeout(commitTimer);
         window.cancelAnimationFrame(frame);
+        window.cancelAnimationFrame(layoutFrame);
+        resizeObserver?.disconnect();
         detachShutterDragBridge();
         rail.removeEventListener('scroll', onScroll);
+        rail.removeEventListener('click', onFilterClick);
+        window.removeEventListener('resize', queueLayoutSync);
       });
     };
 
