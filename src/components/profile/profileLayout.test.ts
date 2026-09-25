@@ -114,7 +114,7 @@ describe('profile post layouts', () => {
     expect(dialog).toContain('<DialogOverlay className={overlayClassName} style={overlayStyle} />');
   });
 
-  it('keeps a premium cover on every profile and offers a ten-design collection', () => {
+  it('keeps a premium cover on every profile and offers an expanded colorful collection', () => {
     const ownProfile = source('pages/ProfilePage.tsx');
     const sharedHeader = source('components/profile/ProfileHeader.tsx');
     const coverSurface = source('components/profile/ProfileCoverSurface.tsx');
@@ -123,7 +123,12 @@ describe('profile post layouts', () => {
     const userProfileHook = source('hooks/useUserProfile.ts');
 
     expect(coverPresets).toContain("DEFAULT_PROFILE_COVER_PRESET: ProfileCoverPresetId = 'graphite-halo'");
-    expect(coverPresets.match(/id: '/g)?.length).toBe(10);
+    expect(coverPresets.match(/id: '/g)?.length).toBe(22);
+    expect(coverPresets).toContain("id: 'aurora-prism'");
+    expect(coverPresets).toContain("id: 'sunset-coral'");
+    expect(coverPresets).toContain("id: 'emerald-luxe'");
+    expect(coverPresets).toContain("id: 'neon-night'");
+    expect(coverPresets).toContain("id: 'crimson-velvet'");
     expect(sharedHeader).toContain('<ProfileCoverSurface coverUrl={profile.cover_url} presetId={profile.cover_preset} />');
     expect(coverSurface).toContain('resolveProfileCoverPreset(presetId)');
     expect(coverPicker).toContain('PROFILE_COVER_PRESETS.map');
