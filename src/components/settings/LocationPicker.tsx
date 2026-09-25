@@ -128,11 +128,16 @@ export function LocationPicker({ value, onChange, className }: LocationPickerPro
   );
 
   return (
-    <div className={cn('space-y-2.5', className)}>
+    <div className={cn('min-w-0 w-full max-w-full overflow-hidden space-y-2.5', className)}>
       {value ? (
-        <div className="flex items-center gap-2 rounded-xl border border-border bg-muted/40 px-3 py-2.5">
+        <div className="flex min-w-0 w-full max-w-full items-center gap-2 overflow-hidden rounded-xl border border-border bg-muted/40 px-3 py-2.5">
           <MapPin className="h-4 w-4 shrink-0 text-primary" />
-          <span className="min-w-0 flex-1 truncate text-sm font-medium">{value}</span>
+          <span
+            className="min-w-0 flex-1 truncate text-sm font-medium"
+            title={value}
+          >
+            {value}
+          </span>
           <Button
             type="button"
             variant="ghost"
@@ -149,13 +154,13 @@ export function LocationPicker({ value, onChange, className }: LocationPickerPro
         </div>
       ) : null}
 
-      <div className="relative">
+      <div className="relative min-w-0 w-full max-w-full">
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           placeholder="Shahar, tuman yoki manzilni yozing"
-          className="pl-9 pr-9"
+          className="min-w-0 w-full max-w-full pl-9 pr-9"
           autoComplete="off"
         />
         {search.loading && (
@@ -164,7 +169,7 @@ export function LocationPicker({ value, onChange, className }: LocationPickerPro
       </div>
 
       {query.trim().length >= 2 && search.places.length > 0 && (
-        <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+        <div className="min-w-0 w-full max-w-full overflow-hidden rounded-xl border border-border bg-card shadow-sm">
           {search.places.slice(0, 6).map((place, index) => {
             const ui = categoryUi(place.categoryId);
             const Icon = ui.Icon;
@@ -174,14 +179,14 @@ export function LocationPicker({ value, onChange, className }: LocationPickerPro
                 type="button"
                 onClick={() => applyPlace(place)}
                 className={cn(
-                  'flex w-full items-start gap-2.5 px-3 py-2.5 text-left transition-colors hover:bg-accent/60',
+                  'flex min-w-0 w-full max-w-full items-start gap-2.5 overflow-hidden px-3 py-2.5 text-left transition-colors hover:bg-accent/60',
                   index !== 0 && 'border-t border-border/60',
                 )}
               >
                 <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted">
                   <Icon className="h-4 w-4" style={{ color: ui.color }} />
                 </span>
-                <span className="min-w-0">
+                <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-medium">{place.name}</span>
                   <span className="block truncate text-xs text-muted-foreground">
                     {place.address || place.categoryLabel || ui.label}
@@ -194,15 +199,15 @@ export function LocationPicker({ value, onChange, className }: LocationPickerPro
       )}
 
       {(search.error || error) && (
-        <p className="text-xs text-destructive">{error || search.error}</p>
+        <p className="max-w-full break-words text-xs text-destructive">{error || search.error}</p>
       )}
 
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex min-w-0 w-full max-w-full flex-col items-start gap-2 sm:flex-row sm:flex-wrap sm:items-center">
         <Button
           type="button"
           variant="outline"
           size="sm"
-          className="rounded-full"
+          className="max-w-full rounded-full"
           disabled={locating}
           onClick={useCurrentLocation}
         >
@@ -213,15 +218,15 @@ export function LocationPicker({ value, onChange, className }: LocationPickerPro
           )}
           Joriy joylashuvim
         </Button>
-        <span className="text-xs text-muted-foreground">
+        <span className="max-w-full break-words text-xs leading-relaxed text-muted-foreground">
           Alsamos Xarita ma’lumotlari
         </span>
       </div>
 
-      <ProfilePhoneEditor className="mt-4" />
+      <ProfilePhoneEditor className="mt-4 min-w-0 w-full max-w-full" />
 
       {coords && (
-        <div className="relative h-48 overflow-hidden rounded-2xl border border-border/60 bg-muted shadow-sm">
+        <div className="relative h-48 min-w-0 w-full max-w-full overflow-hidden rounded-2xl border border-border/60 bg-muted shadow-sm">
           <AlsamosMapSurface
             center={coords}
             referenceCenter={coords}
@@ -232,9 +237,9 @@ export function LocationPicker({ value, onChange, className }: LocationPickerPro
           />
           {resolvingPoint && (
             <div className="pointer-events-none absolute inset-x-3 bottom-3 flex justify-center">
-              <span className="flex items-center gap-2 rounded-full border border-border/60 bg-background/90 px-3 py-1.5 text-[11px] font-medium shadow-lg backdrop-blur">
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                Joy aniqlanmoqda…
+              <span className="flex max-w-full items-center gap-2 rounded-full border border-border/60 bg-background/90 px-3 py-1.5 text-[11px] font-medium shadow-lg backdrop-blur">
+                <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
+                <span className="truncate">Joy aniqlanmoqda…</span>
               </span>
             </div>
           )}
