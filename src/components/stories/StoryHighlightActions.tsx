@@ -113,7 +113,7 @@ export function StoryHighlightActions({
         <SheetContent
           side="bottom"
           hideDefaultClose
-          className="left-1/2 w-[calc(100%-20px)] max-w-lg -translate-x-1/2 rounded-t-[28px] border-x border-t border-border/70 p-0 pb-[max(10px,env(safe-area-inset-bottom))]"
+          className="left-1/2 right-auto w-[calc(100%-20px)] max-w-lg -translate-x-1/2 rounded-t-[28px] border-x border-t border-border/70 p-0 pb-[max(10px,env(safe-area-inset-bottom))]"
         >
           <SheetTitle className="sr-only">Tanlangan amallari</SheetTitle>
           <div className="mx-auto mt-2 h-1.5 w-10 rounded-full bg-muted-foreground/25" />
@@ -140,10 +140,7 @@ export function StoryHighlightActions({
             <button
               type="button"
               className={actionClass}
-              onClick={() => {
-                onOpenChange(false);
-                setQrOpen(true);
-              }}
+              onClick={() => setQrOpen(true)}
             >
               <QrCode className="h-5 w-5" />
               QR kod
