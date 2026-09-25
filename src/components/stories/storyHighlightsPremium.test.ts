@@ -7,23 +7,48 @@ function source(path: string) {
 }
 
 describe('premium story highlights', () => {
-  it('creates an Instagram-style highlight with story selection and a custom cover', () => {
+  it('creates and edits highlights with story or device cover selection', () => {
     const composer = source('components/stories/StoryHighlightComposerDialog.tsx');
     const highlights = source('components/stories/StoryHighlights.tsx');
 
     expect(composer).toContain("mode: 'create' | 'edit'");
     expect(composer).toContain(".from('stories')");
     expect(composer).toContain('selectedStoryIds');
-    expect(composer).toContain("accept=\"image/*\"");
+    expect(composer).toContain('coverStoryId');
+    expect(composer).toContain('chooseStoryCover');
+    expect(composer).toContain('Storydan muqova tanlash');
+    expect(composer).toContain('Qurilmadan');
+    expect(composer).toContain('accept="image/*"');
     expect(composer).toContain("uploadMedia(coverFile, { type: 'avatar', visibility: 'public' })");
-    expect(composer).toContain("defaultValue: 'Muqovani tanlash'");
-    expect(composer).toContain("defaultValue: 'Storylarni tanlang'");
+    expect(composer).toContain('selectedCoverStory?.media_url');
     expect(composer).toContain('selectedStories.map((story) => ({');
     expect(composer).toContain('removeExistingCover');
 
     expect(highlights).toContain('StoryHighlightComposerDialog');
     expect(highlights).toContain('from-amber-300 via-fuchsia-500 to-violet-600');
     expect(highlights).toContain('<HighlightCover highlight={highlight} />');
+    expect(highlights).toContain('resolveCoverItem');
+    expect(highlights).toContain("mediaType === 'video'");
+  });
+
+  it('keeps all owner stories visible in archive and exposes direct add-to-highlight actions', () => {
+    const archive = source('pages/StoryArchivePage.tsx');
+    const addDialog = source('components/stories/AddToHighlightDialog.tsx');
+
+    expect(archive).toContain(".from('stories')");
+    expect(archive).toContain(".eq('user_id', user.id)");
+    expect(archive).not.toContain('const expired =');
+    expect(archive).not.toContain('setArchivedStories(expired');
+    expect(archive).toContain('Faol va avvalgi storylaringiz');
+    expect(archive).toContain('Tanlanganlarga');
+    expect(archive).toContain('<AddToHighlightDialog');
+
+    expect(addDialog).toContain('{story && !open ? (');
+    expect(addDialog).toContain('onClick={() => onOpenChange(true)}');
+    expect(addDialog).toContain('Storini Tanlanganlarga qo‘shish');
+    expect(addDialog).toContain("selectedHighlightId === 'new'");
+    expect(addDialog).toContain('Yaratish va qo‘shish');
+    expect(addDialog).toContain('addStoryToHighlight(');
   });
 
   it('persists initial highlight stories together and rolls back a partial creation', () => {
