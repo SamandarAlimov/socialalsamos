@@ -615,7 +615,7 @@ export default function SettingsHubPage() {
                   <div>
                     <Label htmlFor="username">Foydalanuvchi nomi</Label>
                     <div className="relative mt-1.5">
-                      <AtSign className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                      <span aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-base font-semibold leading-none text-blue-600 dark:text-blue-400">@</span>
                       <Input id="username" value={profile.username} onChange={(e) => setProfile((prev) => ({ ...prev, username: e.target.value }))} className="pl-9" placeholder="username" />
                     </div>
                     <p className="mt-1.5 text-[11px] text-muted-foreground">Profil havolangiz: alsamos.com/user/{profile.username || 'username'}</p>
@@ -631,7 +631,7 @@ export default function SettingsHubPage() {
               </div>
             </SectionCard>
 
-            <SectionCard title="Qo‘shimcha ma’lumotlar" description="Profilingizni ishonchli va to‘liq ko‘rsatadigan qo‘shimcha ma’lumotlar.">
+            <SectionCard title="Qo‘shimcha ma’lumotlar">
               <div className="grid gap-5 p-4 md:p-5">
                 <div>
                   <div className="mb-2 flex items-center gap-2 text-sm font-medium"><MapPin className="h-4 w-4 text-muted-foreground" /> Joylashuv</div>

@@ -117,9 +117,6 @@ export function ProfilePhoneEditor({ className }: ProfilePhoneEditorProps) {
             className="mt-1.5 min-w-0 w-full max-w-full"
             placeholder="+998 90 123 45 67"
           />
-          <p className="mt-1.5 max-w-full break-words text-[11px] leading-relaxed text-muted-foreground">
-            Xalqaro formatdan foydalaning. Raqam o‘zgartirilsa, avvalgi tasdiqlash holati bekor qilinadi.
-          </p>
         </div>
         <Button
           type="button"
