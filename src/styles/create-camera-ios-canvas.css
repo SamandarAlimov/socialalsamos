@@ -20,15 +20,33 @@
  * paint path: opaque background, no backdrop sampling, no transform and no
  * animated opacity interpolation. left/right + auto margins preserve centering.
  *
+ * Mobile Create also has legacy layout rules that size direct recorder child
+ * divs to 100% height. The Story/Reel zoom HUD is appended as a direct child, so
+ * without explicit intrinsic sizing that generic rule turns the tiny badge into
+ * a viewport-height strip. Reset every box-size axis here as well as compositor
+ * properties; this keeps the HUD small even if route-level camera CSS loads later.
+ *
  * These declarations are !important on purpose: the HUD properties are written
  * inline and Compose camera styles can be loaded later through the route chunk.
  */
 html.alsamos-camera-canvas-preview [data-camera-zoom-badge='true'],
 html.alsamos-camera-canvas-preview [data-live-camera-zoom-badge='true'] {
+  display: block !important;
+  top: auto !important;
   left: 0 !important;
   right: 0 !important;
   width: max-content !important;
+  min-width: 0 !important;
+  max-width: calc(100% - 24px) !important;
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
   margin-inline: auto !important;
+  padding: 5px 10px !important;
+  box-sizing: border-box !important;
+  white-space: nowrap !important;
+  flex: none !important;
+  align-self: auto !important;
   transform: none !important;
   filter: none !important;
   backdrop-filter: none !important;
