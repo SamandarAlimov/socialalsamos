@@ -308,7 +308,7 @@ export default function SettingsLandingPage() {
             variant="ghost"
             size="icon"
             className="-ml-2 h-10 w-10 shrink-0 rounded-full"
-            onClick={() => navigate(-1)}
+            onClick={() => navigate('/profile', { replace: true })}
             aria-label="Orqaga"
           >
             <ArrowLeft className="h-5 w-5" />
