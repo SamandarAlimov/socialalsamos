@@ -361,15 +361,13 @@ export function StoryHighlightComposerDialog({
               <DialogTitle className="text-xl font-semibold tracking-[-0.025em] sm:text-2xl">
                 {title}
               </DialogTitle>
-              <DialogDescription className="mt-0.5 text-xs sm:text-sm">
-                {mode === 'create'
-                  ? t('profile.highlights.createPremiumDescription', {
-                      defaultValue: 'Storylarni tanlang, nom bering va muqovani storydan yoki qurilmadan qo‘ying.',
-                    })
-                  : t('profile.highlights.editPremiumDescription', {
-                      defaultValue: 'Nomi va muqovasini storydan yoki qurilmadan istalgan payt yangilang.',
-                    })}
-              </DialogDescription>
+              {mode === 'create' ? (
+                <DialogDescription className="mt-0.5 text-xs sm:text-sm">
+                  {t('profile.highlights.createPremiumDescription', {
+                    defaultValue: 'Storylarni tanlang, nom bering va muqovani storydan yoki qurilmadan qo‘ying.',
+                  })}
+                </DialogDescription>
+              ) : null}
             </div>
           </div>
         </DialogHeader>
