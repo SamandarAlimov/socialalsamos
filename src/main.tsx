@@ -14,7 +14,6 @@ import "./styles/create-camera-shutter-safe.css";
 import "./styles/create-camera-ios-canvas.css";
 import "./styles/video-comments-preview-tap-dismiss.css";
 import "./styles/video-comments-preview-sheet-sync.css";
-import "./styles/video-comments-compact-density.css";
 import "./i18n";
 import {
   installAuthSessionResumeRecovery,
@@ -25,6 +24,7 @@ import { installNativeInteractionPolicy } from "./lib/nativeInteractionPolicy";
 import { installMobileChatKeyboardLayout } from "./lib/mobileChatKeyboardLayout";
 import { installCreateCameraZoom } from "./lib/createCameraZoom";
 import { installIosCameraCanvasPreview } from "./lib/iosCameraCanvasPreview";
+import { installCreateImmersiveStatusBar } from "./lib/createImmersiveStatusBar";
 import { installVideoCommentsPreviewTapDismiss } from "./lib/videoCommentsPreviewTapDismiss";
 import { installVideoCommentsPreviewSheetSync } from "./lib/videoCommentsPreviewSheetSync";
 
@@ -43,6 +43,10 @@ installMobileChatKeyboardLayout();
 // Create Live can move its active camera into a document-level fullscreen portal.
 // Keep pinch/wheel zoom working there as well as inside the normal Create stage.
 installCreateCameraZoom();
+
+// Make Story/Reel/Live/Post camera surfaces edge-to-edge at the system status bar
+// when the host browser supports it, with a dark system-chrome fallback elsewhere.
+installCreateImmersiveStatusBar();
 
 // iOS/WebKit must not combine hardware-backed camera video, CSS filters and
 // mix-blend overlays. Reuse the capture Canvas2D lens renderer for live filtered
