@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import { Loader2, LocateFixed, MapPin, Search, X } from 'lucide-react';
+import { Loader2, LocateFixed, MapPinned, MapPin, Search, X } from 'lucide-react';
 
 import { AlsamosMapSurface } from '@/components/map/AlsamosMapSurface';
 import { ProfilePhoneEditor } from '@/components/settings/ProfilePhoneEditor';
@@ -18,6 +18,11 @@ interface LocationPickerProps {
   className?: string;
 }
 
+// Neutral world view lets users open the map even when they have not granted
+// geolocation and have not searched for a place yet. Once a point is selected,
+// the map recenters to that exact location.
+const WORLD_MAP_CENTER = { latitude: 20, longitude: 0 };
+
 /**
  * Settings location editor ham MapPage bilan bir xil provider/engine stack'da.
  * Alohida Nominatim endpoint yoki OSM iframe yo'q.
@@ -28,6 +33,7 @@ export function LocationPicker({ value, onChange, className }: LocationPickerPro
   const [resolvingPoint, setResolvingPoint] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [coords, setCoords] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [mapOpen, setMapOpen] = useState(false);
 
   const search = usePlaceSearch(query, coords, 300);
 
@@ -36,6 +42,7 @@ export function LocationPicker({ value, onChange, className }: LocationPickerPro
       const label = place.address ? `${place.name}, ${place.address}` : place.name;
       onChange(label);
       setCoords({ latitude: place.latitude, longitude: place.longitude });
+      setMapOpen(true);
       setQuery('');
       setError(null);
     },
@@ -58,6 +65,7 @@ export function LocationPicker({ value, onChange, className }: LocationPickerPro
           longitude: position.coords.longitude,
         };
         setCoords(point);
+        setMapOpen(true);
 
         try {
           const place = await resolveMapClickPlace(point, 16);
@@ -76,7 +84,8 @@ export function LocationPicker({ value, onChange, className }: LocationPickerPro
         }
       },
       () => {
-        setError('Joylashuvga ruxsat berilmadi');
+        setError('Joylashuvga ruxsat berilmadi. Xaritadan qo‘lda tanlashingiz mumkin.');
+        setMapOpen(true);
         setLocating(false);
       },
       { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 },
@@ -126,6 +135,9 @@ export function LocationPicker({ value, onChange, className }: LocationPickerPro
         : [],
     [coords, value],
   );
+
+  const mapCenter = coords ?? WORLD_MAP_CENTER;
+  const mapZoom = coords ? 15 : 2;
 
   return (
     <div className={cn('min-w-0 w-full max-w-full overflow-hidden space-y-2.5', className)}>
@@ -202,39 +214,56 @@ export function LocationPicker({ value, onChange, className }: LocationPickerPro
         <p className="max-w-full break-words text-xs text-destructive">{error || search.error}</p>
       )}
 
-      <div className="flex min-w-0 w-full max-w-full flex-col items-start gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+      <div className="grid min-w-0 w-full max-w-full grid-cols-1 gap-2 sm:grid-cols-2">
         <Button
           type="button"
           variant="outline"
           size="sm"
-          className="max-w-full rounded-full"
+          className="w-full min-w-0 justify-center rounded-full"
           disabled={locating}
           onClick={useCurrentLocation}
         >
           {locating ? (
-            <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+            <Loader2 className="mr-1.5 h-3.5 w-3.5 shrink-0 animate-spin" />
           ) : (
-            <LocateFixed className="mr-1.5 h-3.5 w-3.5" />
+            <LocateFixed className="mr-1.5 h-3.5 w-3.5 shrink-0" />
           )}
-          Joriy joylashuvim
+          <span className="truncate">Joriy joylashuvim</span>
         </Button>
-        <span className="max-w-full break-words text-xs leading-relaxed text-muted-foreground">
-          Alsamos Xarita ma’lumotlari
-        </span>
+
+        <Button
+          type="button"
+          variant={mapOpen ? 'secondary' : 'outline'}
+          size="sm"
+          className="w-full min-w-0 justify-center rounded-full"
+          onClick={() => setMapOpen((open) => !open)}
+        >
+          <MapPinned className="mr-1.5 h-3.5 w-3.5 shrink-0" />
+          <span className="truncate">{mapOpen ? 'Xaritani yopish' : 'Xaritadan tanlash'}</span>
+        </Button>
       </div>
 
-      <ProfilePhoneEditor className="mt-4 min-w-0 w-full max-w-full" />
+      <p className="max-w-full break-words text-xs leading-relaxed text-muted-foreground">
+        Joriy joylashuv shart emas — xaritani ochib istalgan hududga suring, masshtabni o‘zgartiring va kerakli nuqtani bosing.
+      </p>
 
-      {coords && (
-        <div className="relative h-48 min-w-0 w-full max-w-full overflow-hidden rounded-2xl border border-border/60 bg-muted shadow-sm">
+      {mapOpen && (
+        <div className="relative h-72 min-w-0 w-full max-w-full overflow-hidden rounded-2xl border border-border/60 bg-muted shadow-sm sm:h-80">
           <AlsamosMapSurface
-            center={coords}
-            referenceCenter={coords}
-            zoom={15}
+            center={mapCenter}
+            referenceCenter={mapCenter}
+            zoom={mapZoom}
             markers={mapMarkers}
             pickMode
             onMapClick={handleMapPick}
           />
+
+          <div className="pointer-events-none absolute inset-x-3 top-3 flex justify-center">
+            <span className="max-w-full rounded-full border border-border/60 bg-background/90 px-3 py-1.5 text-center text-[11px] font-medium shadow-lg backdrop-blur">
+              Xaritadagi kerakli nuqtani bosing
+            </span>
+          </div>
+
           {resolvingPoint && (
             <div className="pointer-events-none absolute inset-x-3 bottom-3 flex justify-center">
               <span className="flex max-w-full items-center gap-2 rounded-full border border-border/60 bg-background/90 px-3 py-1.5 text-[11px] font-medium shadow-lg backdrop-blur">
@@ -245,6 +274,12 @@ export function LocationPicker({ value, onChange, className }: LocationPickerPro
           )}
         </div>
       )}
+
+      <span className="block max-w-full break-words text-xs leading-relaxed text-muted-foreground">
+        Alsamos Xarita ma’lumotlari
+      </span>
+
+      <ProfilePhoneEditor className="mt-4 min-w-0 w-full max-w-full" />
     </div>
   );
 }
