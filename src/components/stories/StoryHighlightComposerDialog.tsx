@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Archive, Check, ImagePlus, Loader2, Play, Sparkles, X } from 'lucide-react';
+import { Archive, Check, ImagePlus, Images, Loader2, Play, Sparkles, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 
@@ -14,7 +14,11 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { supabase } from '@/integrations/supabase/client';
-import type { StoryHighlight, StoryHighlightDraftItem } from '@/hooks/useStoryHighlights';
+import type {
+  StoryHighlight,
+  StoryHighlightDraftItem,
+  StoryHighlightItem,
+} from '@/hooks/useStoryHighlights';
 import { uploadMedia } from '@/lib/mediaUpload';
 import { cn } from '@/lib/utils';
 
@@ -23,6 +27,8 @@ type ArchivedStory = StoryHighlightDraftItem & {
   created_at: string;
   expires_at: string;
 };
+
+type CoverStory = Pick<StoryHighlightDraftItem, 'story_id' | 'media_url' | 'media_type' | 'caption'>;
 
 interface StoryHighlightComposerDialogProps {
   open: boolean;
@@ -81,6 +87,54 @@ function StoryCover({
   );
 }
 
+function CoverChoice({
+  story,
+  selected,
+  onSelect,
+}: {
+  story: CoverStory;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      aria-pressed={selected}
+      className="relative shrink-0 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+    >
+      <span
+        className={cn(
+          'block h-14 w-14 overflow-hidden rounded-full border-2 bg-muted transition sm:h-16 sm:w-16',
+          selected ? 'border-foreground ring-2 ring-foreground/15' : 'border-border/80',
+        )}
+      >
+        {story.media_type === 'video' ? (
+          <video
+            src={story.media_url}
+            muted
+            playsInline
+            preload="metadata"
+            className="h-full w-full object-cover"
+          />
+        ) : (
+          <img src={story.media_url} alt="" loading="lazy" className="h-full w-full object-cover" />
+        )}
+      </span>
+      {story.media_type === 'video' ? (
+        <span className="absolute bottom-0 left-0 flex h-5 w-5 items-center justify-center rounded-full border-2 border-background bg-black/65 text-white">
+          <Play className="h-2.5 w-2.5 fill-current" />
+        </span>
+      ) : null}
+      {selected ? (
+        <span className="absolute -bottom-0.5 -right-0.5 flex h-5 w-5 items-center justify-center rounded-full border-2 border-background bg-foreground text-background">
+          <Check className="h-3 w-3" />
+        </span>
+      ) : null}
+    </button>
+  );
+}
+
 export function StoryHighlightComposerDialog({
   open,
   onOpenChange,
@@ -95,6 +149,7 @@ export function StoryHighlightComposerDialog({
   const [name, setName] = useState('');
   const [coverFile, setCoverFile] = useState<File | null>(null);
   const [coverObjectUrl, setCoverObjectUrl] = useState<string | null>(null);
+  const [coverStoryId, setCoverStoryId] = useState<string | null>(null);
   const [removeExistingCover, setRemoveExistingCover] = useState(false);
   const [stories, setStories] = useState<ArchivedStory[]>([]);
   const [selectedStoryIds, setSelectedStoryIds] = useState<string[]>([]);
@@ -117,6 +172,7 @@ export function StoryHighlightComposerDialog({
 
     setName(mode === 'edit' ? highlight?.name ?? '' : '');
     setCoverFile(null);
+    setCoverStoryId(null);
     setRemoveExistingCover(false);
     setSelectedStoryIds([]);
 
@@ -168,14 +224,33 @@ export function StoryHighlightComposerDialog({
     [selectedStoryIds, stories],
   );
 
+  const coverStoryCandidates = useMemo<CoverStory[]>(() => {
+    if (mode === 'create') return selectedStories;
+    return (highlight?.items || []).map((item: StoryHighlightItem) => ({
+      story_id: item.story_id,
+      media_url: item.media_url,
+      media_type: item.media_type,
+      caption: item.caption,
+    }));
+  }, [highlight?.items, mode, selectedStories]);
+
+  const selectedCoverStory = useMemo(
+    () => coverStoryCandidates.find((story) => story.story_id === coverStoryId) ?? null,
+    [coverStoryCandidates, coverStoryId],
+  );
+
   const firstSelectedStory = selectedStories[0] ?? null;
   const existingCover = mode === 'edit' && !removeExistingCover ? highlight?.cover_url ?? null : null;
-  const previewUrl = coverObjectUrl || existingCover || firstSelectedStory?.media_url || null;
-  const previewMediaType = coverObjectUrl || existingCover ? 'image' : firstSelectedStory?.media_type ?? null;
+  const previewUrl =
+    coverObjectUrl || selectedCoverStory?.media_url || existingCover || firstSelectedStory?.media_url || null;
+  const previewMediaType = coverObjectUrl
+    ? 'image'
+    : selectedCoverStory?.media_type || (existingCover ? 'image' : firstSelectedStory?.media_type ?? null);
 
   const resetAndClose = () => {
     if (saving) return;
     setCoverFile(null);
+    setCoverStoryId(null);
     setSelectedStoryIds([]);
     setRemoveExistingCover(false);
     onOpenChange(false);
@@ -196,15 +271,24 @@ export function StoryHighlightComposerDialog({
     }
 
     setCoverFile(file);
+    setCoverStoryId(null);
+    setRemoveExistingCover(false);
+  };
+
+  const chooseStoryCover = (storyId: string) => {
+    setCoverStoryId(storyId);
+    setCoverFile(null);
     setRemoveExistingCover(false);
   };
 
   const toggleStory = (storyId: string) => {
-    setSelectedStoryIds((current) =>
-      current.includes(storyId)
-        ? current.filter((id) => id !== storyId)
-        : [...current, storyId],
-    );
+    setSelectedStoryIds((current) => {
+      if (current.includes(storyId)) {
+        if (coverStoryId === storyId) setCoverStoryId(null);
+        return current.filter((id) => id !== storyId);
+      }
+      return [...current, storyId];
+    });
   };
 
   const handleSave = async () => {
@@ -223,7 +307,7 @@ export function StoryHighlightComposerDialog({
         const automaticImageCover = selectedStories.find((story) => story.media_type !== 'video')?.media_url;
         const created = await createHighlight(
           trimmedName,
-          uploadedCoverUrl || automaticImageCover,
+          uploadedCoverUrl || selectedCoverStory?.media_url || automaticImageCover,
           selectedStories.map((story) => ({
             story_id: story.story_id,
             media_url: story.media_url,
@@ -235,6 +319,7 @@ export function StoryHighlightComposerDialog({
       } else if (highlight) {
         const updates: { name: string; cover_url?: string | null } = { name: trimmedName };
         if (uploadedCoverUrl) updates.cover_url = uploadedCoverUrl;
+        else if (selectedCoverStory) updates.cover_url = selectedCoverStory.media_url;
         else if (removeExistingCover) updates.cover_url = null;
 
         const updated = await updateHighlight(highlight.id, updates);
@@ -242,6 +327,7 @@ export function StoryHighlightComposerDialog({
       }
 
       setCoverFile(null);
+      setCoverStoryId(null);
       setSelectedStoryIds([]);
       setRemoveExistingCover(false);
       onOpenChange(false);
@@ -278,10 +364,10 @@ export function StoryHighlightComposerDialog({
               <DialogDescription className="mt-0.5 text-xs sm:text-sm">
                 {mode === 'create'
                   ? t('profile.highlights.createPremiumDescription', {
-                      defaultValue: 'Storylarni tanlang, nom bering va o‘zingizga mos muqova qo‘ying.',
+                      defaultValue: 'Storylarni tanlang, nom bering va muqovani storydan yoki qurilmadan qo‘ying.',
                     })
                   : t('profile.highlights.editPremiumDescription', {
-                      defaultValue: 'Nomi va muqovasini istalgan payt yangilang.',
+                      defaultValue: 'Nomi va muqovasini storydan yoki qurilmadan istalgan payt yangilang.',
                     })}
               </DialogDescription>
             </div>
@@ -293,11 +379,7 @@ export function StoryHighlightComposerDialog({
             <div className="flex flex-col items-center text-center">
               <div className="relative rounded-full bg-gradient-to-tr from-amber-300 via-fuchsia-500 to-violet-600 p-[3px] shadow-lg shadow-fuchsia-500/10">
                 <div className="h-24 w-24 overflow-hidden rounded-full border-[3px] border-background bg-muted sm:h-28 sm:w-28">
-                  <StoryCover
-                    url={previewUrl}
-                    mediaType={previewMediaType}
-                    name={name}
-                  />
+                  <StoryCover url={previewUrl} mediaType={previewMediaType} name={name} />
                 </div>
               </div>
 
@@ -318,21 +400,50 @@ export function StoryHighlightComposerDialog({
                   disabled={saving}
                 >
                   <ImagePlus className="mr-1.5 h-4 w-4" />
-                  {t('profile.highlights.chooseCover', { defaultValue: 'Muqovani tanlash' })}
+                  Qurilmadan
                 </Button>
 
-                {mode === 'edit' && highlight?.cover_url && !coverFile && !removeExistingCover ? (
+                {mode === 'edit' && highlight?.cover_url && !coverFile && !coverStoryId && !removeExistingCover ? (
                   <Button
                     type="button"
                     variant="ghost"
                     className="h-9 rounded-full px-3 text-xs text-muted-foreground"
-                    onClick={() => setRemoveExistingCover(true)}
+                    onClick={() => {
+                      setRemoveExistingCover(true);
+                      setCoverStoryId(null);
+                      setCoverFile(null);
+                    }}
                     disabled={saving}
                   >
                     <X className="mr-1.5 h-3.5 w-3.5" />
-                    {t('profile.highlights.removeCover', { defaultValue: 'Muqovani olib tashlash' })}
+                    Muqovani olib tashlash
                   </Button>
                 ) : null}
+              </div>
+
+              <div className="mt-4 w-full border-t border-border/60 pt-4 text-left">
+                <div className="mb-2 flex items-center gap-2">
+                  <Images className="h-4 w-4 text-muted-foreground" />
+                  <p className="text-xs font-semibold text-foreground">Storydan muqova tanlash</p>
+                </div>
+                {coverStoryCandidates.length > 0 ? (
+                  <div className="flex gap-2.5 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                    {coverStoryCandidates.map((story) => (
+                      <CoverChoice
+                        key={story.story_id}
+                        story={story}
+                        selected={coverStoryId === story.story_id}
+                        onSelect={() => chooseStoryCover(story.story_id)}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs leading-relaxed text-muted-foreground">
+                    {mode === 'create'
+                      ? 'Avval pastdan story tanlang — tanlangan storylardan birini muqova qilishingiz mumkin.'
+                      : 'Bu Tanlanganda hali story yo‘q. Story qo‘shilgach, shu yerdan muqova sifatida tanlash mumkin.'}
+                  </p>
+                )}
               </div>
             </div>
 
@@ -348,7 +459,7 @@ export function StoryHighlightComposerDialog({
                 value={name}
                 onChange={(event) => setName(event.target.value)}
                 placeholder={t('profile.highlights.namePlaceholderPremium', {
-                  defaultValue: 'Masalan: Sayohat, Oila, Ish...'
+                  defaultValue: 'Masalan: Sayohat, Oila, Ish...',
                 })}
                 maxLength={50}
                 className="h-12 rounded-2xl border-border/80 bg-background px-4 text-base shadow-sm"
@@ -366,7 +477,7 @@ export function StoryHighlightComposerDialog({
                   </h3>
                   <p className="mt-0.5 text-xs text-muted-foreground">
                     {t('profile.highlights.chooseStoriesHint', {
-                      defaultValue: 'Tanlangan storylar shu bo‘limda doimiy saqlanadi.',
+                      defaultValue: 'Faol va arxivdagi storylardan Tanlangan yarating.',
                     })}
                   </p>
                 </div>
@@ -382,13 +493,9 @@ export function StoryHighlightComposerDialog({
               ) : stories.length === 0 ? (
                 <div className="flex min-h-36 flex-col items-center justify-center rounded-3xl border border-dashed border-border bg-muted/20 px-6 text-center">
                   <Archive className="mb-2 h-6 w-6 text-muted-foreground" />
-                  <p className="text-sm font-medium text-foreground">
-                    {t('profile.highlights.noStories', { defaultValue: 'Hozircha story yo‘q' })}
-                  </p>
+                  <p className="text-sm font-medium text-foreground">Hozircha story yo‘q</p>
                   <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                    {t('profile.highlights.noStoriesHint', {
-                      defaultValue: 'Tanlanganni hozir yaratishingiz va storylarni keyinroq arxivdan qo‘shishingiz mumkin.',
-                    })}
+                    Story joylaganingizdan keyin shu yerda tanlash mumkin bo‘ladi.
                   </p>
                 </div>
               ) : (
@@ -396,6 +503,7 @@ export function StoryHighlightComposerDialog({
                   {stories.map((story) => {
                     const selectedIndex = selectedStoryIds.indexOf(story.id);
                     const selected = selectedIndex >= 0;
+                    const isCover = coverStoryId === story.id;
                     return (
                       <button
                         key={story.id}
@@ -425,10 +533,15 @@ export function StoryHighlightComposerDialog({
                             className="h-full w-full object-cover"
                           />
                         )}
-                        <span className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-black/10" />
+                        <span className="absolute inset-0 bg-gradient-to-t from-black/35 via-transparent to-black/10" />
                         {story.media_type === 'video' ? (
                           <span className="absolute bottom-1.5 left-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-black/55 text-white backdrop-blur-sm">
                             <Play className="h-2.5 w-2.5 fill-current" />
+                          </span>
+                        ) : null}
+                        {isCover ? (
+                          <span className="absolute bottom-1.5 right-1.5 rounded-full bg-white/95 px-1.5 py-0.5 text-[9px] font-bold text-black shadow-sm">
+                            MUQOVA
                           </span>
                         ) : null}
                         <span
@@ -453,7 +566,7 @@ export function StoryHighlightComposerDialog({
         <DialogFooter className="border-t border-border/60 bg-background/95 px-5 py-4 backdrop-blur-xl sm:px-6">
           <Button
             type="button"
-            onClick={handleSave}
+            onClick={() => void handleSave()}
             disabled={!name.trim() || saving}
             className="h-12 w-full rounded-2xl bg-foreground text-base font-semibold text-background shadow-lg shadow-black/5 hover:bg-foreground/90"
           >
