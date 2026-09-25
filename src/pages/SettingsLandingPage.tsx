@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   AlertTriangle,
+  ArrowLeft,
   BarChart3,
   Bell,
   ChevronRight,
@@ -288,7 +289,6 @@ export default function SettingsLandingPage() {
 
     return {
       title: 'Administratsiya',
-      description: 'Bu bo‘lim faqat sizning admin rolingiz va ruxsatlaringizga mos ravishda ko‘rinadi.',
       items,
     };
   }, [hasPermission, isAdmin]);
@@ -300,13 +300,18 @@ export default function SettingsLandingPage() {
   return (
     <div className="mx-auto max-w-5xl px-3 pb-24 pt-4 md:px-5 md:pb-10 md:pt-7">
       <header className="mb-6 md:mb-8">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">Sozlamalar</h1>
-          </div>
-          <Button variant="outline" onClick={() => navigate('/profile')} className="self-start sm:self-auto">
-            Profilni ko‘rish
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="-ml-2 h-10 w-10 shrink-0 rounded-full"
+            onClick={() => navigate(-1)}
+            aria-label="Orqaga"
+          >
+            <ArrowLeft className="h-5 w-5" />
           </Button>
+          <h1 className="text-2xl font-bold tracking-tight">Sozlamalar</h1>
         </div>
       </header>
 
