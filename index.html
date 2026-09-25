@@ -2,7 +2,7 @@
 <html lang="uz">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, interactive-widget=resizes-content" />
     <title>Alsamos — Superapp</title>
     <meta name="description" content="Alsamos — xabarlar, hamjamiyatlar, videolar, marketplace, xarita, to‘lovlar, AI va mini ilovalarni bir joyda birlashtirgan superapp." />
     <meta name="author" content="Alsamos" />
@@ -31,7 +31,6 @@
       (() => {
         const LIGHT_HEADER = '#ffffff';
         const DARK_HEADER = '#0f1115';
-        const IMMERSIVE_CAMERA_HEADER = '#000000';
         const themeMeta = document.querySelector('meta[name="theme-color"]');
         const darkMedia = window.matchMedia('(prefers-color-scheme: dark)');
 
@@ -47,11 +46,6 @@
           if (!themeMeta) return;
 
           const root = document.documentElement;
-          if (root.hasAttribute('data-alsamos-immersive-status')) {
-            themeMeta.setAttribute('content', IMMERSIVE_CAMERA_HEADER);
-            return;
-          }
-
           const storedTheme = getStoredTheme();
           const hasResolvedClass = root.classList.contains('light') || root.classList.contains('dark');
           const isDark = hasResolvedClass
@@ -64,7 +58,7 @@
         syncThemeColor();
         new MutationObserver(syncThemeColor).observe(document.documentElement, {
           attributes: true,
-          attributeFilter: ['class', 'data-alsamos-immersive-status'],
+          attributeFilter: ['class'],
         });
         darkMedia.addEventListener?.('change', syncThemeColor);
       })();
