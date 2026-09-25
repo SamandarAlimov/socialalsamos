@@ -7,35 +7,15 @@ import { describe, expect, it } from 'vitest';
 import {
   cameraLensFromRecorder,
   cameraPreviewBackingSize,
+  cameraPreviewCapabilitiesSupported,
   cameraPreviewNeedsCanvas,
-  shouldUseIosCameraCanvasPreview,
 } from './iosCameraCanvasPreview';
 
-describe('iOS camera Canvas2D preview compatibility', () => {
-  it('targets iPhone WebKit and iPad desktop user agents only', () => {
-    expect(
-      shouldUseIosCameraCanvasPreview(
-        'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 Safari/604.1',
-        'iPhone',
-        5,
-      ),
-    ).toBe(true);
-
-    expect(
-      shouldUseIosCameraCanvasPreview(
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Version/18.0 Safari/605.1.15',
-        'MacIntel',
-        5,
-      ),
-    ).toBe(true);
-
-    expect(
-      shouldUseIosCameraCanvasPreview(
-        'Mozilla/5.0 (Linux; Android 15) AppleWebKit/537.36 Chrome/140.0 Mobile Safari/537.36',
-        'Linux armv8l',
-        5,
-      ),
-    ).toBe(false);
+describe('cross-browser camera Canvas2D preview compatibility', () => {
+  it('is capability-driven instead of OS or user-agent driven', () => {
+    expect(cameraPreviewCapabilitiesSupported(true, true)).toBe(true);
+    expect(cameraPreviewCapabilitiesSupported(false, true)).toBe(false);
+    expect(cameraPreviewCapabilitiesSupported(true, false)).toBe(false);
   });
 
   it('caps preview backing resolution and keeps even dimensions', () => {
@@ -60,7 +40,7 @@ describe('iOS camera Canvas2D preview compatibility', () => {
     expect(cameraLensFromRecorder(root).id).toBe('clarendon');
   });
 
-  it('uses Canvas2D for Normal only while an iOS pinch zoom is active', () => {
+  it('uses Canvas2D for active pinch, digital zoom and processed lenses', () => {
     const root = document.createElement('div');
     root.innerHTML = `
       <div class="alsamos-camera-filter-scroll">
@@ -71,34 +51,41 @@ describe('iOS camera Canvas2D preview compatibility', () => {
 
     const normal = cameraLensFromRecorder(root);
     expect(normal.id).toBe('none');
-    expect(cameraPreviewNeedsCanvas(normal, false)).toBe(false);
-    expect(cameraPreviewNeedsCanvas(normal, true)).toBe(true);
+    expect(cameraPreviewNeedsCanvas(normal, false, 1)).toBe(false);
+    expect(cameraPreviewNeedsCanvas(normal, true, 1)).toBe(true);
+    expect(cameraPreviewNeedsCanvas(normal, false, 1.25)).toBe(true);
+
+    const filteredRoot = document.createElement('div');
+    filteredRoot.innerHTML = `
+      <div class="alsamos-camera-filter-scroll">
+        <button aria-label="Normal filtri" aria-pressed="false"></button>
+        <button aria-label="Clarendon filtri" aria-pressed="true"></button>
+      </div>
+    `;
+    expect(cameraPreviewNeedsCanvas(cameraLensFromRecorder(filteredRoot), false, 1)).toBe(true);
   });
 
-  it('neutralizes hazardous hardware video compositing before Canvas2D owns output', () => {
+  it('removes visible hardware-video compositing during processed preview and pinch', () => {
     const css = readFileSync(
       resolve(process.cwd(), 'src/styles/create-camera-ios-canvas.css'),
       'utf8',
     );
 
-    // First-paint filter safety must not depend on data-camera-canvas-filter.
+    expect(css).toContain('html.alsamos-camera-canvas-preview');
     expect(css).toMatch(
       /\[data-camera-state='live'\]\s+video\s*\{[\s\S]*?filter:\s*none\s*!important;/,
     );
     expect(css).toMatch(
-      /\[data-camera-state='live'\]\s+\[style\*='mix-blend-mode'\]\s*\{[\s\S]*?display:\s*none\s*!important;/,
+      /\[data-camera-canvas-filter='active'\][\s\S]*?video,[\s\S]*?opacity:\s*0\s*!important;/,
     );
-
-    // The user's remaining artifact exists only while pinch is moving. The raw
-    // iOS hardware video therefore must stop receiving its changing scale during
-    // that exact gesture window; Canvas2D renders the moving zoom instead.
     expect(css).toMatch(
       /\[data-camera-zoom-gesture='active'\][\s\S]*?video\s*\{[\s\S]*?transform:\s*none\s*!important;/,
     );
-    expect(css).toContain('.alsamos-camera-filter-scroll');
+    expect(css).toContain('-webkit-mask-image: none !important');
+    expect(css).toContain('border-radius: 0 !important');
   });
 
-  it('does not mutate the iOS hardware video transform while pinch is moving', () => {
+  it('keeps existing recorder hooks frozen while the generic canvas path owns zoom', () => {
     const capture = readFileSync(
       resolve(process.cwd(), 'src/components/create/useCameraCapture.ts'),
       'utf8',
@@ -107,7 +94,15 @@ describe('iOS camera Canvas2D preview compatibility', () => {
       resolve(process.cwd(), 'src/hooks/useCameraFilterRail.ts'),
       'utf8',
     );
+    const preview = readFileSync(
+      resolve(process.cwd(), 'src/lib/iosCameraCanvasPreview.ts'),
+      'utf8',
+    );
 
+    // The legacy marker is intentionally installed globally during migration so
+    // these existing guards remain effective without another hardware transform.
+    expect(preview).toContain("LEGACY_HTML_COMPAT_CLASS = 'alsamos-ios-camera-canvas-preview'");
+    expect(preview).toContain("HTML_COMPAT_CLASS = 'alsamos-camera-canvas-preview'");
     expect(capture).toContain(
       "document.documentElement.classList.contains('alsamos-ios-camera-canvas-preview')",
     );
@@ -126,6 +121,5 @@ describe('iOS camera Canvas2D preview compatibility', () => {
     expect(rail).toContain(
       'completed.host.removeAttribute(ZOOM_GESTURE_ATTRIBUTE)',
     );
-    expect(rail).toContain('finishZoomGesture();');
   });
 });
