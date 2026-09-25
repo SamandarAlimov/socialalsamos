@@ -80,6 +80,102 @@ export const PROFILE_COVER_PRESETS = [
     backgroundImage:
       'radial-gradient(ellipse at 50% -10%, rgba(255,255,255,1), rgba(255,255,255,.22) 42%, transparent 68%), linear-gradient(100deg, #b9bdc4 0%, #eef0f2 46%, #b2b6bd 100%)',
   },
+  {
+    id: 'aurora-prism',
+    name: 'Aurora Prism',
+    tone: 'dark',
+    backgroundColor: '#111a3a',
+    backgroundImage:
+      'radial-gradient(circle at 14% 22%, rgba(92,255,214,.92) 0 10%, rgba(92,255,214,.28) 28%, transparent 48%), radial-gradient(circle at 78% 18%, rgba(133,92,255,.88) 0 12%, rgba(133,92,255,.30) 30%, transparent 50%), radial-gradient(circle at 68% 86%, rgba(255,79,190,.75) 0 10%, transparent 38%), linear-gradient(135deg, #071426 0%, #163a7a 45%, #3b145f 100%)',
+  },
+  {
+    id: 'sunset-coral',
+    name: 'Sunset Coral',
+    tone: 'dark',
+    backgroundColor: '#b43352',
+    backgroundImage:
+      'radial-gradient(circle at 18% 24%, rgba(255,239,183,.95) 0 10%, rgba(255,191,105,.45) 28%, transparent 48%), radial-gradient(circle at 82% 78%, rgba(219,39,119,.68), transparent 36%), linear-gradient(125deg, #ffb36b 0%, #ff6f61 36%, #d83a76 68%, #6e2a78 100%)',
+  },
+  {
+    id: 'electric-violet',
+    name: 'Electric Violet',
+    tone: 'dark',
+    backgroundColor: '#3d22a8',
+    backgroundImage:
+      'linear-gradient(118deg, transparent 0 21%, rgba(117,251,255,.24) 21.5% 22.5%, transparent 23% 54%, rgba(255,255,255,.14) 54.5% 55.5%, transparent 56%), radial-gradient(circle at 82% 20%, rgba(61,240,255,.70), transparent 30%), linear-gradient(135deg, #27105f 0%, #5d2bdb 48%, #1464d2 100%)',
+  },
+  {
+    id: 'emerald-luxe',
+    name: 'Emerald Luxe',
+    tone: 'dark',
+    backgroundColor: '#053d39',
+    backgroundImage:
+      'radial-gradient(ellipse at 16% 115%, rgba(99,255,207,.50), transparent 42%), radial-gradient(circle at 84% 12%, rgba(255,213,107,.48), transparent 28%), linear-gradient(145deg, #022c2a 0%, #087f6b 48%, #0b5f5a 72%, #8a6a1f 130%)',
+  },
+  {
+    id: 'royal-amethyst',
+    name: 'Royal Amethyst',
+    tone: 'dark',
+    backgroundColor: '#3b174f',
+    backgroundImage:
+      'radial-gradient(circle at 25% 18%, rgba(255,160,215,.72), transparent 31%), radial-gradient(circle at 84% 76%, rgba(123,97,255,.60), transparent 38%), linear-gradient(136deg, #2f123f 0%, #6b2a88 48%, #a53873 100%)',
+  },
+  {
+    id: 'ocean-glass',
+    name: 'Ocean Glass',
+    tone: 'dark',
+    backgroundColor: '#075985',
+    backgroundImage:
+      'radial-gradient(ellipse at 50% -14%, rgba(218,255,255,.86), rgba(218,255,255,.20) 36%, transparent 61%), radial-gradient(circle at 12% 82%, rgba(45,212,191,.52), transparent 34%), linear-gradient(120deg, #0e7490 0%, #0369a1 46%, #164e63 100%)',
+  },
+  {
+    id: 'solar-flare',
+    name: 'Solar Flare',
+    tone: 'dark',
+    backgroundColor: '#9a3412',
+    backgroundImage:
+      'radial-gradient(circle at 24% 28%, rgba(255,249,196,.98) 0 8%, rgba(255,203,89,.58) 22%, transparent 42%), radial-gradient(circle at 80% 70%, rgba(220,38,38,.62), transparent 35%), linear-gradient(135deg, #f59e0b 0%, #f97316 38%, #dc2626 70%, #7f1d1d 100%)',
+  },
+  {
+    id: 'rose-quartz',
+    name: 'Rose Quartz',
+    tone: 'light',
+    backgroundColor: '#f5c7d6',
+    backgroundImage:
+      'radial-gradient(circle at 18% 18%, rgba(255,255,255,.92) 0 12%, rgba(255,255,255,.26) 32%, transparent 50%), radial-gradient(circle at 82% 72%, rgba(168,85,247,.28), transparent 34%), linear-gradient(130deg, #ffd9e8 0%, #f3b6cf 44%, #c4b5fd 100%)',
+  },
+  {
+    id: 'neon-night',
+    name: 'Neon Night',
+    tone: 'dark',
+    backgroundColor: '#09102d',
+    backgroundImage:
+      'radial-gradient(circle at 16% 78%, rgba(34,211,238,.72), transparent 28%), radial-gradient(circle at 82% 20%, rgba(236,72,153,.72), transparent 30%), linear-gradient(105deg, transparent 0 36%, rgba(255,255,255,.10) 36.5% 37.2%, transparent 37.8%), linear-gradient(135deg, #050816 0%, #111b4d 46%, #350b4f 100%)',
+  },
+  {
+    id: 'sapphire-veil',
+    name: 'Sapphire Veil',
+    tone: 'dark',
+    backgroundColor: '#103a8a',
+    backgroundImage:
+      'radial-gradient(ellipse at 78% -12%, rgba(191,219,254,.72), transparent 43%), radial-gradient(circle at 20% 76%, rgba(99,102,241,.52), transparent 35%), linear-gradient(125deg, #082f6f 0%, #1558c7 48%, #312e81 100%)',
+  },
+  {
+    id: 'citrus-mint',
+    name: 'Citrus Mint',
+    tone: 'light',
+    backgroundColor: '#b8ed9b',
+    backgroundImage:
+      'radial-gradient(circle at 22% 24%, rgba(254,249,195,.92) 0 11%, rgba(254,249,195,.28) 30%, transparent 49%), radial-gradient(circle at 80% 78%, rgba(45,212,191,.32), transparent 34%), linear-gradient(128deg, #e7f77f 0%, #9be7a1 45%, #67d9c2 100%)',
+  },
+  {
+    id: 'crimson-velvet',
+    name: 'Crimson Velvet',
+    tone: 'dark',
+    backgroundColor: '#6b1028',
+    backgroundImage:
+      'radial-gradient(ellipse at 12% 112%, rgba(255,189,89,.34), transparent 40%), radial-gradient(circle at 86% 16%, rgba(251,113,133,.46), transparent 30%), linear-gradient(145deg, #3f0717 0%, #8b1538 48%, #5b1538 76%, #aa6b22 135%)',
+  },
 ] as const;
 
 export type ProfileCoverPresetId = (typeof PROFILE_COVER_PRESETS)[number]['id'];
