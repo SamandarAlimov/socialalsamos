@@ -98,10 +98,6 @@ export default function StoryArchivePage() {
         </div>
       </header>
 
-      <div className="mb-5 rounded-[24px] border border-border/70 bg-muted/25 px-4 py-3 text-sm leading-relaxed text-muted-foreground sm:mb-6 sm:px-5">
-        Joylagan storylaringiz shu yerda tarix sifatida ko‘rinadi. Istalgan storyni profil Tanlanganlariga qo‘shishingiz mumkin.
-      </div>
-
       {isLoading ? (
         <div className="flex min-h-[42vh] items-center justify-center">
           <Loader2 className="h-7 w-7 animate-spin text-muted-foreground" />
