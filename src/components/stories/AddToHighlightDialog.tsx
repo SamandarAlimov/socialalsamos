@@ -11,7 +11,9 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { useAuth } from '@/contexts/AuthContext';
 import { useStoryHighlights, type StoryHighlight } from '@/hooks/useStoryHighlights';
+import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 
 interface AddToHighlightDialogProps {
@@ -63,16 +65,46 @@ function HighlightThumb({ highlight }: { highlight: StoryHighlight }) {
 }
 
 export function AddToHighlightDialog({ open, onOpenChange, story }: AddToHighlightDialogProps) {
+  const { user } = useAuth();
   const { highlights, createHighlight, addStoryToHighlight } = useStoryHighlights();
   const [selectedHighlightId, setSelectedHighlightId] = useState<string>('');
   const [newHighlightName, setNewHighlightName] = useState('');
   const [isAdding, setIsAdding] = useState(false);
+  const [canQuickAdd, setCanQuickAdd] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     setSelectedHighlightId('');
     setNewHighlightName('');
   }, [open, story?.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setCanQuickAdd(false);
+
+    if (!story || !user) return () => {
+      cancelled = true;
+    };
+
+    void supabase
+      .from('stories')
+      .select('user_id')
+      .eq('id', story.id)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        if (error) {
+          console.error('Error checking story ownership for highlight action:', error);
+          setCanQuickAdd(false);
+          return;
+        }
+        setCanQuickAdd(data?.user_id === user.id);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [story?.id, user?.id]);
 
   const selectedHighlight = useMemo(
     () => highlights.find((highlight) => highlight.id === selectedHighlightId) ?? null,
@@ -129,7 +161,7 @@ export function AddToHighlightDialog({ open, onOpenChange, story }: AddToHighlig
 
   return (
     <>
-      {story && !open ? (
+      {story && !open && canQuickAdd ? (
         <button
           type="button"
           data-story-interactive="true"
