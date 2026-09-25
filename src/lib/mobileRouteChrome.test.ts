@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { getMobileChromeMode } from './mobileRouteChrome';
@@ -14,6 +16,23 @@ describe('mobile route chrome', () => {
     expect(getMobileChromeMode('/settings/profile')).toBe('immersive');
     expect(getMobileChromeMode('/settings/privacy')).toBe('immersive');
     expect(getMobileChromeMode('/settings/devices')).toBe('immersive');
+  });
+
+  it('contains profile location and phone editors inside narrow settings cards', () => {
+    const locationPicker = readFileSync(
+      resolve(process.cwd(), 'src/components/settings/LocationPicker.tsx'),
+      'utf8',
+    );
+    const phoneEditor = readFileSync(
+      resolve(process.cwd(), 'src/components/settings/ProfilePhoneEditor.tsx'),
+      'utf8',
+    );
+
+    expect(locationPicker).toContain("'min-w-0 w-full max-w-full overflow-hidden space-y-2.5'");
+    expect(locationPicker).toContain('flex min-w-0 w-full max-w-full flex-col items-start gap-2');
+    expect(locationPicker).toContain('min-w-0 flex-1 truncate text-sm font-medium');
+    expect(phoneEditor).toContain("'min-w-0 w-full max-w-full overflow-hidden border-t");
+    expect(phoneEditor).toContain('min-w-0 w-full max-w-full flex-1');
   });
 
   it('lets the complete AI workspace own its chrome', () => {

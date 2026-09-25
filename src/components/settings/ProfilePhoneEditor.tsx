@@ -99,11 +99,12 @@ export function ProfilePhoneEditor({ className }: ProfilePhoneEditorProps) {
   };
 
   return (
-    <div className={cn('border-t border-border/70 pt-4', className)}>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-        <div className="min-w-0 flex-1">
-          <Label htmlFor="profile_phone" className="flex items-center gap-2">
-            <Phone className="h-3.5 w-3.5" /> Telefon raqami
+    <div className={cn('min-w-0 w-full max-w-full overflow-hidden border-t border-border/70 pt-4', className)}>
+      <div className="flex min-w-0 w-full max-w-full flex-col gap-3 sm:flex-row sm:items-end">
+        <div className="min-w-0 w-full max-w-full flex-1">
+          <Label htmlFor="profile_phone" className="flex min-w-0 items-center gap-2">
+            <Phone className="h-3.5 w-3.5 shrink-0" />
+            <span className="min-w-0 truncate">Telefon raqami</span>
           </Label>
           <Input
             id="profile_phone"
@@ -113,10 +114,10 @@ export function ProfilePhoneEditor({ className }: ProfilePhoneEditorProps) {
             value={phone}
             disabled={loading || saving}
             onChange={(event) => setPhone(event.target.value)}
-            className="mt-1.5"
+            className="mt-1.5 min-w-0 w-full max-w-full"
             placeholder="+998 90 123 45 67"
           />
-          <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
+          <p className="mt-1.5 max-w-full break-words text-[11px] leading-relaxed text-muted-foreground">
             Xalqaro formatdan foydalaning. Raqam o‘zgartirilsa, avvalgi tasdiqlash holati bekor qilinadi.
           </p>
         </div>
@@ -125,16 +126,16 @@ export function ProfilePhoneEditor({ className }: ProfilePhoneEditorProps) {
           variant={dirty ? 'default' : 'outline'}
           disabled={loading || saving || !dirty}
           onClick={savePhone}
-          className="shrink-0"
+          className="max-w-full shrink-0 self-start sm:self-auto"
         >
           {loading || saving ? (
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            <Loader2 className="mr-2 h-4 w-4 shrink-0 animate-spin" />
           ) : dirty ? (
-            <Save className="mr-2 h-4 w-4" />
+            <Save className="mr-2 h-4 w-4 shrink-0" />
           ) : (
-            <CheckCircle2 className="mr-2 h-4 w-4" />
+            <CheckCircle2 className="mr-2 h-4 w-4 shrink-0" />
           )}
-          {saving ? 'Saqlanmoqda…' : dirty ? 'Telefonni saqlash' : 'Saqlandi'}
+          <span className="truncate">{saving ? 'Saqlanmoqda…' : dirty ? 'Telefonni saqlash' : 'Saqlandi'}</span>
         </Button>
       </div>
     </div>
