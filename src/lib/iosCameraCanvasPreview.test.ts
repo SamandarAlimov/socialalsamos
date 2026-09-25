@@ -107,6 +107,40 @@ describe('cross-browser camera Canvas2D preview compatibility', () => {
     );
   });
 
+  it('keeps the zoom HUD intrinsically sized despite mobile recorder child rules', () => {
+    const safetyCss = readFileSync(
+      resolve(process.cwd(), 'src/styles/create-camera-ios-canvas.css'),
+      'utf8',
+    );
+    const routeCss = readFileSync(
+      resolve(process.cwd(), 'src/styles/create-instagram-fixes.css'),
+      'utf8',
+    );
+    const mobileCss = readFileSync(
+      resolve(process.cwd(), 'src/styles/create-camera-mobile-polish.css'),
+      'utf8',
+    );
+
+    // Legacy mobile layout intentionally stretches direct recorder child divs.
+    // The dynamically appended zoom HUD is also such a child, so its safety
+    // selector must explicitly reclaim intrinsic height on every device class.
+    expect(routeCss).toContain("[data-camera-recorder-root='true'] > div");
+    expect(mobileCss).toContain("[data-camera-recorder-root='true'] > div");
+    expect(safetyCss).toMatch(
+      /\[data-camera-zoom-badge='true'\][\s\S]*?top:\s*auto\s*!important;/,
+    );
+    expect(safetyCss).toMatch(
+      /\[data-camera-zoom-badge='true'\][\s\S]*?height:\s*auto\s*!important;/,
+    );
+    expect(safetyCss).toMatch(
+      /\[data-camera-zoom-badge='true'\][\s\S]*?min-height:\s*0\s*!important;/,
+    );
+    expect(safetyCss).toMatch(
+      /\[data-camera-zoom-badge='true'\][\s\S]*?max-height:\s*none\s*!important;/,
+    );
+    expect(safetyCss).toContain('white-space: nowrap !important');
+  });
+
   it('removes remaining camera-chrome backdrop surfaces while the camera compatibility path is active', () => {
     const css = readFileSync(
       resolve(process.cwd(), 'src/styles/create-camera-ios-canvas.css'),
