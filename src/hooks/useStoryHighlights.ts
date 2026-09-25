@@ -289,6 +289,12 @@ export function useStoryHighlights(userId?: string) {
     if (!user) return false;
 
     try {
+      const highlight = highlights.find((item) => item.id === highlightId);
+      const removedItem = highlight?.items?.find((item) => item.story_id === storyId);
+      const coverWasRemoved = Boolean(
+        highlight?.cover_url && removedItem?.media_url === highlight.cover_url,
+      );
+
       const { error } = await supabase
         .from('story_highlight_items')
         .delete()
@@ -297,15 +303,31 @@ export function useStoryHighlights(userId?: string) {
 
       if (error) throw error;
 
-      toast.success('Removed from highlight');
+      if (coverWasRemoved && highlight) {
+        const remainingItems = (highlight.items || []).filter((item) => item.story_id !== storyId);
+        const fallbackCover =
+          remainingItems.find((item) => item.media_type !== 'video')?.media_url ||
+          remainingItems[0]?.media_url ||
+          null;
+
+        const { error: coverError } = await supabase
+          .from('story_highlights')
+          .update({ cover_url: fallbackCover })
+          .eq('id', highlightId)
+          .eq('user_id', user.id);
+
+        if (coverError) throw coverError;
+      }
+
+      toast.success('Tanlangandan olib tashlandi');
       await fetchHighlights();
       return true;
     } catch (error) {
       console.error('Error removing story from highlight:', error);
-      toast.error('Failed to remove from highlight');
+      toast.error('Tanlangandan olib tashlab bo‘lmadi');
       return false;
     }
-  }, [user, fetchHighlights]);
+  }, [user, highlights, fetchHighlights]);
 
   const reorderHighlights = useCallback(async (highlightIds: string[]) => {
     if (!user) return false;
