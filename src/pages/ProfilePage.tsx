@@ -284,7 +284,7 @@ export default function ProfilePage() {
               variant="outline"
               size="sm"
               className="h-9 rounded-xl border-border bg-muted/60 px-4 text-foreground shadow-none hover:bg-muted md:h-10"
-              onClick={() => navigate('/settings')}
+              onClick={() => navigate('/settings/profile')}
             >
               <Edit3 className="mr-1.5 h-4 w-4" />
               <span className="text-sm">{t('profile.editProfile')}</span>
