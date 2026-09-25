@@ -10,6 +10,17 @@ def replace_once(path: str, old: str, new: str) -> None:
     file_path.write_text(text.replace(old, new, 1), encoding="utf-8")
 
 
+def replace_exact(path: str, old: str, new: str, expected: int) -> None:
+    file_path = Path(path)
+    text = file_path.read_text(encoding="utf-8")
+    count = text.count(old)
+    if count != expected:
+        raise RuntimeError(
+            f"{path}: expected {expected} matches, found {count}: {old[:120]!r}"
+        )
+    file_path.write_text(text.replace(old, new), encoding="utf-8")
+
+
 capture_path = "src/components/create/useCameraCapture.ts"
 rail_path = "src/hooks/useCameraFilterRail.ts"
 test_path = "src/lib/iosCameraCanvasPreview.test.ts"
@@ -40,10 +51,7 @@ replace_once(
 
 assignment = """      activeZoom = {\n        ...resolved,\n        startDistance: distance,\n        startZoom: getCurrentZoom(resolved.host),\n      };\n      event.preventDefault();\n"""
 assignment_with_marker = """      activeZoom = {\n        ...resolved,\n        startDistance: distance,\n        startZoom: getCurrentZoom(resolved.host),\n      };\n      if (resolved.kind === 'recorder') {\n        resolved.host.setAttribute(ZOOM_GESTURE_ATTRIBUTE, 'active');\n      }\n      event.preventDefault();\n"""
-
-# Touch and Pointer start blocks are intentionally identical; patch both.
-for _ in range(2):
-    replace_once(rail_path, assignment, assignment_with_marker)
+replace_exact(rail_path, assignment, assignment_with_marker, 2)
 
 replace_once(
     rail_path,
