@@ -53,6 +53,7 @@ describe('premium story highlights', () => {
 
   it('plays highlights with highlight-specific edit and remove actions', () => {
     const playback = source('components/stories/StoryHighlightPlayback.tsx');
+    const hook = source('hooks/useStoryHighlights.ts');
 
     expect(playback).toContain('Tanlangandan olib tashlash');
     expect(playback).toContain('Tanlanganni tahrirlash');
@@ -60,6 +61,9 @@ describe('premium story highlights', () => {
     expect(playback).toContain('setItems(nextItems)');
     expect(playback).toContain('onTimeUpdate');
     expect(playback).toContain('IMAGE_DURATION');
+    expect(hook).toContain('const coverWasRemoved = Boolean(');
+    expect(hook).toContain('const fallbackCover =');
+    expect(hook).toContain('.update({ cover_url: fallbackCover })');
   });
 
   it('shares highlights through action sheet, copy link and QR code', () => {
