@@ -131,6 +131,18 @@ export function useCameraCapture(options: UseCameraCaptureOptions) {
       if (typeof nextZoom !== 'number') return;
       const safeZoom = clampCameraZoom(nextZoom);
       zoomRef.current = safeZoom;
+
+      // On iOS/WebKit, mutating the hardware-backed <video> transform on every
+      // pinch frame can corrupt the compositor into the giant rounded/capsule
+      // surface visible only while fingers are moving. The iOS Canvas2D preview
+      // owns the moving gesture, so keep only zoomRef current during that window.
+      // useCameraFilterRail dispatches one final zoom event after the gesture
+      // marker is removed, which commits the stable transform exactly once.
+      const recorderRoot = videoRef.current?.closest<HTMLElement>(
+        '[data-camera-recorder-root="true"]',
+      );
+      if (recorderRoot?.dataset.cameraZoomGesture === 'active') return;
+
       setZoom(safeZoom);
     };
 
@@ -344,6 +356,14 @@ export function useCameraCapture(options: UseCameraCaptureOptions) {
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
+
+    // The Canvas2D compatibility path deliberately freezes the hardware video
+    // while an iOS pinch is active. Do not touch its compositor properties until
+    // useCameraFilterRail commits the final stable zoom after finger release.
+    const recorderRoot = video.closest<HTMLElement>(
+      '[data-camera-recorder-root="true"]',
+    );
+    if (recorderRoot?.dataset.cameraZoomGesture === 'active') return;
 
     const scaleX = facingMode === 'user' ? -zoom : zoom;
     video.style.setProperty('transform', `scale(${scaleX}, ${zoom})`);
