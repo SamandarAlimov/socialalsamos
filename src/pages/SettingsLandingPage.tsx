@@ -169,6 +169,7 @@ const PLATFORM_TOOLS: ControlCenterGroup = {
     {
       id: 'ads',
       label: 'Reklama markazi',
+      description: 'Kampaniyalar, targeting va reklama natijalari',
       path: '/ads',
       icon: Megaphone,
       tint: 'text-orange-600 bg-orange-500/10',
@@ -176,6 +177,7 @@ const PLATFORM_TOOLS: ControlCenterGroup = {
     {
       id: 'experiments',
       label: 'A/B testlar',
+      description: 'Kreativ va kampaniya variantlarini solishtirish',
       path: '/ads/experiments',
       icon: FlaskConical,
       tint: 'text-violet-600 bg-violet-500/10',
@@ -183,6 +185,7 @@ const PLATFORM_TOOLS: ControlCenterGroup = {
     {
       id: 'feedback',
       label: 'Feedback va yordam',
+      description: 'Muammo, taklif va support murojaatlarini boshqarish',
       path: '/feedback',
       icon: MessageSquareText,
       tint: 'text-sky-600 bg-sky-500/10',
@@ -247,6 +250,7 @@ export default function SettingsLandingPage() {
       {
         id: 'admin',
         label: 'Admin panel',
+        description: 'Platforma boshqaruvi va moderatsiya markazi',
         path: '/admin',
         icon: Shield,
         tint: 'text-slate-600 bg-slate-500/10 dark:text-slate-300',
@@ -257,6 +261,7 @@ export default function SettingsLandingPage() {
       items.push({
         id: 'admin-feedback',
         label: 'Feedback & Support',
+        description: 'Foydalanuvchi murojaatlarini ko‘rish va javob berish',
         path: '/admin/feedback',
         icon: MessageSquareText,
         tint: 'text-blue-600 bg-blue-500/10',
@@ -268,6 +273,7 @@ export default function SettingsLandingPage() {
         {
           id: 'ads-review',
           label: 'Ads Review',
+          description: 'Reklama materiallarini tekshirish va moderatsiya qilish',
           path: '/admin/ads-review',
           icon: Megaphone,
           tint: 'text-orange-600 bg-orange-500/10',
@@ -275,6 +281,7 @@ export default function SettingsLandingPage() {
         {
           id: 'ads-integrity',
           label: 'Ads Integrity',
+          description: 'Reklama xavfsizligi, risk va integrity nazorati',
           path: '/admin/ads-integrity',
           icon: ShieldAlert,
           tint: 'text-red-600 bg-red-500/10',
