@@ -123,12 +123,17 @@ describe('profile post layouts', () => {
     const userProfileHook = source('hooks/useUserProfile.ts');
 
     expect(coverPresets).toContain("DEFAULT_PROFILE_COVER_PRESET: ProfileCoverPresetId = 'graphite-halo'");
-    expect(coverPresets.match(/id: '/g)?.length).toBe(22);
+    expect(coverPresets.match(/id: '/g)?.length).toBe(34);
     expect(coverPresets).toContain("id: 'aurora-prism'");
     expect(coverPresets).toContain("id: 'sunset-coral'");
     expect(coverPresets).toContain("id: 'emerald-luxe'");
     expect(coverPresets).toContain("id: 'neon-night'");
     expect(coverPresets).toContain("id: 'crimson-velvet'");
+    expect(coverPresets).toContain("id: 'blush-silk'");
+    expect(coverPresets).toContain("id: 'lavender-moon'");
+    expect(coverPresets).toContain("id: 'champagne-bloom'");
+    expect(coverPresets).toContain("id: 'pink-opal'");
+    expect(coverPresets).toContain("id: 'starlight-mauve'");
     expect(sharedHeader).toContain('<ProfileCoverSurface coverUrl={profile.cover_url} presetId={profile.cover_preset} />');
     expect(coverSurface).toContain('resolveProfileCoverPreset(presetId)');
     expect(coverPicker).toContain('PROFILE_COVER_PRESETS.map');

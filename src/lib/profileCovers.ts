@@ -176,6 +176,110 @@ export const PROFILE_COVER_PRESETS = [
     backgroundImage:
       'radial-gradient(ellipse at 12% 112%, rgba(255,189,89,.34), transparent 40%), radial-gradient(circle at 86% 16%, rgba(251,113,133,.46), transparent 30%), linear-gradient(145deg, #3f0717 0%, #8b1538 48%, #5b1538 76%, #aa6b22 135%)',
   },
+  {
+    id: 'blush-silk',
+    name: 'Blush Silk',
+    tone: 'light',
+    backgroundColor: '#f8d7e3',
+    backgroundImage:
+      'radial-gradient(ellipse at 14% 16%, rgba(255,255,255,.98) 0 10%, rgba(255,255,255,.34) 28%, transparent 48%), radial-gradient(circle at 82% 76%, rgba(216,112,147,.24), transparent 36%), linear-gradient(135deg, #fff1f6 0%, #f8cedd 42%, #ddb4c8 72%, #f6e0e8 100%)',
+  },
+  {
+    id: 'lavender-moon',
+    name: 'Lavender Moon',
+    tone: 'light',
+    backgroundColor: '#d9cdf8',
+    backgroundImage:
+      'radial-gradient(circle at 78% 24%, rgba(255,255,255,.88) 0 9%, rgba(255,255,255,.18) 24%, transparent 42%), radial-gradient(circle at 18% 82%, rgba(139,92,246,.28), transparent 34%), linear-gradient(132deg, #f4edff 0%, #d9c8ff 42%, #b7c6ff 72%, #e6d5f7 100%)',
+  },
+  {
+    id: 'champagne-bloom',
+    name: 'Champagne Bloom',
+    tone: 'light',
+    backgroundColor: '#ead8c6',
+    backgroundImage:
+      'radial-gradient(circle at 20% 24%, rgba(255,248,231,.98) 0 11%, rgba(255,233,190,.30) 30%, transparent 48%), radial-gradient(circle at 82% 72%, rgba(190,123,118,.24), transparent 34%), linear-gradient(135deg, #fff4df 0%, #ebd0b5 38%, #d9b2ad 68%, #f3ded2 100%)',
+  },
+  {
+    id: 'cherry-gloss',
+    name: 'Cherry Gloss',
+    tone: 'dark',
+    backgroundColor: '#8c163d',
+    backgroundImage:
+      'radial-gradient(circle at 20% 18%, rgba(255,194,215,.62), transparent 28%), radial-gradient(circle at 86% 72%, rgba(255,100,149,.46), transparent 36%), linear-gradient(138deg, #4a0c26 0%, #9f174a 44%, #d8356d 70%, #651033 100%)',
+  },
+  {
+    id: 'peach-cloud',
+    name: 'Peach Cloud',
+    tone: 'light',
+    backgroundColor: '#f7c9b2',
+    backgroundImage:
+      'radial-gradient(ellipse at 52% -8%, rgba(255,255,255,.95), rgba(255,255,255,.24) 38%, transparent 62%), radial-gradient(circle at 14% 78%, rgba(255,172,134,.28), transparent 34%), linear-gradient(126deg, #fff0e7 0%, #ffcbb5 44%, #f6b8c3 72%, #fde2ce 100%)',
+  },
+  {
+    id: 'pearl-aura',
+    name: 'Pearl Aura',
+    tone: 'light',
+    backgroundColor: '#e8e4f0',
+    backgroundImage:
+      'radial-gradient(circle at 22% 24%, rgba(255,255,255,.98) 0 12%, rgba(255,255,255,.25) 34%, transparent 52%), radial-gradient(circle at 80% 76%, rgba(100,210,220,.22), transparent 33%), radial-gradient(circle at 76% 16%, rgba(199,166,255,.24), transparent 30%), linear-gradient(135deg, #faf9ff 0%, #e8e0f4 46%, #d5e8ea 100%)',
+  },
+  {
+    id: 'pink-opal',
+    name: 'Pink Opal',
+    tone: 'light',
+    backgroundColor: '#efbfd5',
+    backgroundImage:
+      'radial-gradient(circle at 18% 22%, rgba(255,255,255,.90) 0 9%, rgba(255,255,255,.18) 26%, transparent 44%), radial-gradient(circle at 82% 24%, rgba(114,231,218,.34), transparent 34%), radial-gradient(circle at 72% 82%, rgba(167,139,250,.28), transparent 34%), linear-gradient(128deg, #ffd4e5 0%, #f1b7d3 40%, #c8e8df 72%, #d8c7ff 100%)',
+  },
+  {
+    id: 'lilac-ribbon',
+    name: 'Lilac Ribbon',
+    tone: 'light',
+    backgroundColor: '#d5b8f0',
+    backgroundImage:
+      'linear-gradient(118deg, transparent 0 18%, rgba(255,255,255,.48) 18.5% 30%, transparent 30.5% 52%, rgba(255,255,255,.24) 52.5% 64%, transparent 64.5%), radial-gradient(circle at 80% 18%, rgba(246,198,255,.62), transparent 28%), linear-gradient(135deg, #f2ddff 0%, #cfa9ef 48%, #b9b3f3 100%)',
+  },
+  {
+    id: 'berry-velvet',
+    name: 'Berry Velvet',
+    tone: 'dark',
+    backgroundColor: '#5b1c52',
+    backgroundImage:
+      'radial-gradient(circle at 20% 18%, rgba(255,164,205,.52), transparent 30%), radial-gradient(ellipse at 86% 106%, rgba(225,183,107,.30), transparent 40%), linear-gradient(145deg, #381237 0%, #76205f 46%, #9f356e 70%, #4d173e 100%)',
+  },
+  {
+    id: 'cotton-candy-sky',
+    name: 'Cotton Candy Sky',
+    tone: 'light',
+    backgroundColor: '#c9ddfb',
+    backgroundImage:
+      'radial-gradient(circle at 18% 24%, rgba(255,255,255,.92) 0 10%, rgba(255,255,255,.24) 29%, transparent 46%), radial-gradient(circle at 82% 72%, rgba(248,171,211,.46), transparent 35%), linear-gradient(128deg, #dff2ff 0%, #c3dcff 40%, #f4c6df 72%, #f7d7ef 100%)',
+  },
+  {
+    id: 'golden-rose',
+    name: 'Golden Rose',
+    tone: 'light',
+    backgroundColor: '#e8c2b8',
+    backgroundImage:
+      'radial-gradient(circle at 82% 18%, rgba(255,235,175,.68), transparent 28%), radial-gradient(circle at 18% 80%, rgba(226,115,146,.24), transparent 34%), linear-gradient(142deg, #f8e1d7 0%, #e5b7b2 44%, #d7a77b 72%, #f1d3c5 100%)',
+  },
+  {
+    id: 'mint-blossom',
+    name: 'Mint Blossom',
+    tone: 'light',
+    backgroundColor: '#c9eadf',
+    backgroundImage:
+      'radial-gradient(circle at 20% 20%, rgba(255,255,255,.96) 0 10%, rgba(255,255,255,.24) 30%, transparent 48%), radial-gradient(circle at 80% 74%, rgba(247,166,200,.34), transparent 34%), linear-gradient(128deg, #e8fff6 0%, #c2eadc 42%, #efd1dd 74%, #d9f0e8 100%)',
+  },
+  {
+    id: 'starlight-mauve',
+    name: 'Starlight Mauve',
+    tone: 'dark',
+    backgroundColor: '#43314f',
+    backgroundImage:
+      'radial-gradient(circle at 18% 22%, rgba(255,228,250,.50) 0 7%, rgba(255,228,250,.12) 20%, transparent 36%), radial-gradient(circle at 78% 28%, rgba(185,173,255,.42), transparent 30%), radial-gradient(circle at 70% 82%, rgba(255,163,197,.34), transparent 32%), linear-gradient(135deg, #2d2337 0%, #5b3d68 48%, #7a4967 100%)',
+  },
 ] as const;
 
 export type ProfileCoverPresetId = (typeof PROFILE_COVER_PRESETS)[number]['id'];
