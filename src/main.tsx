@@ -14,6 +14,7 @@ import "./styles/create-camera-shutter-safe.css";
 import "./styles/create-camera-ios-canvas.css";
 import "./styles/video-comments-preview-tap-dismiss.css";
 import "./styles/video-comments-preview-sheet-sync.css";
+import "./styles/video-comments-compact-density.css";
 import "./i18n";
 import {
   installAuthSessionResumeRecovery,
