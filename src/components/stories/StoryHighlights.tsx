@@ -7,6 +7,7 @@ import { EmojiText } from '@/components/emoji/EmojiText';
 import { StoryHighlightActions } from '@/components/stories/StoryHighlightActions';
 import { StoryHighlightComposerDialog } from '@/components/stories/StoryHighlightComposerDialog';
 import { StoryHighlightEditDialog } from '@/components/stories/StoryHighlightEditDialog';
+import { StoryHighlightPlayback } from '@/components/stories/StoryHighlightPlayback';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -22,7 +23,6 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { supabase } from '@/integrations/supabase/client';
 import { useStoryHighlights, type StoryHighlight, type StoryHighlightItem } from '@/hooks/useStoryHighlights';
 import { cn } from '@/lib/utils';
-import { StoryViewer } from './StoryViewer';
 
 interface StoryHighlightsProps {
   userId: string;
@@ -46,20 +46,9 @@ function HighlightCover({ highlight }: { highlight: StoryHighlight }) {
   const mediaType = coverItem?.media_type || (highlight.cover_url ? 'image' : fallbackItem?.media_type) || null;
 
   if (url && mediaType === 'video') {
-    return (
-      <video
-        src={url}
-        muted
-        playsInline
-        preload="metadata"
-        className="h-full w-full object-cover"
-      />
-    );
+    return <video src={url} muted playsInline preload="metadata" className="h-full w-full object-cover" />;
   }
-
-  if (url) {
-    return <img src={url} alt={highlight.name} loading="lazy" className="h-full w-full object-cover" />;
-  }
+  if (url) return <img src={url} alt={highlight.name} loading="lazy" className="h-full w-full object-cover" />;
 
   return (
     <div
@@ -87,6 +76,7 @@ export function StoryHighlights({ userId, className }: StoryHighlightsProps) {
     updateHighlight,
     syncHighlightItems,
     deleteHighlight,
+    removeStoryFromHighlight,
   } = useStoryHighlights(userId);
 
   const [profileUsername, setProfileUsername] = useState<string | null>(null);
@@ -131,9 +121,7 @@ export function StoryHighlights({ userId, className }: StoryHighlightsProps) {
   };
 
   const openHighlightViewer = (highlight: StoryHighlight) => {
-    if (highlight.items && highlight.items.length > 0) {
-      setSelectedHighlight(highlight);
-    }
+    if (highlight.items && highlight.items.length > 0) setSelectedHighlight(highlight);
   };
 
   if (isLoading) {
@@ -164,12 +152,7 @@ export function StoryHighlights({ userId, className }: StoryHighlightsProps) {
             </h2>
           </div>
           {isOwnProfile && highlights.length > 0 ? (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-8 gap-1 rounded-full px-3 text-xs font-medium"
-              onClick={() => setShowCreateDialog(true)}
-            >
+            <Button variant="ghost" size="sm" className="h-8 gap-1 rounded-full px-3 text-xs font-medium" onClick={() => setShowCreateDialog(true)}>
               <Plus className="h-3.5 w-3.5" />
               {t('profile.highlights.new', { defaultValue: 'Yangi' })}
             </Button>
@@ -182,10 +165,7 @@ export function StoryHighlights({ userId, className }: StoryHighlightsProps) {
             onClick={() => setShowCreateDialog(true)}
             className="group relative flex w-full items-center gap-4 overflow-hidden rounded-[26px] border border-border/70 bg-gradient-to-br from-muted/45 via-background to-muted/25 p-4 text-left shadow-sm transition hover:border-foreground/20 hover:shadow-md"
           >
-            <span
-              className="absolute -right-12 -top-16 h-40 w-40 rounded-full opacity-40 blur-3xl"
-              style={{ background: 'linear-gradient(135deg, rgba(217,70,239,.34), rgba(99,102,241,.18))' }}
-            />
+            <span className="absolute -right-12 -top-16 h-40 w-40 rounded-full opacity-40 blur-3xl" style={{ background: 'linear-gradient(135deg, rgba(217,70,239,.34), rgba(99,102,241,.18))' }} />
             <span className="relative rounded-full bg-gradient-to-tr from-amber-300 via-fuchsia-500 to-violet-600 p-[2px] shadow-md">
               <span className="flex h-14 w-14 items-center justify-center rounded-full border-2 border-background bg-background/95">
                 <Plus className="h-5 w-5 text-foreground" />
@@ -200,12 +180,7 @@ export function StoryHighlights({ userId, className }: StoryHighlightsProps) {
         ) : (
           <div className="flex gap-4 overflow-x-auto pb-1 pt-0.5 scrollbar-hidden">
             {isOwnProfile ? (
-              <button
-                type="button"
-                onClick={() => setShowCreateDialog(true)}
-                className="flex flex-shrink-0 flex-col items-center gap-2"
-                aria-label={t('profile.highlights.new', { defaultValue: 'Yangi' })}
-              >
+              <button type="button" onClick={() => setShowCreateDialog(true)} className="flex flex-shrink-0 flex-col items-center gap-2" aria-label={t('profile.highlights.new', { defaultValue: 'Yangi' })}>
                 <span className="rounded-full bg-gradient-to-tr from-amber-300 via-fuchsia-500 to-violet-600 p-[2px] shadow-sm">
                   <span className="flex h-[72px] w-[72px] items-center justify-center rounded-full border-[3px] border-background bg-background">
                     <Plus className="h-6 w-6 text-foreground" />
@@ -283,9 +258,7 @@ export function StoryHighlights({ userId, className }: StoryHighlightsProps) {
       <AlertDialog open={!!deletingHighlight} onOpenChange={(open) => !open && setDeletingHighlight(null)}>
         <AlertDialogContent className="rounded-[28px]">
           <AlertDialogHeader>
-            <AlertDialogTitle>
-              {t('profile.highlights.deleteTitle', { defaultValue: "Tanlanganni o'chirasizmi?" })}
-            </AlertDialogTitle>
+            <AlertDialogTitle>{t('profile.highlights.deleteTitle', { defaultValue: "Tanlanganni o'chirasizmi?" })}</AlertDialogTitle>
             <AlertDialogDescription>
               {t('profile.highlights.deleteDescription', {
                 defaultValue: '“' + NAME_TOKEN + '” butunlay o\'chiriladi. Story\'lar arxivda qoladi.',
@@ -294,45 +267,21 @@ export function StoryHighlights({ userId, className }: StoryHighlightsProps) {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel className="rounded-xl">
-              {t('common.cancel', { defaultValue: 'Bekor qilish' })}
-            </AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDeleteHighlight}
-              className="rounded-xl bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
+            <AlertDialogCancel className="rounded-xl">{t('common.cancel', { defaultValue: 'Bekor qilish' })}</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteHighlight} className="rounded-xl bg-destructive text-destructive-foreground hover:bg-destructive/90">
               {t('common.delete', { defaultValue: "O'chirish" })}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
-      {selectedHighlight && selectedHighlight.items && selectedHighlight.items.length > 0 ? (
-        <StoryViewer
-          storyGroup={{
-            user_id: userId,
-            username: profileUsername,
-            display_name: selectedHighlight.name,
-            avatar_url: (() => {
-              const coverItem = resolveCoverItem(selectedHighlight);
-              if (selectedHighlight.cover_url && coverItem?.media_type !== 'video') return selectedHighlight.cover_url;
-              return selectedHighlight.items.find((item) => item.media_type !== 'video')?.media_url || null;
-            })(),
-            is_verified: false,
-            stories: selectedHighlight.items.map((item) => ({
-              id: item.story_id,
-              user_id: userId,
-              media_url: item.media_url,
-              media_type: item.media_type,
-              caption: item.caption,
-              views_count: 0,
-              expires_at: new Date(Date.now() + 86400000).toISOString(),
-              created_at: item.created_at,
-            })),
-            all_story_ids: selectedHighlight.items.map((item) => item.story_id),
-          }}
-          allGroups={[]}
+      {selectedHighlight && selectedHighlight.items?.length ? (
+        <StoryHighlightPlayback
+          highlight={selectedHighlight}
+          isOwnProfile={isOwnProfile}
           onClose={() => setSelectedHighlight(null)}
+          onEdit={openEditDialog}
+          onRemoveStory={removeStoryFromHighlight}
         />
       ) : null}
     </>
