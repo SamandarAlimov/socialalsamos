@@ -28,6 +28,7 @@ describe('premium story highlights', () => {
     expect(highlights).toContain('StoryHighlightComposerDialog');
     expect(highlights).toContain('StoryHighlightEditDialog');
     expect(highlights).toContain('StoryHighlightActions');
+    expect(highlights).toContain('StoryHighlightPlayback');
     expect(highlights).toContain('<HighlightCover highlight={highlight} />');
     expect(highlights).toContain('resolveCoverItem');
   });
@@ -48,6 +49,17 @@ describe('premium story highlights', () => {
     expect(editor).toContain('selectedStories.map((story) => ({');
     expect(hook).toContain('const syncHighlightItems = useCallback');
     expect(hook).toContain("{ onConflict: 'highlight_id,story_id' }");
+  });
+
+  it('plays highlights with highlight-specific edit and remove actions', () => {
+    const playback = source('components/stories/StoryHighlightPlayback.tsx');
+
+    expect(playback).toContain('Tanlangandan olib tashlash');
+    expect(playback).toContain('Tanlanganni tahrirlash');
+    expect(playback).toContain('onRemoveStory(highlight.id, current.story_id)');
+    expect(playback).toContain('setItems(nextItems)');
+    expect(playback).toContain('onTimeUpdate');
+    expect(playback).toContain('IMAGE_DURATION');
   });
 
   it('shares highlights through action sheet, copy link and QR code', () => {
