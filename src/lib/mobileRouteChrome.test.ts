@@ -30,7 +30,7 @@ describe('mobile route chrome', () => {
     expect(settingsLanding).not.toContain('Bu bo‘lim faqat sizning admin rolingiz va ruxsatlaringizga mos ravishda ko‘rinadi.');
   });
 
-  it('keeps platform/admin tools concise and brands settings as Alsamos Superapp', () => {
+  it('keeps platform/admin descriptions and brands settings as Alsamos Superapp', () => {
     const settingsLanding = readFileSync(
       resolve(process.cwd(), 'src/pages/SettingsLandingPage.tsx'),
       'utf8',
@@ -40,15 +40,31 @@ describe('mobile route chrome', () => {
       'utf8',
     );
 
-    expect(settingsLanding).not.toContain('Kampaniyalar, targeting va reklama natijalari');
-    expect(settingsLanding).not.toContain('Kreativ va kampaniya variantlarini solishtirish');
-    expect(settingsLanding).not.toContain('Muammo, taklif va support murojaatlarini boshqarish');
-    expect(settingsLanding).not.toContain('Platforma boshqaruvi va moderatsiya markazi');
-    expect(settingsLanding).not.toContain('Foydalanuvchi murojaatlarini ko‘rish va javob berish');
-    expect(settingsLanding).not.toContain('Reklama materiallarini tekshirish va moderatsiya qilish');
-    expect(settingsLanding).not.toContain('Reklama xavfsizligi, risk va integrity nazorati');
+    expect(settingsLanding).toContain('Kampaniyalar, targeting va reklama natijalari');
+    expect(settingsLanding).toContain('Kreativ va kampaniya variantlarini solishtirish');
+    expect(settingsLanding).toContain('Muammo, taklif va support murojaatlarini boshqarish');
+    expect(settingsLanding).toContain('Platforma boshqaruvi va moderatsiya markazi');
+    expect(settingsLanding).toContain('Foydalanuvchi murojaatlarini ko‘rish va javob berish');
+    expect(settingsLanding).toContain('Reklama materiallarini tekshirish va moderatsiya qilish');
+    expect(settingsLanding).toContain('Reklama xavfsizligi, risk va integrity nazorati');
     expect(settingsHub).toContain('Alsamos Superapp v1.0.0');
     expect(settingsHub).not.toContain('Alsamos Social v1.0.0');
+  });
+
+  it('keeps profile save and trust controls compact without redundant helper copy', () => {
+    const settingsHub = readFileSync(
+      resolve(process.cwd(), 'src/pages/SettingsHubPage.tsx'),
+      'utf8',
+    );
+
+    expect(settingsHub).toContain('O‘zgarishlarni saqlash');
+    expect(settingsHub).not.toContain('Profil ma’lumotlari saqlangan');
+    expect(settingsHub).not.toContain('Saqlanmagan o‘zgarishlar bor');
+    expect(settingsHub).not.toContain('Yangi o‘zgarish kiritsangiz, bu yerda saqlash holati ko‘rinadi.');
+    expect(settingsHub).toContain('<SectionCard title="Profil ishonchliligi">');
+    expect(settingsHub).toContain('Tasdiqlangan nishon');
+    expect(settingsHub).not.toContain('Tasdiqlash foydalanuvchilarga rasmiy hisobni tezroq tanishga yordam beradi.');
+    expect(settingsHub).not.toContain('Shaxs yoki brend sifatida tasdiqlash uchun so‘rov yuboring.');
   });
 
   it('opens profile editing directly instead of the settings landing page', () => {
