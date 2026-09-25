@@ -150,12 +150,75 @@ export function useStoryHighlights(userId?: string) {
 
       if (error) throw error;
 
-      toast.success('Highlight updated');
       await fetchHighlights();
       return true;
     } catch (error) {
       console.error('Error updating highlight:', error);
       toast.error('Failed to update highlight');
+      return false;
+    }
+  }, [user, fetchHighlights]);
+
+  const syncHighlightItems = useCallback(async (
+    highlightId: string,
+    items: StoryHighlightDraftItem[],
+  ) => {
+    if (!user) return false;
+
+    try {
+      const { data: ownedHighlight, error: ownerError } = await supabase
+        .from('story_highlights')
+        .select('id')
+        .eq('id', highlightId)
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (ownerError) throw ownerError;
+      if (!ownedHighlight) throw new Error('Highlight not found');
+
+      const { data: existingRows, error: existingError } = await supabase
+        .from('story_highlight_items')
+        .select('story_id')
+        .eq('highlight_id', highlightId);
+
+      if (existingError) throw existingError;
+
+      const nextIds = new Set(items.map((item) => item.story_id));
+      const removedIds = (existingRows || [])
+        .map((row) => row.story_id)
+        .filter((storyId) => !nextIds.has(storyId));
+
+      if (removedIds.length > 0) {
+        const { error: removeError } = await supabase
+          .from('story_highlight_items')
+          .delete()
+          .eq('highlight_id', highlightId)
+          .in('story_id', removedIds);
+        if (removeError) throw removeError;
+      }
+
+      for (const [position, item] of items.entries()) {
+        const { error: upsertError } = await supabase
+          .from('story_highlight_items')
+          .upsert(
+            {
+              highlight_id: highlightId,
+              story_id: item.story_id,
+              media_url: item.media_url,
+              media_type: item.media_type,
+              caption: item.caption || null,
+              position,
+            },
+            { onConflict: 'highlight_id,story_id' },
+          );
+        if (upsertError) throw upsertError;
+      }
+
+      await fetchHighlights();
+      return true;
+    } catch (error) {
+      console.error('Error syncing highlight stories:', error);
+      toast.error('Tanlangan storylarini yangilab bo‘lmadi');
       return false;
     }
   }, [user, fetchHighlights]);
@@ -226,6 +289,12 @@ export function useStoryHighlights(userId?: string) {
     if (!user) return false;
 
     try {
+      const highlight = highlights.find((item) => item.id === highlightId);
+      const removedItem = highlight?.items?.find((item) => item.story_id === storyId);
+      const coverWasRemoved = Boolean(
+        highlight?.cover_url && removedItem?.media_url === highlight.cover_url,
+      );
+
       const { error } = await supabase
         .from('story_highlight_items')
         .delete()
@@ -234,15 +303,31 @@ export function useStoryHighlights(userId?: string) {
 
       if (error) throw error;
 
-      toast.success('Removed from highlight');
+      if (coverWasRemoved && highlight) {
+        const remainingItems = (highlight.items || []).filter((item) => item.story_id !== storyId);
+        const fallbackCover =
+          remainingItems.find((item) => item.media_type !== 'video')?.media_url ||
+          remainingItems[0]?.media_url ||
+          null;
+
+        const { error: coverError } = await supabase
+          .from('story_highlights')
+          .update({ cover_url: fallbackCover })
+          .eq('id', highlightId)
+          .eq('user_id', user.id);
+
+        if (coverError) throw coverError;
+      }
+
+      toast.success('Tanlangandan olib tashlandi');
       await fetchHighlights();
       return true;
     } catch (error) {
       console.error('Error removing story from highlight:', error);
-      toast.error('Failed to remove from highlight');
+      toast.error('Tanlangandan olib tashlab bo‘lmadi');
       return false;
     }
-  }, [user, fetchHighlights]);
+  }, [user, highlights, fetchHighlights]);
 
   const reorderHighlights = useCallback(async (highlightIds: string[]) => {
     if (!user) return false;
@@ -280,6 +365,7 @@ export function useStoryHighlights(userId?: string) {
     refresh: fetchHighlights,
     createHighlight,
     updateHighlight,
+    syncHighlightItems,
     deleteHighlight,
     addStoryToHighlight,
     removeStoryFromHighlight,
