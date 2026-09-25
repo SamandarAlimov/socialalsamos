@@ -23,6 +23,8 @@ describe('premium story highlights', () => {
     expect(composer).toContain('selectedCoverStory?.media_url');
     expect(composer).toContain('selectedStories.map((story) => ({');
     expect(composer).toContain('removeExistingCover');
+    expect(composer).not.toContain('editPremiumDescription');
+    expect(composer).not.toContain('Nomi va muqovasini storydan yoki qurilmadan istalgan payt yangilang.');
 
     expect(highlights).toContain('StoryHighlightComposerDialog');
     expect(highlights).toContain('from-amber-300 via-fuchsia-500 to-violet-600');
@@ -40,6 +42,7 @@ describe('premium story highlights', () => {
     expect(archive).not.toContain('const expired =');
     expect(archive).not.toContain('setArchivedStories(expired');
     expect(archive).toContain('Faol va avvalgi storylaringiz');
+    expect(archive).not.toContain('Joylagan storylaringiz shu yerda tarix sifatida ko‘rinadi.');
     expect(archive).toContain('Tanlanganlarga');
     expect(archive).toContain('<AddToHighlightDialog');
 
