@@ -824,7 +824,7 @@ export default function SettingsHubPage() {
         </main>
       </Tabs>
 
-      <footer className="pt-8 text-center text-xs text-muted-foreground"><p>Alsamos Social v1.0.0</p><p className="mt-1">© 2026 Alsamos. Barcha huquqlar himoyalangan.</p></footer>
+      <footer className="pt-8 text-center text-xs text-muted-foreground"><p>Alsamos Superapp v1.0.0</p><p className="mt-1">© 2026 Alsamos. Barcha huquqlar himoyalangan.</p></footer>
 
       <AlertDialog open={logoutDialogOpen} onOpenChange={setLogoutDialogOpen}>
         <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Qurilmani chiqarish</AlertDialogTitle><AlertDialogDescription>Tanlangan qurilma tizimdan chiqariladi va qaytadan kirish talab qilinadi.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Bekor qilish</AlertDialogCancel><AlertDialogAction onClick={handleLogoutSession}>Chiqarish</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
