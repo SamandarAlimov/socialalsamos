@@ -1,9 +1,12 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { MoreHorizontal, Pencil, Plus, Sparkles, Trash2 } from 'lucide-react';
+import { MoreHorizontal, Plus, Sparkles } from 'lucide-react';
 
 import { EmojiText } from '@/components/emoji/EmojiText';
+import { StoryHighlightActions } from '@/components/stories/StoryHighlightActions';
 import { StoryHighlightComposerDialog } from '@/components/stories/StoryHighlightComposerDialog';
+import { StoryHighlightEditDialog } from '@/components/stories/StoryHighlightEditDialog';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -15,13 +18,8 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { Skeleton } from '@/components/ui/skeleton';
+import { supabase } from '@/integrations/supabase/client';
 import { useStoryHighlights, type StoryHighlight, type StoryHighlightItem } from '@/hooks/useStoryHighlights';
 import { cn } from '@/lib/utils';
 import { StoryViewer } from './StoryViewer';
@@ -80,20 +78,46 @@ function HighlightCover({ highlight }: { highlight: StoryHighlight }) {
 
 export function StoryHighlights({ userId, className }: StoryHighlightsProps) {
   const { t } = useTranslation();
+  const [searchParams] = useSearchParams();
   const {
     highlights,
     isLoading,
     isOwnProfile,
     createHighlight,
     updateHighlight,
+    syncHighlightItems,
     deleteHighlight,
   } = useStoryHighlights(userId);
 
+  const [profileUsername, setProfileUsername] = useState<string | null>(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [editingHighlight, setEditingHighlight] = useState<StoryHighlight | null>(null);
   const [deletingHighlight, setDeletingHighlight] = useState<StoryHighlight | null>(null);
+  const [actionHighlight, setActionHighlight] = useState<StoryHighlight | null>(null);
   const [selectedHighlight, setSelectedHighlight] = useState<StoryHighlight | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void supabase
+      .from('profiles')
+      .select('username')
+      .eq('id', userId)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!cancelled) setProfileUsername(data?.username || null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
+
+  useEffect(() => {
+    const sharedHighlightId = searchParams.get('highlight');
+    if (!sharedHighlightId || selectedHighlight) return;
+    const sharedHighlight = highlights.find((highlight) => highlight.id === sharedHighlightId);
+    if (sharedHighlight?.items?.length) setSelectedHighlight(sharedHighlight);
+  }, [highlights, searchParams, selectedHighlight]);
 
   const handleDeleteHighlight = async () => {
     if (!deletingHighlight) return;
@@ -125,9 +149,7 @@ export function StoryHighlights({ userId, className }: StoryHighlightsProps) {
     );
   }
 
-  if (highlights.length === 0 && !isOwnProfile) {
-    return null;
-  }
+  if (highlights.length === 0 && !isOwnProfile) return null;
 
   return (
     <>
@@ -173,11 +195,6 @@ export function StoryHighlights({ userId, className }: StoryHighlightsProps) {
               <span className="block text-sm font-semibold tracking-[-0.01em] text-foreground">
                 {t('profile.highlights.createTitle', { defaultValue: 'Tanlangan yarating' })}
               </span>
-              <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">
-                {t('profile.highlights.createHintPremium', {
-                  defaultValue: 'Storylarni bir joyga jamlang, nom bering va alohida muqova bilan bezang.',
-                })}
-              </span>
             </span>
           </button>
         ) : (
@@ -190,7 +207,7 @@ export function StoryHighlights({ userId, className }: StoryHighlightsProps) {
                 aria-label={t('profile.highlights.new', { defaultValue: 'Yangi' })}
               >
                 <span className="rounded-full bg-gradient-to-tr from-amber-300 via-fuchsia-500 to-violet-600 p-[2px] shadow-sm">
-                  <span className="flex h-[72px] w-[72px] items-center justify-center rounded-full border-[3px] border-background bg-background transition group-hover:bg-muted">
+                  <span className="flex h-[72px] w-[72px] items-center justify-center rounded-full border-[3px] border-background bg-background">
                     <Plus className="h-6 w-6 text-foreground" />
                   </span>
                 </span>
@@ -201,10 +218,7 @@ export function StoryHighlights({ userId, className }: StoryHighlightsProps) {
             ) : null}
 
             {highlights.map((highlight) => (
-              <div
-                key={highlight.id}
-                className="group relative flex flex-shrink-0 flex-col items-center gap-2"
-              >
+              <div key={highlight.id} className="group relative flex flex-shrink-0 flex-col items-center gap-2">
                 <button
                   type="button"
                   onClick={() => openHighlightViewer(highlight)}
@@ -221,30 +235,14 @@ export function StoryHighlights({ userId, className }: StoryHighlightsProps) {
                 </span>
 
                 {isOwnProfile ? (
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <button
-                        type="button"
-                        className="absolute -right-1 -top-1 flex h-6 w-6 items-center justify-center rounded-full border border-border/70 bg-background/95 text-muted-foreground shadow-sm backdrop-blur transition hover:text-foreground"
-                        aria-label={t('common.more', { defaultValue: "Ko'proq" })}
-                      >
-                        <MoreHorizontal className="h-3.5 w-3.5" />
-                      </button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="min-w-44 rounded-2xl p-1.5">
-                      <DropdownMenuItem className="rounded-xl" onClick={() => openEditDialog(highlight)}>
-                        <Pencil className="mr-2 h-4 w-4" />
-                        {t('common.edit', { defaultValue: 'Tahrirlash' })}
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() => setDeletingHighlight(highlight)}
-                        className="rounded-xl text-destructive focus:text-destructive"
-                      >
-                        <Trash2 className="mr-2 h-4 w-4" />
-                        {t('common.delete', { defaultValue: "O'chirish" })}
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                  <button
+                    type="button"
+                    className="absolute -right-1 -top-1 flex h-6 w-6 items-center justify-center rounded-full border border-border/70 bg-background/95 text-muted-foreground shadow-sm backdrop-blur transition hover:text-foreground"
+                    aria-label={t('common.more', { defaultValue: "Ko'proq" })}
+                    onClick={() => setActionHighlight(highlight)}
+                  >
+                    <MoreHorizontal className="h-3.5 w-3.5" />
+                  </button>
                 ) : null}
               </div>
             ))}
@@ -261,23 +259,28 @@ export function StoryHighlights({ userId, className }: StoryHighlightsProps) {
         updateHighlight={updateHighlight}
       />
 
-      <StoryHighlightComposerDialog
+      <StoryHighlightEditDialog
         open={showEditDialog}
         onOpenChange={(open) => {
           setShowEditDialog(open);
           if (!open) setEditingHighlight(null);
         }}
-        mode="edit"
         userId={userId}
         highlight={editingHighlight}
-        createHighlight={createHighlight}
         updateHighlight={updateHighlight}
+        syncHighlightItems={syncHighlightItems}
       />
 
-      <AlertDialog
-        open={!!deletingHighlight}
-        onOpenChange={(open) => !open && setDeletingHighlight(null)}
-      >
+      <StoryHighlightActions
+        open={Boolean(actionHighlight)}
+        onOpenChange={(open) => !open && setActionHighlight(null)}
+        highlight={actionHighlight}
+        username={profileUsername}
+        onEdit={openEditDialog}
+        onDelete={setDeletingHighlight}
+      />
+
+      <AlertDialog open={!!deletingHighlight} onOpenChange={(open) => !open && setDeletingHighlight(null)}>
         <AlertDialogContent className="rounded-[28px]">
           <AlertDialogHeader>
             <AlertDialogTitle>
@@ -308,13 +311,11 @@ export function StoryHighlights({ userId, className }: StoryHighlightsProps) {
         <StoryViewer
           storyGroup={{
             user_id: userId,
-            username: null,
+            username: profileUsername,
             display_name: selectedHighlight.name,
             avatar_url: (() => {
               const coverItem = resolveCoverItem(selectedHighlight);
-              if (selectedHighlight.cover_url && coverItem?.media_type !== 'video') {
-                return selectedHighlight.cover_url;
-              }
+              if (selectedHighlight.cover_url && coverItem?.media_type !== 'video') return selectedHighlight.cover_url;
               return selectedHighlight.items.find((item) => item.media_type !== 'video')?.media_url || null;
             })(),
             is_verified: false,
