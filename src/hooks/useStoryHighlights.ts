@@ -14,6 +14,13 @@ export interface StoryHighlightItem {
   created_at: string;
 }
 
+export interface StoryHighlightDraftItem {
+  story_id: string;
+  media_url: string;
+  media_type: string;
+  caption?: string | null;
+}
+
 export interface StoryHighlight {
   id: string;
   user_id: string;
@@ -51,8 +58,7 @@ export function useStoryHighlights(userId?: string) {
         .order('position', { ascending: true });
 
       if (error) throw error;
-      
-      // Sort items by position within each highlight
+
       const highlightsWithSortedItems = (data || []).map(h => ({
         ...h,
         items: (h.items || []).sort((a: StoryHighlightItem, b: StoryHighlightItem) => a.position - b.position),
@@ -66,14 +72,19 @@ export function useStoryHighlights(userId?: string) {
     }
   }, [targetUserId]);
 
-  const createHighlight = useCallback(async (name: string, coverUrl?: string) => {
+  const createHighlight = useCallback(async (
+    name: string,
+    coverUrl?: string,
+    initialItems: StoryHighlightDraftItem[] = [],
+  ) => {
     if (!user) {
       toast.error('Please login to create highlights');
       return null;
     }
 
+    let createdHighlightId: string | null = null;
+
     try {
-      // Get max position
       const maxPosition = highlights.reduce((max, h) => Math.max(max, h.position), -1);
 
       const { data, error } = await supabase
@@ -88,18 +99,46 @@ export function useStoryHighlights(userId?: string) {
         .single();
 
       if (error) throw error;
+      createdHighlightId = data.id;
+
+      if (initialItems.length > 0) {
+        const { error: itemsError } = await supabase
+          .from('story_highlight_items')
+          .insert(
+            initialItems.map((item, index) => ({
+              highlight_id: data.id,
+              story_id: item.story_id,
+              media_url: item.media_url,
+              media_type: item.media_type,
+              caption: item.caption || null,
+              position: index,
+            })),
+          );
+
+        if (itemsError) throw itemsError;
+      }
 
       toast.success('Highlight created');
-      fetchHighlights();
+      await fetchHighlights();
       return data;
     } catch (error) {
+      if (createdHighlightId) {
+        await supabase
+          .from('story_highlights')
+          .delete()
+          .eq('id', createdHighlightId)
+          .eq('user_id', user.id);
+      }
       console.error('Error creating highlight:', error);
       toast.error('Failed to create highlight');
       return null;
     }
   }, [user, highlights, fetchHighlights]);
 
-  const updateHighlight = useCallback(async (highlightId: string, updates: { name?: string; cover_url?: string }) => {
+  const updateHighlight = useCallback(async (
+    highlightId: string,
+    updates: { name?: string; cover_url?: string | null },
+  ) => {
     if (!user) return false;
 
     try {
@@ -112,7 +151,7 @@ export function useStoryHighlights(userId?: string) {
       if (error) throw error;
 
       toast.success('Highlight updated');
-      fetchHighlights();
+      await fetchHighlights();
       return true;
     } catch (error) {
       console.error('Error updating highlight:', error);
@@ -134,7 +173,7 @@ export function useStoryHighlights(userId?: string) {
       if (error) throw error;
 
       toast.success('Highlight deleted');
-      fetchHighlights();
+      await fetchHighlights();
       return true;
     } catch (error) {
       console.error('Error deleting highlight:', error);
@@ -144,16 +183,15 @@ export function useStoryHighlights(userId?: string) {
   }, [user, fetchHighlights]);
 
   const addStoryToHighlight = useCallback(async (
-    highlightId: string, 
-    storyId: string, 
-    mediaUrl: string, 
-    mediaType: string, 
-    caption?: string
+    highlightId: string,
+    storyId: string,
+    mediaUrl: string,
+    mediaType: string,
+    caption?: string,
   ) => {
     if (!user) return false;
 
     try {
-      // Get max position in highlight
       const highlight = highlights.find(h => h.id === highlightId);
       const maxPosition = highlight?.items?.reduce((max, item) => Math.max(max, item.position), -1) ?? -1;
 
@@ -171,7 +209,7 @@ export function useStoryHighlights(userId?: string) {
       if (error) throw error;
 
       toast.success('Added to highlight');
-      fetchHighlights();
+      await fetchHighlights();
       return true;
     } catch (error: any) {
       if (error.code === '23505') {
@@ -197,7 +235,7 @@ export function useStoryHighlights(userId?: string) {
       if (error) throw error;
 
       toast.success('Removed from highlight');
-      fetchHighlights();
+      await fetchHighlights();
       return true;
     } catch (error) {
       console.error('Error removing story from highlight:', error);
@@ -210,7 +248,6 @@ export function useStoryHighlights(userId?: string) {
     if (!user) return false;
 
     try {
-      // Update positions
       const updates = highlightIds.map((id, index) => ({
         id,
         position: index,
@@ -224,7 +261,7 @@ export function useStoryHighlights(userId?: string) {
           .eq('user_id', user.id);
       }
 
-      fetchHighlights();
+      await fetchHighlights();
       return true;
     } catch (error) {
       console.error('Error reordering highlights:', error);
