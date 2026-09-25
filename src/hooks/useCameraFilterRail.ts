@@ -4,6 +4,7 @@ const FILTER_SELECTOR = '.alsamos-camera-filter-scroll';
 const FILTER_BUTTON_SELECTOR = 'button[aria-label$=" filtri"]';
 const RECORDER_SELECTOR = '[data-camera-recorder-root="true"]';
 const LIVE_STAGE_SELECTOR = '[data-create-mode="live"]';
+const ZOOM_GESTURE_ATTRIBUTE = 'data-camera-zoom-gesture';
 const ZOOM_MIN = 1;
 const ZOOM_MAX = 5;
 
@@ -443,6 +444,23 @@ export function useCameraFilterRail(rootRef: RefObject<HTMLElement>) {
       });
     };
 
+    const finishZoomGesture = () => {
+      const completed = activeZoom;
+      activeZoom = null;
+      if (!completed || completed.kind !== 'recorder') return;
+
+      completed.host.removeAttribute(ZOOM_GESTURE_ATTRIBUTE);
+      // Commit the final stable zoom only after the iOS Canvas2D gesture window
+      // ends. This causes one hardware-video transform update instead of one per
+      // moving frame, avoiding WebKit's transient giant capsule compositor bug.
+      setCameraZoom(
+        completed.host,
+        completed.video,
+        completed.kind,
+        getCurrentZoom(completed.host),
+      );
+    };
+
     const handleTouchStart = (event: TouchEvent) => {
       if (event.touches.length !== 2) return;
       const points = [event.touches[0], event.touches[1]];
@@ -456,6 +474,12 @@ export function useCameraFilterRail(rootRef: RefObject<HTMLElement>) {
         startDistance: distance,
         startZoom: getCurrentZoom(resolved.host),
       };
+      if (
+        resolved.kind === 'recorder' &&
+        document.documentElement.classList.contains('alsamos-ios-camera-canvas-preview')
+      ) {
+        resolved.host.setAttribute(ZOOM_GESTURE_ATTRIBUTE, 'active');
+      }
       event.preventDefault();
     };
 
@@ -466,7 +490,7 @@ export function useCameraFilterRail(rootRef: RefObject<HTMLElement>) {
     };
 
     const handleTouchEnd = (event: TouchEvent) => {
-      if (event.touches.length < 2) activeZoom = null;
+      if (event.touches.length < 2) finishZoomGesture();
     };
 
     const handlePointerDown = (event: PointerEvent) => {
@@ -489,6 +513,12 @@ export function useCameraFilterRail(rootRef: RefObject<HTMLElement>) {
         startDistance: distance,
         startZoom: getCurrentZoom(resolved.host),
       };
+      if (
+        resolved.kind === 'recorder' &&
+        document.documentElement.classList.contains('alsamos-ios-camera-canvas-preview')
+      ) {
+        resolved.host.setAttribute(ZOOM_GESTURE_ATTRIBUTE, 'active');
+      }
       event.preventDefault();
     };
 
@@ -510,7 +540,7 @@ export function useCameraFilterRail(rootRef: RefObject<HTMLElement>) {
     const handlePointerEnd = (event: PointerEvent) => {
       if (event.pointerType !== 'touch') return;
       pointerTouches.delete(event.pointerId);
-      if (pointerTouches.size < 2) activeZoom = null;
+      if (pointerTouches.size < 2) finishZoomGesture();
     };
 
     const handleWheel = (event: WheelEvent) => {
@@ -587,6 +617,10 @@ export function useCameraFilterRail(rootRef: RefObject<HTMLElement>) {
       window.cancelAnimationFrame(zoomFrame);
       cleanups.forEach((cleanup) => cleanup());
       cleanups.clear();
+      if (activeZoom?.kind === 'recorder') {
+        activeZoom.host.removeAttribute(ZOOM_GESTURE_ATTRIBUTE);
+      }
+      activeZoom = null;
       pointerTouches.clear();
       if (typeof window.PointerEvent === 'function') {
         root.removeEventListener('pointerdown', handlePointerDown);

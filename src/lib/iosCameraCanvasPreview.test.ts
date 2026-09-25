@@ -97,4 +97,35 @@ describe('iOS camera Canvas2D preview compatibility', () => {
     );
     expect(css).toContain('.alsamos-camera-filter-scroll');
   });
+
+  it('does not mutate the iOS hardware video transform while pinch is moving', () => {
+    const capture = readFileSync(
+      resolve(process.cwd(), 'src/components/create/useCameraCapture.ts'),
+      'utf8',
+    );
+    const rail = readFileSync(
+      resolve(process.cwd(), 'src/hooks/useCameraFilterRail.ts'),
+      'utf8',
+    );
+
+    expect(capture).toContain(
+      "document.documentElement.classList.contains('alsamos-ios-camera-canvas-preview')",
+    );
+    expect(capture).toContain(
+      "recorderRoot?.dataset.cameraZoomGesture === 'active'",
+    );
+    expect(rail).toContain(
+      "const ZOOM_GESTURE_ATTRIBUTE = 'data-camera-zoom-gesture'",
+    );
+    expect(rail).toContain(
+      "document.documentElement.classList.contains('alsamos-ios-camera-canvas-preview')",
+    );
+    expect(rail).toContain(
+      "resolved.host.setAttribute(ZOOM_GESTURE_ATTRIBUTE, 'active')",
+    );
+    expect(rail).toContain(
+      'completed.host.removeAttribute(ZOOM_GESTURE_ATTRIBUTE)',
+    );
+    expect(rail).toContain('finishZoomGesture();');
+  });
 });
