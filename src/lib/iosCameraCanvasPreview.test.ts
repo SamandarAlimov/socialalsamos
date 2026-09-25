@@ -109,10 +109,16 @@ describe('iOS camera Canvas2D preview compatibility', () => {
     );
 
     expect(capture).toContain(
+      "document.documentElement.classList.contains('alsamos-ios-camera-canvas-preview')",
+    );
+    expect(capture).toContain(
       "recorderRoot?.dataset.cameraZoomGesture === 'active'",
     );
     expect(rail).toContain(
       "const ZOOM_GESTURE_ATTRIBUTE = 'data-camera-zoom-gesture'",
+    );
+    expect(rail).toContain(
+      "document.documentElement.classList.contains('alsamos-ios-camera-canvas-preview')",
     );
     expect(rail).toContain(
       "resolved.host.setAttribute(ZOOM_GESTURE_ATTRIBUTE, 'active')",

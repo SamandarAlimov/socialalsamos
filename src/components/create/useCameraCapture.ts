@@ -141,7 +141,12 @@ export function useCameraCapture(options: UseCameraCaptureOptions) {
       const recorderRoot = videoRef.current?.closest<HTMLElement>(
         '[data-camera-recorder-root="true"]',
       );
-      if (recorderRoot?.dataset.cameraZoomGesture === 'active') return;
+      if (
+        document.documentElement.classList.contains('alsamos-ios-camera-canvas-preview') &&
+        recorderRoot?.dataset.cameraZoomGesture === 'active'
+      ) {
+        return;
+      }
 
       setZoom(safeZoom);
     };
@@ -363,7 +368,12 @@ export function useCameraCapture(options: UseCameraCaptureOptions) {
     const recorderRoot = video.closest<HTMLElement>(
       '[data-camera-recorder-root="true"]',
     );
-    if (recorderRoot?.dataset.cameraZoomGesture === 'active') return;
+    if (
+        document.documentElement.classList.contains('alsamos-ios-camera-canvas-preview') &&
+        recorderRoot?.dataset.cameraZoomGesture === 'active'
+      ) {
+        return;
+      }
 
     const scaleX = facingMode === 'user' ? -zoom : zoom;
     video.style.setProperty('transform', `scale(${scaleX}, ${zoom})`);

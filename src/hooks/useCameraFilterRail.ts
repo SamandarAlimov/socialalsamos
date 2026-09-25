@@ -474,7 +474,10 @@ export function useCameraFilterRail(rootRef: RefObject<HTMLElement>) {
         startDistance: distance,
         startZoom: getCurrentZoom(resolved.host),
       };
-      if (resolved.kind === 'recorder') {
+      if (
+        resolved.kind === 'recorder' &&
+        document.documentElement.classList.contains('alsamos-ios-camera-canvas-preview')
+      ) {
         resolved.host.setAttribute(ZOOM_GESTURE_ATTRIBUTE, 'active');
       }
       event.preventDefault();
@@ -510,7 +513,10 @@ export function useCameraFilterRail(rootRef: RefObject<HTMLElement>) {
         startDistance: distance,
         startZoom: getCurrentZoom(resolved.host),
       };
-      if (resolved.kind === 'recorder') {
+      if (
+        resolved.kind === 'recorder' &&
+        document.documentElement.classList.contains('alsamos-ios-camera-canvas-preview')
+      ) {
         resolved.host.setAttribute(ZOOM_GESTURE_ATTRIBUTE, 'active');
       }
       event.preventDefault();
