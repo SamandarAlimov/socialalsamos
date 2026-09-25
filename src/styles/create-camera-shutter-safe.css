@@ -9,6 +9,24 @@
  * control surface.
  */
 
+/*
+ * Do not carve a rectangular center slot out of the filter rail.
+ * create-instagram-fixes.css historically used a horizontal linear mask with a
+ * transparent 100px center band so the selected filter bubble disappeared under
+ * the shutter. That mask also slices the neighbouring circular filter bubbles on
+ * straight vertical edges, which shows up as the two rectangular/flat artifacts
+ * beside the capture button.
+ *
+ * The mask is unnecessary: the shutter overlay is above the rail and its opaque
+ * 54px photo/video center fully covers the centered 44-48px lens bubble. Keeping
+ * the rail unmasked preserves every neighbouring lens as a complete circle on
+ * phones, tablets, desktop browsers and embedded WebViews.
+ */
+[data-camera-recorder-root='true'] .alsamos-camera-filter-scroll {
+  -webkit-mask-image: none !important;
+  mask-image: none !important;
+}
+
 [data-camera-recorder-root='true']
   .alsamos-camera-filter-scroll
   + div
