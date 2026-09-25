@@ -1,26 +1,23 @@
 /* Camera shutter compositor safety.
  *
- * The filter rail previously painted the selected lens onto the shutter by
- * applying CSS filter + mix-blend-mode to the shutter's circular span. On
- * WebKit/iOS (and some GPU/WebView combinations) that tiny composited circle can
- * be promoted with the recorder viewport's backing surface, producing the huge
- * rounded grey/black panel seen over the camera. The actual lens remains on the
- * camera video/capture pipeline; the shutter must stay a plain, non-composited
- * control surface.
+ * The selected lens already exists as the centered filter bubble underneath the
+ * shutter overlay. Keep the shutter itself on a plain paint path instead of
+ * duplicating the lens with another CSS filter/mix-blend composited surface.
  */
 
 /*
  * Do not carve a rectangular center slot out of the filter rail.
  * create-instagram-fixes.css historically used a horizontal linear mask with a
  * transparent 100px center band so the selected filter bubble disappeared under
- * the shutter. That mask also slices the neighbouring circular filter bubbles on
- * straight vertical edges, which shows up as the two rectangular/flat artifacts
- * beside the capture button.
+ * the shutter. That mask also slices neighbouring circular filter bubbles on
+ * straight vertical edges.
  *
- * The mask is unnecessary: the shutter overlay is above the rail and its opaque
- * 54px photo/video center fully covers the centered 44-48px lens bubble. Keeping
- * the rail unmasked preserves every neighbouring lens as a complete circle on
- * phones, tablets, desktop browsers and embedded WebViews.
+ * The rail now stays fully visible. In photo mode the shutter is a transparent
+ * ring/window, so the actual selected filter bubble underneath becomes the center
+ * preview. This guarantees the shutter shows the exact same lens thumbnail as the
+ * rail without creating a second filtered compositor surface. Video keeps its red
+ * recording affordance. The behavior is shared by phones, tablets, desktop and
+ * embedded WebViews.
  */
 [data-camera-recorder-root='true'] .alsamos-camera-filter-scroll {
   -webkit-mask-image: none !important;
@@ -53,17 +50,25 @@
   opacity: 0 !important;
 }
 
-/* Keep the shutter semantically correct after removing the lens thumbnail.
- * The filter itself is still visible on the live camera and on the filter rail.
- */
+/* Photo shutter is only the capture ring. Its transparent body and center let the
+ * centered selected lens bubble render unchanged underneath it. */
+[data-camera-recorder-root='true']
+  .alsamos-camera-filter-scroll
+  + div
+  button[aria-label='Rasmga olish'] {
+  background: transparent !important;
+}
+
 [data-camera-recorder-root='true']
   .alsamos-camera-filter-scroll
   + div
   button[aria-label='Rasmga olish']
   > span {
-  background-color: #fff !important;
+  background-color: transparent !important;
 }
 
+/* Video keeps an unmistakable red idle record target; during recording the stop
+ * icon is rendered separately by the recorder component. */
 [data-camera-recorder-root='true']
   .alsamos-camera-filter-scroll
   + div
