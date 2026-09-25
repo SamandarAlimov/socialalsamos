@@ -29,7 +29,7 @@ describe('mobile route chrome', () => {
     );
 
     expect(locationPicker).toContain("'min-w-0 w-full max-w-full overflow-hidden space-y-2.5'");
-    expect(locationPicker).toContain('flex min-w-0 w-full max-w-full flex-col items-start gap-2');
+    expect(locationPicker).toContain('grid min-w-0 w-full max-w-full grid-cols-1 gap-2');
     expect(locationPicker).toContain('min-w-0 flex-1 truncate text-sm font-medium');
     expect(phoneEditor).toContain("'min-w-0 w-full max-w-full overflow-hidden border-t");
     expect(phoneEditor).toContain('min-w-0 w-full max-w-full flex-1');
