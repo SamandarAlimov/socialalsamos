@@ -1,5 +1,5 @@
 import { createPortal } from 'react-dom';
-import { MinusCircle, MoreHorizontal, Pencil } from 'lucide-react';
+import { MoreHorizontal, Pencil } from 'lucide-react';
 
 import {
   Sheet,
@@ -19,7 +19,6 @@ interface StoryHighlightViewerProps {
   onMenuOpenChange: (open: boolean) => void;
   onClose: () => void;
   onEdit: (highlight: StoryHighlight) => void;
-  onRemoveStory: (highlight: StoryHighlight, storyId: string) => Promise<boolean>;
 }
 
 function resolveCoverItem(highlight: StoryHighlight): StoryHighlightItem | undefined {
@@ -39,7 +38,6 @@ export function StoryHighlightViewer({
   onMenuOpenChange,
   onClose,
   onEdit,
-  onRemoveStory,
 }: StoryHighlightViewerProps) {
   const items = highlight.items || [];
   if (items.length === 0) return null;
@@ -103,20 +101,6 @@ export function StoryHighlightViewer({
           <div className="mt-2 overflow-hidden rounded-[22px] bg-background">
             <button
               type="button"
-              className="flex min-h-14 w-full items-center gap-3 border-b border-border/60 px-5 text-left text-[15px] font-medium text-destructive"
-              onClick={async () => {
-                const storyId = items[0]?.story_id;
-                if (!storyId) return;
-                onMenuOpenChange(false);
-                const removed = await onRemoveStory(highlight, storyId);
-                if (removed) onClose();
-              }}
-            >
-              <MinusCircle className="h-5 w-5" />
-              Tanlangandan olib tashlash
-            </button>
-            <button
-              type="button"
               className="flex min-h-14 w-full items-center gap-3 px-5 text-left text-[15px] font-medium"
               onClick={() => {
                 onMenuOpenChange(false);
@@ -128,8 +112,11 @@ export function StoryHighlightViewer({
               Tanlanganni tahrirlash
             </button>
           </div>
+          <p className="px-5 py-3 text-xs leading-relaxed text-muted-foreground">
+            Storylarni qo‘shish yoki olib tashlash uchun Tanlanganni tahrirlash oynasidan foydalaning.
+          </p>
           <SheetClose asChild>
-            <button type="button" className="mx-3 mt-3 h-12 w-[calc(100%-24px)] rounded-2xl bg-muted text-sm font-semibold">
+            <button type="button" className="mx-3 h-12 w-[calc(100%-24px)] rounded-2xl bg-muted text-sm font-semibold">
               Bekor qilish
             </button>
           </SheetClose>
