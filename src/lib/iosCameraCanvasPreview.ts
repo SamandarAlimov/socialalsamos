@@ -5,7 +5,10 @@ const RECORDER_SELECTOR = '[data-camera-recorder-root="true"]';
 const FILTER_RAIL_SELECTOR = '.alsamos-camera-filter-scroll';
 const FILTER_BUTTON_SELECTOR = 'button[aria-label$=" filtri"]';
 const CANVAS_ATTRIBUTE = 'data-camera-processed-preview';
-const HTML_COMPAT_CLASS = 'alsamos-ios-camera-canvas-preview';
+const HTML_COMPAT_CLASS = 'alsamos-camera-canvas-preview';
+// Keep the legacy marker during the migration because useCameraCapture and
+// useCameraFilterRail already use it to freeze hardware-video transforms.
+const LEGACY_HTML_COMPAT_CLASS = 'alsamos-ios-camera-canvas-preview';
 const ACTIVE_ATTRIBUTE = 'data-camera-canvas-filter';
 const ZOOM_GESTURE_ATTRIBUTE = 'data-camera-zoom-gesture';
 const PREVIEW_MAX_LONG_EDGE = 1080;
@@ -23,23 +26,17 @@ export interface CameraPreviewBackingSize {
 }
 
 /**
- * All iOS browsers use WebKit. The live camera used to combine a hardware video
- * layer, CSS filter, transform and mix-blend-mode overlays. On iOS that stack can
- * be promoted into a broken compositor surface (the giant grey/black ellipse
- * seen over Story/Reel). The capture path already renders the exact same lenses
- * and zoom safely through Canvas2D, so iOS reuses that path whenever a filtered
- * preview or an in-progress pinch gesture would otherwise transform the hardware
- * video surface every frame.
+ * The processed preview is capability-gated instead of OS/UA-gated. Camera
+ * compositor bugs are not unique to one browser family: any hardware-backed
+ * video surface can become unstable when filters, transforms, rounded clipping
+ * and a moving pinch gesture are combined. Canvas2D gives Story/Reel one stable
+ * preview path across Safari, Chromium, Firefox and embedded WebViews.
  */
-export function shouldUseIosCameraCanvasPreview(
-  userAgent: string,
-  platform: string,
-  maxTouchPoints: number,
+export function cameraPreviewCapabilitiesSupported(
+  canvas2dAvailable: boolean,
+  animationFrameAvailable: boolean,
 ): boolean {
-  const webkit = /AppleWebKit/i.test(userAgent);
-  const iosDevice = /iPad|iPhone|iPod/i.test(userAgent);
-  const iPadDesktopUa = platform === 'MacIntel' && maxTouchPoints > 1;
-  return webkit && (iosDevice || iPadDesktopUa);
+  return canvas2dAvailable && animationFrameAvailable;
 }
 
 export function cameraPreviewBackingSize(
@@ -62,8 +59,8 @@ export function cameraPreviewBackingSize(
     height = Math.max(2, Math.round(height * scale));
   }
 
-  // Video encoders and a few older WebKit canvas paths behave better with even
-  // backing dimensions. The live preview does not need full device DPR quality.
+  // Video encoders and a few older canvas paths behave better with even backing
+  // dimensions. The live preview does not need full device DPR quality.
   width = Math.max(2, Math.round(width / 2) * 2);
   height = Math.max(2, Math.round(height / 2) * 2);
   return { width, height };
@@ -86,14 +83,12 @@ export function cameraLensFromRecorder(root: ParentNode): CameraLens {
 export function cameraPreviewNeedsCanvas(
   lens: CameraLens,
   zoomGestureActive = false,
+  zoom = 1,
 ): boolean {
-  return zoomGestureActive || Boolean(lens.style || lens.overlays?.length);
-}
-
-function recorderNeedsProcessedPreview(root: HTMLElement, lens: CameraLens): boolean {
-  return cameraPreviewNeedsCanvas(
-    lens,
-    root.dataset.cameraZoomGesture === 'active',
+  return (
+    zoomGestureActive ||
+    Math.abs(zoom - 1) > 0.001 ||
+    Boolean(lens.style || lens.overlays?.length)
   );
 }
 
@@ -103,10 +98,18 @@ function currentZoom(root: HTMLElement): number {
   return Math.min(5, Math.max(1, parsed));
 }
 
+function recorderNeedsProcessedPreview(root: HTMLElement, lens: CameraLens): boolean {
+  return cameraPreviewNeedsCanvas(
+    lens,
+    root.dataset.cameraZoomGesture === 'active',
+    currentZoom(root),
+  );
+}
+
 function sourceIsMirrored(video: HTMLVideoElement): boolean {
   // useCameraCapture owns mirror + zoom through an inline scale transform. The
-  // iOS safety stylesheet can neutralize the effective transform while Canvas2D
-  // owns output; the inline value is intentionally still readable here.
+  // safety stylesheet neutralizes the effective transform while Canvas2D owns
+  // output; the inline value is intentionally still readable here.
   const inline = video.style.transform;
   if (/scale\(\s*-/i.test(inline) || /scaleX\(\s*-/i.test(inline)) return true;
   return video.classList.contains('scale-x-[-1]');
@@ -129,7 +132,7 @@ function ensurePreviewCanvas(viewport: HTMLElement): HTMLCanvasElement {
     height: '100%',
     display: 'none',
     pointerEvents: 'none',
-    borderRadius: 'inherit',
+    borderRadius: '0',
     background: '#000',
   });
   viewport.appendChild(canvas);
@@ -218,7 +221,9 @@ function createPreviewController(root: HTMLElement): PreviewController | null {
     if (running) return;
     running = true;
     root.setAttribute(ACTIVE_ATTRIBUTE, 'active');
-    animationFrame = window.requestAnimationFrame(draw);
+    // Prime synchronously so the source video can be hidden in the same event
+    // turn that starts a pinch; this avoids one compositor frame leaking through.
+    draw(performance.now());
   };
 
   const reconnectSource = () => {
@@ -268,17 +273,23 @@ export function installIosCameraCanvasPreview(): () => void {
     return () => undefined;
   }
 
+  const capabilityProbe = document.createElement('canvas');
+  let hasCanvas2d = false;
+  try {
+    hasCanvas2d = Boolean(capabilityProbe.getContext('2d'));
+  } catch {
+    hasCanvas2d = false;
+  }
   if (
-    !shouldUseIosCameraCanvasPreview(
-      navigator.userAgent,
-      navigator.platform,
-      navigator.maxTouchPoints || 0,
+    !cameraPreviewCapabilitiesSupported(
+      hasCanvas2d,
+      typeof window.requestAnimationFrame === 'function',
     )
   ) {
     return () => undefined;
   }
 
-  document.documentElement.classList.add(HTML_COMPAT_CLASS);
+  document.documentElement.classList.add(HTML_COMPAT_CLASS, LEGACY_HTML_COMPAT_CLASS);
   const controllers = new Map<HTMLElement, PreviewController>();
   const pointerTouches = new Map<number, HTMLElement | null>();
   let scanFrame = 0;
@@ -375,7 +386,12 @@ export function installIosCameraCanvasPreview(): () => void {
     childList: true,
     subtree: true,
     attributes: true,
-    attributeFilter: ['aria-pressed', 'data-camera-state', ZOOM_GESTURE_ATTRIBUTE],
+    attributeFilter: [
+      'aria-pressed',
+      'data-camera-state',
+      'data-camera-zoom',
+      ZOOM_GESTURE_ATTRIBUTE,
+    ],
   });
   scheduleScan();
 
@@ -422,6 +438,6 @@ export function installIosCameraCanvasPreview(): () => void {
     document.removeEventListener('gestureend', onNativeGestureEnd as EventListener, true);
     window.removeEventListener('resize', onResize);
     window.visualViewport?.removeEventListener('resize', onResize);
-    document.documentElement.classList.remove(HTML_COMPAT_CLASS);
+    document.documentElement.classList.remove(HTML_COMPAT_CLASS, LEGACY_HTML_COMPAT_CLASS);
   };
 }
