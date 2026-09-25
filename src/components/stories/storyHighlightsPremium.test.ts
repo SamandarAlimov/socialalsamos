@@ -7,7 +7,7 @@ function source(path: string) {
 }
 
 describe('premium story highlights', () => {
-  it('creates and edits highlights with story or device cover selection', () => {
+  it('creates highlights with story or device cover selection', () => {
     const composer = source('components/stories/StoryHighlightComposerDialog.tsx');
     const highlights = source('components/stories/StoryHighlights.tsx');
 
@@ -24,13 +24,44 @@ describe('premium story highlights', () => {
     expect(composer).toContain('selectedStories.map((story) => ({');
     expect(composer).toContain('removeExistingCover');
     expect(composer).not.toContain('editPremiumDescription');
-    expect(composer).not.toContain('Nomi va muqovasini storydan yoki qurilmadan istalgan payt yangilang.');
 
     expect(highlights).toContain('StoryHighlightComposerDialog');
-    expect(highlights).toContain('from-amber-300 via-fuchsia-500 to-violet-600');
+    expect(highlights).toContain('StoryHighlightEditDialog');
+    expect(highlights).toContain('StoryHighlightActions');
     expect(highlights).toContain('<HighlightCover highlight={highlight} />');
     expect(highlights).toContain('resolveCoverItem');
-    expect(highlights).toContain("mediaType === 'video'");
+  });
+
+  it('edits highlight name, cover and story membership with selected/stories tabs', () => {
+    const editor = source('components/stories/StoryHighlightEditDialog.tsx');
+    const hook = source('hooks/useStoryHighlights.ts');
+
+    expect(editor).toContain('Tanlanganni tahrirlash');
+    expect(editor).toContain('Bekor qilish');
+    expect(editor).toContain('Tayyor');
+    expect(editor).toContain('Qurilmadan muqova');
+    expect(editor).toContain("setTab('selected')");
+    expect(editor).toContain("setTab('stories')");
+    expect(editor).toContain('Tanlangan');
+    expect(editor).toContain('Storylar');
+    expect(editor).toContain('syncHighlightItems');
+    expect(editor).toContain('selectedStories.map((story) => ({');
+    expect(hook).toContain('const syncHighlightItems = useCallback');
+    expect(hook).toContain("{ onConflict: 'highlight_id,story_id' }");
+  });
+
+  it('shares highlights through action sheet, copy link and QR code', () => {
+    const actions = source('components/stories/StoryHighlightActions.tsx');
+    const highlights = source('components/stories/StoryHighlights.tsx');
+
+    expect(actions).toContain('Tanlanganni tahrirlash');
+    expect(actions).toContain('Jo‘natish');
+    expect(actions).toContain('Tanlangan havolasini nusxalash');
+    expect(actions).toContain('QR kod');
+    expect(actions).toContain('QRCodeCanvas');
+    expect(actions).toContain('Qurilmaga saqlash');
+    expect(actions).toContain('?highlight=');
+    expect(highlights).toContain("searchParams.get('highlight')");
   });
 
   it('keeps all owner stories visible in archive and exposes direct add-to-highlight actions', () => {
