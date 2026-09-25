@@ -33,14 +33,19 @@ interface StoryHighlightsProps {
 
 const NAME_TOKEN = '{' + '{name}' + '}';
 
-function HighlightCover({
-  highlight,
-}: {
-  highlight: StoryHighlight;
-}) {
-  const fallbackItem: StoryHighlightItem | undefined = highlight.items?.[0];
+function resolveCoverItem(highlight: StoryHighlight): StoryHighlightItem | undefined {
+  if (highlight.cover_url) {
+    const matched = highlight.items?.find((item) => item.media_url === highlight.cover_url);
+    if (matched) return matched;
+  }
+  return highlight.items?.[0];
+}
+
+function HighlightCover({ highlight }: { highlight: StoryHighlight }) {
+  const fallbackItem = highlight.items?.[0];
+  const coverItem = resolveCoverItem(highlight);
   const url = highlight.cover_url || fallbackItem?.media_url || null;
-  const mediaType = highlight.cover_url ? 'image' : fallbackItem?.media_type || null;
+  const mediaType = coverItem?.media_type || (highlight.cover_url ? 'image' : fallbackItem?.media_type) || null;
 
   if (url && mediaType === 'video') {
     return (
@@ -305,11 +310,13 @@ export function StoryHighlights({ userId, className }: StoryHighlightsProps) {
             user_id: userId,
             username: null,
             display_name: selectedHighlight.name,
-            avatar_url:
-              selectedHighlight.cover_url ||
-              (selectedHighlight.items[0]?.media_type === 'video'
-                ? null
-                : selectedHighlight.items[0]?.media_url || null),
+            avatar_url: (() => {
+              const coverItem = resolveCoverItem(selectedHighlight);
+              if (selectedHighlight.cover_url && coverItem?.media_type !== 'video') {
+                return selectedHighlight.cover_url;
+              }
+              return selectedHighlight.items.find((item) => item.media_type !== 'video')?.media_url || null;
+            })(),
             is_verified: false,
             stories: selectedHighlight.items.map((item) => ({
               id: item.story_id,
