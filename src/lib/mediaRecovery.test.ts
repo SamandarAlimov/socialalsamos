@@ -4,6 +4,7 @@ import {
   mergeMediaCandidateGroups,
   uniqueMediaCandidates,
 } from './mediaRecovery';
+import { getMediaCarouselSwipeTarget } from './mediaSwipeNavigation';
 
 describe('inferStoredMediaKind', () => {
   it('repairs a legacy video row that was backfilled as image', () => {
@@ -114,5 +115,19 @@ describe('legacy media candidate preservation', () => {
         urls: ['https://legacy.example.com/1.mp4'],
       },
     ]);
+  });
+});
+
+describe('post media swipe handoff', () => {
+  it('keeps in-carousel swipes inside the media collection', () => {
+    expect(getMediaCarouselSwipeTarget(0, 3, -80)).toBe(1);
+    expect(getMediaCarouselSwipeTarget(1, 3, 80)).toBe(0);
+    expect(getMediaCarouselSwipeTarget(1, 3, -80)).toBe(2);
+  });
+
+  it('hands boundary swipes to Home page navigation', () => {
+    expect(getMediaCarouselSwipeTarget(0, 3, 80)).toBeNull();
+    expect(getMediaCarouselSwipeTarget(2, 3, -80)).toBeNull();
+    expect(getMediaCarouselSwipeTarget(0, 1, 80)).toBeNull();
   });
 });
