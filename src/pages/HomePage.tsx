@@ -89,7 +89,7 @@ export default function HomePage() {
   } = useHomeRecommendations(posts);
 
   const { storyGroups, isLoading: storiesLoading, refresh: refreshStories } = useStories();
-  const { markAsViewed, hasViewedAll, hasUnviewed } = useStoryViews();
+  const { markAsViewed, hasViewedAll } = useStoryViews();
   const { liveStreams } = useLiveStreams();
   
   // Feed ads
@@ -191,7 +191,8 @@ export default function HomePage() {
 
   const openStory = (group: StoryGroup) => {
     setActiveStoryGroup(group);
-    markAsViewed(group.stories[0]?.id);
+    const firstStoryId = group.stories[0]?.id;
+    if (firstStoryId) void markAsViewed(firstStoryId);
   };
 
   const closeStory = () => {
@@ -276,7 +277,11 @@ export default function HomePage() {
             <div className="relative">
               <div className={cn(
                 "p-0.5 rounded-full",
-                userStoryGroup ? "bg-gradient-to-tr from-alsamos-orange-light to-alsamos-orange-dark" : "bg-background"
+                userStoryGroup
+                  ? !hasViewedAll(userStoryGroup.all_story_ids)
+                    ? "bg-gradient-to-tr from-alsamos-orange-light to-alsamos-orange-dark"
+                    : "bg-muted-foreground/30"
+                  : "bg-background"
               )}>
                 <div className="bg-background p-0.5 rounded-full">
                   <Avatar className="h-14 w-14 md:h-16 md:w-16">
@@ -322,7 +327,7 @@ export default function HomePage() {
                   "relative p-0.5 rounded-full",
                   !hasViewedAll(group.all_story_ids)
                     ? "bg-gradient-to-tr from-alsamos-orange-light to-alsamos-orange-dark" 
-                    : "bg-muted"
+                    : "bg-muted-foreground/30"
                 )}>
                   <div className="bg-background p-0.5 rounded-full">
                     <Avatar className="h-14 w-14 md:h-16 md:w-16">
