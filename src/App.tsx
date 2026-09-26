@@ -8,6 +8,7 @@ import { GlobalCallProvider } from "@/contexts/GlobalCallContext";
 import { OnlinePresenceProvider } from "@/contexts/OnlinePresenceContext";
 import { AudioPlayerProvider } from "@/contexts/AudioPlayerContext";
 import { VideoPlayerProvider } from "@/contexts/VideoPlayerContext";
+import { ConversationCacheProvider } from "@/contexts/ConversationCacheContext";
 import { ThemeProvider } from "next-themes";
 import { PushNotificationProvider } from "@/components/PushNotificationProvider";
 import { ChatWallpaperProvider } from "@/components/chat/ChatWallpaperProvider";
@@ -255,13 +256,15 @@ function AppWithGlobalCall() {
       {isAuthenticated ? (
         <PushNotificationProvider>
           <OnlinePresenceProvider>
-            <GlobalCallProvider>
-              <ChatAccentProvider />
-              <ChatWallpaperProvider />
-              <AppRoutes />
-              <VideoHideMenu />
-              <MarketplaceDeliveryLocationDock />
-            </GlobalCallProvider>
+            <ConversationCacheProvider>
+              <GlobalCallProvider>
+                <ChatAccentProvider />
+                <ChatWallpaperProvider />
+                <AppRoutes />
+                <VideoHideMenu />
+                <MarketplaceDeliveryLocationDock />
+              </GlobalCallProvider>
+            </ConversationCacheProvider>
           </OnlinePresenceProvider>
         </PushNotificationProvider>
       ) : (
