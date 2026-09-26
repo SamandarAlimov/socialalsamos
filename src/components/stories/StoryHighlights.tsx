@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { MoreHorizontal, Plus, Sparkles } from 'lucide-react';
+import { Plus, Sparkles } from 'lucide-react';
 
 import { EmojiText } from '@/components/emoji/EmojiText';
 import { StoryHighlightActions } from '@/components/stories/StoryHighlightActions';
@@ -30,6 +30,8 @@ interface StoryHighlightsProps {
 }
 
 const NAME_TOKEN = '{' + '{name}' + '}';
+const HIGHLIGHT_LONG_PRESS_MS = 480;
+const HIGHLIGHT_LONG_PRESS_MOVE_TOLERANCE = 12;
 
 function resolveCoverItem(highlight: StoryHighlight): StoryHighlightItem | undefined {
   if (highlight.cover_url) {
@@ -86,6 +88,9 @@ export function StoryHighlights({ userId, className }: StoryHighlightsProps) {
   const [deletingHighlight, setDeletingHighlight] = useState<StoryHighlight | null>(null);
   const [actionHighlight, setActionHighlight] = useState<StoryHighlight | null>(null);
   const [selectedHighlight, setSelectedHighlight] = useState<StoryHighlight | null>(null);
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressPointerRef = useRef<{ pointerId: number; x: number; y: number } | null>(null);
+  const suppressHighlightClickRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -108,6 +113,52 @@ export function StoryHighlights({ userId, className }: StoryHighlightsProps) {
     const sharedHighlight = highlights.find((highlight) => highlight.id === sharedHighlightId);
     if (sharedHighlight?.items?.length) setSelectedHighlight(sharedHighlight);
   }, [highlights, searchParams, selectedHighlight]);
+
+  useEffect(() => () => {
+    if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+  }, []);
+
+  const clearHighlightLongPress = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+    longPressPointerRef.current = null;
+  };
+
+  const handleHighlightPointerDown = (
+    event: ReactPointerEvent<HTMLButtonElement>,
+    highlight: StoryHighlight,
+  ) => {
+    if (!isOwnProfile || event.button !== 0) return;
+
+    clearHighlightLongPress();
+    suppressHighlightClickRef.current = false;
+    longPressPointerRef.current = {
+      pointerId: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+    };
+
+    longPressTimerRef.current = setTimeout(() => {
+      suppressHighlightClickRef.current = true;
+      longPressTimerRef.current = null;
+      longPressPointerRef.current = null;
+      setActionHighlight(highlight);
+    }, HIGHLIGHT_LONG_PRESS_MS);
+  };
+
+  const handleHighlightPointerMove = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    const start = longPressPointerRef.current;
+    if (!start || start.pointerId !== event.pointerId) return;
+
+    const distance = Math.hypot(event.clientX - start.x, event.clientY - start.y);
+    if (distance > HIGHLIGHT_LONG_PRESS_MOVE_TOLERANCE) clearHighlightLongPress();
+  };
+
+  const handleHighlightPointerEnd = () => {
+    clearHighlightLongPress();
+  };
 
   const handleDeleteHighlight = async () => {
     if (!deletingHighlight) return;
@@ -196,8 +247,24 @@ export function StoryHighlights({ userId, className }: StoryHighlightsProps) {
               <div key={highlight.id} className="group relative flex flex-shrink-0 flex-col items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => openHighlightViewer(highlight)}
-                  className="relative rounded-full bg-gradient-to-tr from-amber-300 via-fuchsia-500 to-violet-600 p-[2px] shadow-sm transition-transform active:scale-[0.97]"
+                  onPointerDown={(event) => handleHighlightPointerDown(event, highlight)}
+                  onPointerMove={handleHighlightPointerMove}
+                  onPointerUp={handleHighlightPointerEnd}
+                  onPointerCancel={handleHighlightPointerEnd}
+                  onPointerLeave={handleHighlightPointerEnd}
+                  onContextMenu={(event) => {
+                    if (isOwnProfile) event.preventDefault();
+                  }}
+                  onClick={(event) => {
+                    if (suppressHighlightClickRef.current) {
+                      event.preventDefault();
+                      suppressHighlightClickRef.current = false;
+                      return;
+                    }
+                    openHighlightViewer(highlight);
+                  }}
+                  className="relative select-none rounded-full bg-gradient-to-tr from-amber-300 via-fuchsia-500 to-violet-600 p-[2px] shadow-sm transition-transform active:scale-[0.97]"
+                  style={{ WebkitUserSelect: 'none', userSelect: 'none' }}
                   aria-label={highlight.name}
                 >
                   <span className="block h-[72px] w-[72px] overflow-hidden rounded-full border-[3px] border-background bg-muted">
@@ -208,17 +275,6 @@ export function StoryHighlights({ userId, className }: StoryHighlightsProps) {
                 <span className="flex max-w-[78px] items-center overflow-hidden whitespace-nowrap text-xs font-medium text-foreground">
                   <EmojiText text={highlight.name} size={13} className="truncate" />
                 </span>
-
-                {isOwnProfile ? (
-                  <button
-                    type="button"
-                    className="absolute -right-1 -top-1 flex h-6 w-6 items-center justify-center rounded-full border border-border/70 bg-background/95 text-muted-foreground shadow-sm backdrop-blur transition hover:text-foreground"
-                    aria-label={t('common.more', { defaultValue: "Ko'proq" })}
-                    onClick={() => setActionHighlight(highlight)}
-                  >
-                    <MoreHorizontal className="h-3.5 w-3.5" />
-                  </button>
-                ) : null}
               </div>
             ))}
           </div>
