@@ -27,7 +27,10 @@ i18n
     supportedLngs: ['uz', 'en', 'ru'],
     interpolation: { escapeValue: false },
     detection: {
-      order: ['localStorage', 'navigator'],
+      // Alsamos defaults to Uzbek. Browser locale must not silently switch only
+      // some translated surfaces to English/Russian while the rest of the app
+      // still appears Uzbek. Explicit user choice remains persisted here.
+      order: ['localStorage'],
       caches: ['localStorage'],
       lookupLocalStorage: 'alsamos-language',
     },
