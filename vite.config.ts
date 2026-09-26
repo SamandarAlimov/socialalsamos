@@ -16,8 +16,15 @@ export default defineConfig(({ mode }) => ({
     mcpPlugin(),
   ].filter(Boolean),
   resolve: {
-    alias: {
-      "@": path.resolve(__dirname, "./src"),
-    },
+    alias: [
+      {
+        find: "@/hooks/useMessages",
+        replacement: path.resolve(__dirname, "./src/hooks/useMessagesCached.ts"),
+      },
+      {
+        find: "@",
+        replacement: path.resolve(__dirname, "./src"),
+      },
+    ],
   },
 }));
