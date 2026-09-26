@@ -12,7 +12,6 @@ import { OnlineIndicator } from '@/components/OnlineIndicator';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   ArrowLeft,
   ArrowRight,
@@ -252,15 +251,13 @@ export function CreateChatDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         hideDefaultClose
-        overlayClassName="bg-black/55 backdrop-blur-[3px]"
+        overlayClassName="bg-black/45 backdrop-blur-[2px]"
         className={cn(
-          'bottom-0 left-0 right-0 top-auto max-h-[88dvh] w-full max-w-none translate-x-0 translate-y-0 gap-0 overflow-hidden rounded-t-[30px] border-x-0 border-b-0 border-t border-border/60 bg-background/95 p-0 shadow-[0_-28px_90px_rgba(0,0,0,0.24)] backdrop-blur-2xl',
-          'sm:bottom-auto sm:left-1/2 sm:right-auto sm:top-1/2 sm:max-h-[min(82vh,760px)] sm:w-[min(92vw,520px)] sm:max-w-[520px] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-[30px] sm:border',
+          'left-1/2 top-1/2 flex h-[min(86dvh,720px)] min-h-0 w-[calc(100vw-24px)] max-w-[520px] -translate-x-1/2 -translate-y-1/2 flex-col gap-0 overflow-hidden rounded-[28px] border border-border/65 bg-background/97 p-0 shadow-[0_28px_80px_rgba(0,0,0,0.32)] backdrop-blur-2xl',
+          'sm:h-[min(82vh,760px)] sm:w-[min(92vw,520px)] sm:rounded-[30px]',
         )}
       >
-        <div className="mx-auto mt-2 h-1.5 w-11 rounded-full bg-muted-foreground/20 sm:hidden" />
-
-        <DialogHeader className="space-y-0 border-b border-border/50 px-5 pb-4 pt-3 text-left sm:px-6 sm:pb-5 sm:pt-6">
+        <DialogHeader className="shrink-0 space-y-0 border-b border-border/50 bg-background/92 px-5 pb-4 pt-5 text-left backdrop-blur-xl sm:px-6 sm:pb-5 sm:pt-6">
           <div className="flex items-start gap-3">
             {step !== 'select-type' && (
               <button
@@ -300,7 +297,7 @@ export function CreateChatDialog({
         </DialogHeader>
 
         {step === 'select-type' && (
-          <div className="space-y-2.5 overflow-y-auto px-4 py-4 sm:px-5 sm:py-5">
+          <div className="min-h-0 flex-1 space-y-2.5 overflow-y-auto overscroll-contain px-4 py-4 touch-pan-y sm:px-5 sm:py-5">
             {chatTypes.map((type) => (
               <button
                 key={type.id}
@@ -338,8 +335,8 @@ export function CreateChatDialog({
         )}
 
         {step === 'select-users' && (
-          <div className="flex min-h-0 flex-1 flex-col">
-            <div className="px-4 pb-3 pt-4 sm:px-5">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <div className="shrink-0 px-4 pb-3 pt-4 sm:px-5">
               <div className="relative">
                 <Search className="pointer-events-none absolute left-4 top-1/2 h-4.5 w-4.5 -translate-y-1/2 text-muted-foreground" />
                 <Input
@@ -363,7 +360,7 @@ export function CreateChatDialog({
             </div>
 
             {chatType === 'secret' && (
-              <div className="mx-4 mb-3 flex items-start gap-2.5 rounded-2xl border border-emerald-500/15 bg-emerald-500/8 px-3.5 py-3 text-emerald-700 dark:text-emerald-300 sm:mx-5">
+              <div className="mx-4 mb-3 flex shrink-0 items-start gap-2.5 rounded-2xl border border-emerald-500/15 bg-emerald-500/8 px-3.5 py-3 text-emerald-700 dark:text-emerald-300 sm:mx-5">
                 <LockKeyhole className="mt-0.5 h-4 w-4 shrink-0" />
                 <p className="text-[12px] leading-[18px]">
                   {t('messages.createChat.secretDeviceNotice')}
@@ -372,7 +369,7 @@ export function CreateChatDialog({
             )}
 
             {chatType === 'group' && selectedUsers.length > 0 && (
-              <div className="flex gap-2 overflow-x-auto px-4 pb-3 scrollbar-hidden sm:px-5">
+              <div className="flex shrink-0 gap-2 overflow-x-auto px-4 pb-3 scrollbar-hidden sm:px-5">
                 {selectedUsers.map((userId) => {
                   const selectedUser = users.find((item) => item.id === userId);
                   return (
@@ -403,7 +400,10 @@ export function CreateChatDialog({
               </div>
             )}
 
-            <ScrollArea className="min-h-0 flex-1 px-2 sm:px-3">
+            <div
+              className="min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain px-2 sm:px-3"
+              style={{ WebkitOverflowScrolling: 'touch' }}
+            >
               <div className="pb-3">
                 {loading ? (
                   <div className="flex h-44 flex-col items-center justify-center gap-3 text-muted-foreground">
@@ -469,10 +469,10 @@ export function CreateChatDialog({
                   </div>
                 )}
               </div>
-            </ScrollArea>
+            </div>
 
             {chatType === 'group' && (
-              <div className="border-t border-border/50 bg-background/90 px-4 pb-[max(16px,env(safe-area-inset-bottom))] pt-3 backdrop-blur-xl sm:px-5 sm:pb-5">
+              <div className="shrink-0 border-t border-border/50 bg-background/90 px-4 pb-[max(16px,env(safe-area-inset-bottom))] pt-3 backdrop-blur-xl sm:px-5 sm:pb-5">
                 <Button
                   type="button"
                   onClick={handleNext}
@@ -488,7 +488,7 @@ export function CreateChatDialog({
         )}
 
         {step === 'group-details' && (
-          <div className="space-y-5 overflow-y-auto px-4 pb-[max(18px,env(safe-area-inset-bottom))] pt-5 sm:px-6 sm:pb-6">
+          <div className="min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain px-4 pb-[max(18px,env(safe-area-inset-bottom))] pt-5 touch-pan-y sm:px-6 sm:pb-6">
             <div className="flex justify-center">
               <div
                 className={cn(
