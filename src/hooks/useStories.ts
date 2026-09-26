@@ -89,6 +89,24 @@ export function useStories() {
     setIsLoading(true);
 
     try {
+      let allowedAuthorIds: Set<string> | null = null;
+
+      if (user?.id) {
+        const { data: followingRows, error: followingError } = await supabase
+          .from('follows')
+          .select('following_id')
+          .eq('follower_id', user.id);
+
+        if (followingError) {
+          console.error('Error fetching followed users for stories:', followingError);
+        }
+
+        allowedAuthorIds = new Set<string>([user.id]);
+        for (const row of followingRows || []) {
+          if (row.following_id) allowedAuthorIds.add(String(row.following_id));
+        }
+      }
+
       const { data, error } = await supabase
         .from('stories')
         .select(`
@@ -107,8 +125,14 @@ export function useStories() {
 
       if (error) throw error;
 
+      const followedStories = allowedAuthorIds
+        ? (data || []).filter((story: any) =>
+            allowedAuthorIds?.has(String(story.user_id)),
+          )
+        : data || [];
+
       const resolvedStories = await Promise.all(
-        (data || []).map(async (story: any) => {
+        followedStories.map(async (story: any) => {
           try {
             const mediaUrl = await resolveStorageUrl(
               String(story.media_url ?? ''),
@@ -164,7 +188,9 @@ export function useStories() {
         }
       });
 
-      // Current user's stories always stay first in the Home rail.
+      // Home Story rail is relationship-first: own stories, then followed users.
+      // The story query is already ordered newest-first, so followed groups keep
+      // recency ordering while unrelated public accounts stay out of the rail.
       const groups = Array.from(groupsMap.values());
       if (user) {
         const userIndex = groups.findIndex((group) => group.user_id === user.id);
@@ -180,7 +206,7 @@ export function useStories() {
     } finally {
       setIsLoading(false);
     }
-  }, [user]);
+  }, [user?.id]);
 
   /**
    * Programmatic compatibility API. The visible Create UI uses StoryComposer,
@@ -322,10 +348,29 @@ export function useStories() {
       )
       .subscribe();
 
+    const followsChannel = user?.id
+      ? supabase
+          .channel(`story-follows-${user.id}`)
+          .on(
+            'postgres_changes',
+            {
+              event: '*',
+              schema: 'public',
+              table: 'follows',
+              filter: `follower_id=eq.${user.id}`,
+            },
+            () => {
+              void fetchStories();
+            },
+          )
+          .subscribe()
+      : null;
+
     return () => {
       supabase.removeChannel(storiesChannel);
+      if (followsChannel) supabase.removeChannel(followsChannel);
     };
-  }, [fetchStories]);
+  }, [fetchStories, user?.id]);
 
   return {
     storyGroups,
