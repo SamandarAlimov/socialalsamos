@@ -12,11 +12,12 @@ import { LocationPermissionDialog } from '@/components/LocationPermissionDialog'
 import { VideoAdsSurface } from '@/components/ads/VideoAdsSurface';
 import { cn } from '@/lib/utils';
 import { resumeMyLiveLocationSharing } from '@/lib/liveLocationSharing';
+import { bootstrapE2EEDevice } from '@/lib/secretChatCrypto';
 import { getMobileChromeMode } from '@/lib/mobileRouteChrome';
 import { UI_LAYER } from '@/lib/uiLayers';
 
 export function AppLayout() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, user } = useAuth();
   const location = useLocation();
   const { startSession, trackPageChange } = useActivityTracking();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -38,6 +39,14 @@ export function AppLayout() {
   useEffect(() => {
     if (isAuthenticated) void resumeMyLiveLocationSharing();
   }, [isAuthenticated]);
+
+  // Every signed-in browser owns a device-local, non-exportable ECDH private
+  // key in IndexedDB. Only the matching public key is registered in Supabase.
+  // This makes a user eligible to receive a device-bound Secret Chat without
+  // weakening normal app startup when WebCrypto/IndexedDB is unavailable.
+  useEffect(() => {
+    if (isAuthenticated && user?.id) void bootstrapE2EEDevice(user.id);
+  }, [isAuthenticated, user?.id]);
 
   // The authenticated shell has exactly one vertical scroll owner: <main>.
   // Desktop browsers can expose document scrolling after keyboard focus/scroll
