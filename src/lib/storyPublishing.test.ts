@@ -90,6 +90,18 @@ describe('unified Story publishing contract', () => {
     expect((viewer.match(/isInteractiveTarget\(event\.target\)/g) || []).length).toBeGreaterThanOrEqual(2);
   });
 
+  it('keeps the Home Story rail scoped to the current user and followed users', () => {
+    const storiesHook = source('src/hooks/useStories.ts');
+
+    expect(storiesHook).toContain(".from('follows')");
+    expect(storiesHook).toContain(".select('following_id')");
+    expect(storiesHook).toContain(".eq('follower_id', user.id)");
+    expect(storiesHook).toContain('allowedAuthorIds = new Set<string>([user.id])');
+    expect(storiesHook).toContain('allowedAuthorIds?.has(String(story.user_id))');
+    expect(storiesHook).toContain("table: 'follows'");
+    expect(storiesHook).toContain('filter: `follower_id=eq.${user.id}`');
+  });
+
   it('keeps the add-to-highlight dialog concise', () => {
     const dialog = source('src/components/stories/AddToHighlightDialog.tsx');
 
