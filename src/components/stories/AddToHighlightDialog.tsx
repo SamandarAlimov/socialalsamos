@@ -5,7 +5,6 @@ import { Button } from '@/components/ui/button';
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -187,9 +186,6 @@ export function AddToHighlightDialog({ open, onOpenChange, story }: AddToHighlig
                 <DialogTitle className="text-xl font-semibold tracking-[-0.025em]">
                   Tanlanganlarga qo‘shish
                 </DialogTitle>
-                <DialogDescription className="mt-0.5 text-xs leading-relaxed sm:text-sm">
-                  Storini mavjud Tanlanganga qo‘shing yoki yangisini yarating.
-                </DialogDescription>
               </div>
             </div>
           </DialogHeader>

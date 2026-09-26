@@ -89,4 +89,12 @@ describe('unified Story publishing contract', () => {
     expect(viewer).toContain('resetPointerGesture();');
     expect((viewer.match(/isInteractiveTarget\(event\.target\)/g) || []).length).toBeGreaterThanOrEqual(2);
   });
+
+  it('keeps the add-to-highlight dialog concise', () => {
+    const dialog = source('src/components/stories/AddToHighlightDialog.tsx');
+
+    expect(dialog).toContain('Tanlanganlarga qo‘shish');
+    expect(dialog).not.toContain('Storini mavjud Tanlanganga qo‘shing yoki yangisini yarating.');
+    expect(dialog).not.toContain('DialogDescription');
+  });
 });
