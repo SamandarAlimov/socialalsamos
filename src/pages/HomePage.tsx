@@ -263,45 +263,55 @@ export default function HomePage() {
       {/* Stories Section - Mobile optimized */}
       <div className="mb-4 px-3 md:mb-6 md:px-0">
         <div className="flex gap-3 md:gap-4 overflow-x-auto pb-3 md:pb-4 scrollbar-hidden">
-          {/* Your Story Button */}
-          <button 
-            onClick={() => {
-              if (userStoryGroup) {
-                openStory(userStoryGroup);
-              } else {
-                navigate('/create?mode=story');
-              }
-            }}
-            className="flex flex-col items-center gap-1.5 md:gap-2 flex-shrink-0 touch-feedback"
-          >
+          {/* Your Story: avatar opens playback, plus always starts another Story. */}
+          <div className="flex flex-shrink-0 flex-col items-center gap-1.5 md:gap-2">
             <div className="relative">
-              <div className={cn(
-                "p-0.5 rounded-full",
-                userStoryGroup
-                  ? !hasViewedAll(userStoryGroup.all_story_ids)
-                    ? "bg-gradient-to-tr from-alsamos-orange-light to-alsamos-orange-dark"
-                    : "bg-muted-foreground/30"
-                  : "bg-background"
-              )}>
-                <div className="bg-background p-0.5 rounded-full">
-                  <Avatar className="h-14 w-14 md:h-16 md:w-16">
-                    <AvatarImage src={profile?.avatar_url || ''} />
-                    <AvatarFallback className="bg-muted text-sm">
-                      {profile?.display_name?.[0] || user?.email?.[0]?.toUpperCase() || 'U'}
-                    </AvatarFallback>
-                  </Avatar>
+              <button
+                type="button"
+                onClick={() => {
+                  if (userStoryGroup) {
+                    openStory(userStoryGroup);
+                  } else {
+                    navigate('/create?mode=story');
+                  }
+                }}
+                aria-label={userStoryGroup ? 'Storini ko‘rish' : 'Story qo‘shish'}
+                className="block rounded-full touch-feedback"
+              >
+                <div className={cn(
+                  "p-0.5 rounded-full",
+                  userStoryGroup
+                    ? !hasViewedAll(userStoryGroup.all_story_ids)
+                      ? "bg-gradient-to-tr from-alsamos-orange-light to-alsamos-orange-dark"
+                      : "bg-muted-foreground/30"
+                    : "bg-background"
+                )}>
+                  <div className="bg-background p-0.5 rounded-full">
+                    <Avatar className="h-14 w-14 md:h-16 md:w-16">
+                      <AvatarImage src={profile?.avatar_url || ''} />
+                      <AvatarFallback className="bg-muted text-sm">
+                        {profile?.display_name?.[0] || user?.email?.[0]?.toUpperCase() || 'U'}
+                      </AvatarFallback>
+                    </Avatar>
+                  </div>
                 </div>
-              </div>
-              {!userStoryGroup && (
-                <div className="absolute bottom-0 right-0 bg-primary rounded-full p-0.5 md:p-1 border-2 border-background">
-                  <Plus className="h-2.5 w-2.5 md:h-3 md:w-3 text-primary-foreground" />
-                </div>
-              )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => navigate('/create?mode=story')}
+                aria-label="Yangi story qo‘shish"
+                data-story-add-action="true"
+                className="absolute bottom-0 right-0 z-10 flex h-5 w-5 items-center justify-center rounded-full border-2 border-background bg-primary text-primary-foreground shadow-sm transition active:scale-95 md:h-6 md:w-6"
+              >
+                <Plus className="h-3 w-3 md:h-3.5 md:w-3.5" />
+              </button>
             </div>
-            <span className="text-[10px] md:text-xs text-muted-foreground truncate max-w-[56px] md:max-w-[64px]">
+
+            <span className="max-w-[56px] truncate text-[10px] text-muted-foreground md:max-w-[64px] md:text-xs">
               {userStoryGroup ? 'Your Story' : 'Add Story'}
             </span>
-          </button>
+          </div>
 
           {/* Live Streams */}
           {liveStreams.map((stream) => (
