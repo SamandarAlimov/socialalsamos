@@ -125,7 +125,7 @@ describe('unified Story publishing contract', () => {
     const dialog = source('src/components/stories/AddToHighlightDialog.tsx');
 
     expect(dialog).toContain('Tanlanganlarga qo‘shish');
-    expect(dialog).not.toContain('Storini mavjud Tanlanganga qo‘shing yoki yangisini yarating.');
+    expect(dialog).not.toContain('Storini mavjud Tanlanganga qo‘shhing yoki yangisini yarating.');
     expect(dialog).not.toContain('DialogDescription');
   });
 
@@ -137,5 +137,22 @@ describe('unified Story publishing contract', () => {
     expect(composePage).not.toContain('CameraVideoRecorder');
     expect(composePage).not.toContain('postCameraOpen');
     expect(composePage).not.toContain('handlePostCameraCapture');
+  });
+
+  it('makes Create -> Home swipe available across the full create surface', () => {
+    const composePage = source('src/pages/ComposePage.tsx');
+    const swipeHook = source('src/hooks/useSwipeNavigation.ts');
+
+    expect(composePage).toContain('interactiveTargetSelector: CREATE_SWIPE_BLOCK_SELECTOR');
+    expect(composePage).toContain('swipeThreshold: 42');
+    expect(composePage).toContain('swipeVelocityThreshold: 0.22');
+    expect(composePage).toContain('const swipeHandlersEnabled = isMobile && !currentModeLocked;');
+    expect(composePage).toContain('onTouchStart={swipeHandlersEnabled ? handleTouchStart : undefined}');
+    expect(composePage).toContain('onTouchEnd={swipeHandlersEnabled ? handleTouchEnd : undefined}');
+    expect(composePage).not.toContain('allowRightSwipe: true');
+    expect(swipeHook).toContain("'/create': '/home'");
+    expect(swipeHook).toContain('interactiveTargetSelector?: string;');
+    expect(swipeHook).toContain('swipeThreshold?: number;');
+    expect(swipeHook).toContain('swipeVelocityThreshold?: number;');
   });
 });
