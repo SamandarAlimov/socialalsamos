@@ -22,6 +22,13 @@ const MODES = [
   { id: 'live' as const, label: 'Live', icon: Radio },
 ];
 
+// Create has many ordinary buttons across the canvas. A deliberate horizontal
+// drag should still be able to return Home when it starts over those buttons.
+// Only controls that genuinely own a horizontal/text gesture keep the page
+// swipe blocked.
+const CREATE_SWIPE_BLOCK_SELECTOR =
+  'input, textarea, select, [role="slider"], [contenteditable="true"], [data-swipe-navigation="ignore"]';
+
 function modeFromParams(value: string | null): CreateMode {
   if (value === 'story' || value === 'reel' || value === 'live') return value;
   return 'post';
@@ -54,8 +61,13 @@ export default function ComposePage() {
     handleTouchCancel,
   } = useSwipeNavigation({
     ignoreInteractiveTargets: true,
+    interactiveTargetSelector: CREATE_SWIPE_BLOCK_SELECTOR,
     allowRightSwipe: false,
     allowLeftSwipe: true,
+    // The shared visual offset is damped to 50%, so 42px here is roughly an
+    // 84px finger drag. This keeps Create -> Home as easy as Home -> Create.
+    swipeThreshold: 42,
+    swipeVelocityThreshold: 0.22,
     trackSwipeOffset: false,
   });
 
@@ -223,6 +235,7 @@ export default function ComposePage() {
   };
 
   const immersiveMode = mode === 'story' || mode === 'reel';
+  const swipeHandlersEnabled = isMobile && !currentModeLocked;
 
   return (
     <div
@@ -231,6 +244,10 @@ export default function ComposePage() {
         immersiveMode && 'create-page--immersive',
       )}
       data-create-mode={mode}
+      onTouchStart={swipeHandlersEnabled ? handleTouchStart : undefined}
+      onTouchMove={swipeHandlersEnabled ? handleTouchMove : undefined}
+      onTouchEnd={swipeHandlersEnabled ? handleTouchEnd : undefined}
+      onTouchCancel={swipeHandlersEnabled ? handleTouchCancel : undefined}
     >
       <button
         type="button"
@@ -246,18 +263,6 @@ export default function ComposePage() {
       <main
         ref={composerMainRef}
         className="create-page-main relative min-h-0 flex-1 touch-pan-y overflow-x-hidden overflow-y-auto overscroll-x-none overscroll-y-contain [-webkit-overflow-scrolling:touch] lg:overflow-hidden"
-        onTouchStart={
-          isMobile && !currentModeLocked ? handleTouchStart : undefined
-        }
-        onTouchMove={
-          isMobile && !currentModeLocked ? handleTouchMove : undefined
-        }
-        onTouchEnd={
-          isMobile && !currentModeLocked ? handleTouchEnd : undefined
-        }
-        onTouchCancel={
-          isMobile && !currentModeLocked ? handleTouchCancel : undefined
-        }
       >
         <div
           className={cn(

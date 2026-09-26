@@ -4,6 +4,8 @@ import { resolveTouchAxis, type TouchAxis } from '@/lib/touchGesture';
 
 const SWIPE_THRESHOLD = 80;
 const SWIPE_VELOCITY_THRESHOLD = 0.3;
+const DEFAULT_INTERACTIVE_TARGET_SELECTOR =
+  'button, a, input, textarea, select, [role="button"], [role="slider"], [contenteditable="true"], [data-swipe-navigation="ignore"]';
 
 // Default mobile page navigation order.
 const NAVIGATION_ORDER = ['/home', '/messages', '/create', '/videos', '/profile'];
@@ -28,10 +30,20 @@ interface SwipeNavigationOptions {
    * Create uses this because its canvas contains editors, sliders and pickers.
    */
   ignoreInteractiveTargets?: boolean;
+  /**
+   * Optional selector used when `ignoreInteractiveTargets` is enabled.
+   * This lets immersive pages keep sliders/text fields protected while still
+   * allowing a deliberate horizontal drag to begin over ordinary buttons.
+   */
+  interactiveTargetSelector?: string;
   /** Enable finger movement from left to right. Defaults to true. */
   allowRightSwipe?: boolean;
   /** Enable finger movement from right to left. Defaults to true. */
   allowLeftSwipe?: boolean;
+  /** Minimum translated distance before navigation. */
+  swipeThreshold?: number;
+  /** Minimum translated px/ms for a fast flick to navigate. */
+  swipeVelocityThreshold?: number;
   /**
    * Publish every horizontal drag offset to React state for live translation.
    * Set false on heavy/scrollable creation surfaces: the gesture still
@@ -40,14 +52,12 @@ interface SwipeNavigationOptions {
   trackSwipeOffset?: boolean;
 }
 
-function isInteractiveTarget(target: EventTarget | null): boolean {
+function isInteractiveTarget(
+  target: EventTarget | null,
+  selector: string,
+): boolean {
   if (!(target instanceof Element)) return false;
-
-  return Boolean(
-    target.closest(
-      'button, a, input, textarea, select, [role="button"], [role="slider"], [contenteditable="true"], [data-swipe-navigation="ignore"]',
-    ),
-  );
+  return Boolean(target.closest(selector));
 }
 
 /**
@@ -74,6 +84,11 @@ export function useSwipeNavigation(options: SwipeNavigationOptions = {}) {
   const allowRightSwipe = options.allowRightSwipe ?? true;
   const allowLeftSwipe = options.allowLeftSwipe ?? true;
   const ignoreInteractiveTargets = options.ignoreInteractiveTargets ?? false;
+  const interactiveTargetSelector =
+    options.interactiveTargetSelector ?? DEFAULT_INTERACTIVE_TARGET_SELECTOR;
+  const swipeThreshold = options.swipeThreshold ?? SWIPE_THRESHOLD;
+  const swipeVelocityThreshold =
+    options.swipeVelocityThreshold ?? SWIPE_VELOCITY_THRESHOLD;
   const trackSwipeOffset = options.trackSwipeOffset ?? true;
 
   const getCurrentIndex = useCallback(() => {
@@ -101,7 +116,8 @@ export function useSwipeNavigation(options: SwipeNavigationOptions = {}) {
     if (!touch) return;
 
     gestureBlocked.current =
-      ignoreInteractiveTargets && isInteractiveTarget(e.target);
+      ignoreInteractiveTargets &&
+      isInteractiveTarget(e.target, interactiveTargetSelector);
 
     startX.current = touch.clientX;
     startY.current = touch.clientY;
@@ -112,7 +128,13 @@ export function useSwipeNavigation(options: SwipeNavigationOptions = {}) {
     // Tap/vertical scroll paytida render qilmaymiz.
     if (isSwiping) setIsSwiping(false);
     if (trackSwipeOffset && swipeOffset !== 0) setSwipeOffset(0);
-  }, [ignoreInteractiveTargets, isSwiping, swipeOffset, trackSwipeOffset]);
+  }, [
+    ignoreInteractiveTargets,
+    interactiveTargetSelector,
+    isSwiping,
+    swipeOffset,
+    trackSwipeOffset,
+  ]);
 
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
     if (gestureBlocked.current) return;
@@ -175,8 +197,8 @@ export function useSwipeNavigation(options: SwipeNavigationOptions = {}) {
       const duration = Math.max(Date.now() - startTime.current, 1);
       const velocity = Math.abs(currentOffset) / duration;
       const shouldNavigate =
-        Math.abs(currentOffset) > SWIPE_THRESHOLD ||
-        velocity > SWIPE_VELOCITY_THRESHOLD;
+        Math.abs(currentOffset) > swipeThreshold ||
+        velocity > swipeVelocityThreshold;
 
       if (shouldNavigate) {
         if (currentOffset > 0 && allowRightSwipe) {
@@ -206,6 +228,8 @@ export function useSwipeNavigation(options: SwipeNavigationOptions = {}) {
     getRightSwipeDestination,
     navigate,
     resetGesture,
+    swipeThreshold,
+    swipeVelocityThreshold,
   ]);
 
   const handleTouchCancel = useCallback(() => {
