@@ -7,6 +7,7 @@ import {
   FileText,
   Film,
   Loader2,
+  LockKeyhole,
   Music2,
   Images,
 } from 'lucide-react';
@@ -23,6 +24,7 @@ import { useMentionInput } from '@/hooks/useMentionInput';
 import { ALBUM_MAX_ITEMS, AlbumItem, buildAlbumPayload } from '@/lib/mediaAlbum';
 import { uploadMedia } from '@/lib/mediaUpload';
 import { cn } from '@/lib/utils';
+import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
 import { useMessageDraft } from '@/hooks/useMessageDraft';
@@ -132,6 +134,7 @@ export function MessageInput({
   const [showWalletTransfer, setShowWalletTransfer] = useState(false);
   const [attachmentOpen, setAttachmentOpen] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [secretMode, setSecretMode] = useState(false);
   const composerRef = useRef<RichComposerHandle>(null);
   const composerBoxRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -143,6 +146,51 @@ export function MessageInput({
     handleInputChange: handleMentionChange,
     closeMention,
   } = useMentionInput();
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!conversationId) {
+      setSecretMode(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    void supabase
+      .from('conversations')
+      .select('security_mode')
+      .eq('id', conversationId)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!cancelled) setSecretMode((data as { security_mode?: string } | null)?.security_mode === 'e2ee');
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [conversationId]);
+
+  useEffect(() => {
+    if (!secretMode) return;
+    // Secret Chat v1 is deliberately text-only. Clear anything prepared before
+    // mode detection so no plaintext attachment can be sent or left in preview.
+    if (localPreviewRef.current) {
+      URL.revokeObjectURL(localPreviewRef.current);
+      localPreviewRef.current = null;
+    }
+    setPendingAttachment(null);
+    setPendingAlbum(null);
+    setAttachmentOpen(false);
+    setShowScheduleDialog(false);
+    setShowArticleComposer(false);
+    setShowWalletTransfer(false);
+    setIsDragging(false);
+  }, [secretMode]);
+
+  const warnSecretTextOnly = () => {
+    toast.info(t('messages.createChat.secretDescription'));
+  };
 
   useEffect(() => {
     if (replyTo) composerRef.current?.focus();
@@ -213,6 +261,10 @@ export function MessageInput({
 
   const handleSend = async () => {
     if (!message.trim() && !pendingAttachment && !pendingAlbum) return;
+    if (secretMode && (pendingAttachment || pendingAlbum)) {
+      warnSecretTextOnly();
+      return;
+    }
 
     // Albom: bir nechta rasm/video Telegramdek BITTA xabar bo'lib ketadi.
     // Server yozuvi muvaffaqiyatsiz bo'lsa draft/attachment yo'qolmaydi.
@@ -257,6 +309,10 @@ export function MessageInput({
 
   /** Maqola (article) xabarini yuborish */
   const handleSendArticle = async (payload: string) => {
+    if (secretMode) {
+      warnSecretTextOnly();
+      return;
+    }
     const sent = await onSend(payload);
     if (sent === null) return;
     await clearDraft();
@@ -329,6 +385,10 @@ export function MessageInput({
    * sifatida yuboriladi - Telegramdagi "Send as file" bilan bir xil.
    */
   const uploadAndAttach = async (file: File, asDocument = false) => {
+    if (secretMode) {
+      warnSecretTextOnly();
+      return;
+    }
     if (file.size > MAX_FILE_MB * 1024 * 1024) {
       toast.error('Fayl hajmi ' + MAX_FILE_MB + " MB dan kichik bo'lishi kerak");
       return;
@@ -373,6 +433,10 @@ export function MessageInput({
 
   /** Qo'shimcha fayllarni darhol alohida xabar sifatida yuborish */
   const uploadAndSendNow = async (file: File, asDocument: boolean) => {
+    if (secretMode) {
+      warnSecretTextOnly();
+      return;
+    }
     if (file.size > MAX_FILE_MB * 1024 * 1024) {
       toast.error('"' + file.name + '" ' + MAX_FILE_MB + ' MB dan katta');
       return;
@@ -405,6 +469,10 @@ export function MessageInput({
    * Bir nechta rasm/videoni yuklab, albom (media group) sifatida tayyorlaydi.
    */
   const uploadAlbum = async (files: File[]) => {
+    if (secretMode) {
+      warnSecretTextOnly();
+      return;
+    }
     const accepted = files.slice(0, ALBUM_MAX_ITEMS).filter((file) => {
       if (file.size > MAX_FILE_MB * 1024 * 1024) {
         toast.error('"' + file.name + '" ' + MAX_FILE_MB + ' MB dan katta');
@@ -450,6 +518,10 @@ export function MessageInput({
    * Bir nechta rasm/video tanlansa - albom, aks holda bitta biriktirma.
    */
   const handlePickedFiles = async (files: File[], asDocument: boolean) => {
+    if (secretMode) {
+      warnSecretTextOnly();
+      return;
+    }
     if (files.length === 0) return;
 
     if (asDocument) {
@@ -506,12 +578,16 @@ export function MessageInput({
   const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
+    if (secretMode) {
+      warnSecretTextOnly();
+      return;
+    }
     const files = Array.from(e.dataTransfer?.files || []);
     if (files.length > 0) await handlePickedFiles(files, false);
   };
 
   const startLongPress = () => {
-    if (!onSchedule) return;
+    if (!onSchedule || secretMode) return;
     longPressTimeoutRef.current = setTimeout(() => setShowScheduleDialog(true), 500);
   };
   const cancelLongPress = () => {
@@ -531,12 +607,19 @@ export function MessageInput({
       )}
       onDragOver={(e) => {
         e.preventDefault();
-        setIsDragging(true);
+        if (!secretMode) setIsDragging(true);
       }}
       onDragLeave={() => setIsDragging(false)}
       onDrop={handleDrop}
     >
-      {isDragging && (
+      {secretMode && (
+        <div className="mb-2 flex items-center gap-2 rounded-xl border border-emerald-500/15 bg-emerald-500/5 px-3 py-2 text-xs text-muted-foreground">
+          <LockKeyhole className="h-4 w-4 shrink-0 text-emerald-500" />
+          <span>{t('messages.createChat.secretDeviceNotice')}</span>
+        </div>
+      )}
+
+      {isDragging && !secretMode && (
         <div className="pointer-events-none absolute inset-2 z-20 flex items-center justify-center rounded-2xl border-2 border-dashed border-border bg-card/80 text-sm text-muted-foreground">
           Faylni yuborish uchun qo'yib yuboring
         </div>
@@ -703,24 +786,30 @@ export function MessageInput({
 
       {/* Kompozitor qatori - hammasi bitta 40px chiziqda */}
       <div className="flex items-end gap-1.5">
-        {/* Fayl qo'shish - Telegram mobil uslubidagi panel */}
-        <Button
-          variant="ghost"
-          size="icon"
-          className={cn(
-            ROW_CONTROL,
-            'text-muted-foreground tg-transition hover:bg-muted hover:text-foreground'
-          )}
-          disabled={uploading}
-          aria-label="Fayl qo'shish"
-          onClick={() => setAttachmentOpen(true)}
-        >
-          {uploading ? (
-            <Loader2 className="h-5 w-5 animate-spin" />
-          ) : (
-            <Paperclip className="h-5 w-5" />
-          )}
-        </Button>
+        {/* Secret Chat v1 media yuklamaydi; oddiy chatlarda attachment paneli saqlanadi. */}
+        {secretMode ? (
+          <div className={cn(ROW_CONTROL, 'flex items-center justify-center text-emerald-500')}>
+            <LockKeyhole className="h-5 w-5" />
+          </div>
+        ) : (
+          <Button
+            variant="ghost"
+            size="icon"
+            className={cn(
+              ROW_CONTROL,
+              'text-muted-foreground tg-transition hover:bg-muted hover:text-foreground'
+            )}
+            disabled={uploading}
+            aria-label="Fayl qo'shish"
+            onClick={() => setAttachmentOpen(true)}
+          >
+            {uploading ? (
+              <Loader2 className="h-5 w-5 animate-spin" />
+            ) : (
+              <Paperclip className="h-5 w-5" />
+            )}
+          </Button>
+        )}
 
         {/* Matn maydoni - Telegramdek WYSIWYG (formatlash belgilari ko'rinmaydi) */}
         <div className="relative min-w-0 flex-1" ref={composerBoxRef}>
@@ -729,6 +818,10 @@ export function MessageInput({
             value={message}
             onChange={handleComposerChange}
             onImagePaste={(file) => {
+              if (secretMode) {
+                warnSecretTextOnly();
+                return;
+              }
               void uploadAndAttach(file);
             }}
             onKeyDown={(e) => {
@@ -759,20 +852,22 @@ export function MessageInput({
           )}
 
           {/* Telegramdek yagona media paneli: GIF | Stikerlar | Emoji */}
-          <div className="absolute bottom-1 right-1.5 flex items-center">
-            <MediaPanel
-              onSelectEmoji={(emoji) => {
-                if (composerRef.current) composerRef.current.insertText(emoji);
-                else setMessage((prev) => prev + emoji);
-              }}
-              onSendMedia={(url, kind) => {
-                // GIF va stiker matnsiz, ALOHIDA message_type bilan ketadi:
-                // 'gif' yoki 'sticker' - endi ular oddiy rasm sifatida saqlanmaydi.
-                void onSend('', url, kind);
-              }}
-              className="h-8 w-8 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
-            />
-          </div>
+          {!secretMode && (
+            <div className="absolute bottom-1 right-1.5 flex items-center">
+              <MediaPanel
+                onSelectEmoji={(emoji) => {
+                  if (composerRef.current) composerRef.current.insertText(emoji);
+                  else setMessage((prev) => prev + emoji);
+                }}
+                onSendMedia={(url, kind) => {
+                  // GIF va stiker matnsiz, ALOHIDA message_type bilan ketadi:
+                  // 'gif' yoki 'sticker' - endi ular oddiy rasm sifatida saqlanmaydi.
+                  void onSend('', url, kind);
+                }}
+                className="h-8 w-8 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+              />
+            </div>
+          )}
         </div>
 
         {/* Yuborish yoki bitta mic/video tugmasi */}
@@ -789,10 +884,14 @@ export function MessageInput({
             onTouchEnd={cancelLongPress}
             disabled={disabled || uploading}
             aria-label="Yuborish"
-            title={onSchedule ? 'Yuborish (uzoq bosilsa - rejalashtirish)' : 'Yuborish'}
+            title={!secretMode && onSchedule ? 'Yuborish (uzoq bosilsa - rejalashtirish)' : 'Yuborish'}
           >
             <Send className="h-5 w-5" />
           </Button>
+        ) : secretMode ? (
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center text-emerald-500/80">
+            <LockKeyhole className="h-5 w-5" />
+          </div>
         ) : (
           <div className="flex h-10 shrink-0 items-center">
             <TelegramMediaRecorder
@@ -809,82 +908,86 @@ export function MessageInput({
       {/* Telegramdek: matn TANLANGANDA suzuvchi formatlash menyusi tanlov ustida chiqadi */}
       <SelectionFormatMenu containerRef={composerBoxRef} onApply={applyFormat} />
 
-      {/* Telegram mobil uslubidagi biriktirish paneli */}
-      <TelegramAttachSheet
-        open={attachmentOpen}
-        onOpenChange={setAttachmentOpen}
-        maxFileMb={MAX_FILE_MB}
-        onPickFiles={(files, asDocument) => {
-          void handlePickedFiles(files, asDocument);
-        }}
-        onArticle={() => setShowArticleComposer(true)}
-        onShareLocation={onShareLocation}
-        onCreatePoll={onCreatePoll}
-        onSendMoney={conversationId ? () => setShowWalletTransfer(true) : undefined}
-      />
+      {!secretMode && (
+        <>
+          {/* Telegram mobil uslubidagi biriktirish paneli */}
+          <TelegramAttachSheet
+            open={attachmentOpen}
+            onOpenChange={setAttachmentOpen}
+            maxFileMb={MAX_FILE_MB}
+            onPickFiles={(files, asDocument) => {
+              void handlePickedFiles(files, asDocument);
+            }}
+            onArticle={() => setShowArticleComposer(true)}
+            onShareLocation={onShareLocation}
+            onCreatePoll={onCreatePoll}
+            onSendMoney={conversationId ? () => setShowWalletTransfer(true) : undefined}
+          />
 
-      <WalletTransferDialog
-        open={showWalletTransfer}
-        onOpenChange={setShowWalletTransfer}
-        conversationId={conversationId}
-        onSuccess={async (result) => {
-          const receiptMessage = await onSend('', undefined, undefined, {
-            metadata: {
-              message_type: 'wallet_transfer',
-              transfer_id: result.transfer_id,
-              amount: result.amount,
-              currency: result.currency,
-              recipient_id: result.recipient_id,
-            },
-          });
+          <WalletTransferDialog
+            open={showWalletTransfer}
+            onOpenChange={setShowWalletTransfer}
+            conversationId={conversationId}
+            onSuccess={async (result) => {
+              const receiptMessage = await onSend('', undefined, undefined, {
+                metadata: {
+                  message_type: 'wallet_transfer',
+                  transfer_id: result.transfer_id,
+                  amount: result.amount,
+                  currency: result.currency,
+                  recipient_id: result.recipient_id,
+                },
+              });
 
-          if (receiptMessage === null) {
-            toast.warning('Pul o‘tkazildi, lekin chat kvitansiyasi yuborilmadi. Tranzaksiya To‘lov tarixida saqlangan.');
-          }
-        }}
-      />
+              if (receiptMessage === null) {
+                toast.warning('Pul o‘tkazildi, lekin chat kvitansiyasi yuborilmadi. Tranzaksiya To‘lov tarixida saqlangan.');
+              }
+            }}
+          />
 
-      {/* Rejalashtirish dialogi */}
-      {onSchedule && (
-        <ScheduleMessageDialog
-          open={showScheduleDialog}
-          onOpenChange={setShowScheduleDialog}
-          messagePreview={message || pendingAttachment?.name || ''}
-          onSchedule={async (scheduledFor) => {
-            const scheduledContent =
-              pendingAlbum && pendingAlbum.length > 0
-                ? buildAlbumPayload({
-                    items: pendingAlbum,
-                    caption: message.trim() || undefined,
-                  })
-                : message.trim();
+          {/* Rejalashtirish dialogi */}
+          {onSchedule && (
+            <ScheduleMessageDialog
+              open={showScheduleDialog}
+              onOpenChange={setShowScheduleDialog}
+              messagePreview={message || pendingAttachment?.name || ''}
+              onSchedule={async (scheduledFor) => {
+                const scheduledContent =
+                  pendingAlbum && pendingAlbum.length > 0
+                    ? buildAlbumPayload({
+                        items: pendingAlbum,
+                        caption: message.trim() || undefined,
+                      })
+                    : message.trim();
 
-            const scheduled = await onSchedule(
-              scheduledFor,
-              scheduledContent,
-              pendingAlbum ? undefined : pendingAttachment?.url,
-              pendingAlbum ? undefined : pendingAttachment?.type,
-              replyTo?.id || null
-            );
-            if (scheduled === null) return;
+                const scheduled = await onSchedule(
+                  scheduledFor,
+                  scheduledContent,
+                  pendingAlbum ? undefined : pendingAttachment?.url,
+                  pendingAlbum ? undefined : pendingAttachment?.type,
+                  replyTo?.id || null
+                );
+                if (scheduled === null) return;
 
-            await clearDraft();
-            clearAttachment();
-            clearAlbum();
-            onCancelReply?.();
-          }}
-        />
+                await clearDraft();
+                clearAttachment();
+                clearAlbum();
+                onCancelReply?.();
+              }}
+            />
+          )}
+
+          {/* Maqola yozish oynasi */}
+          <ArticleComposer
+            open={showArticleComposer}
+            onOpenChange={setShowArticleComposer}
+            initialBody={message}
+            onSubmit={(payload) => {
+              void handleSendArticle(payload);
+            }}
+          />
+        </>
       )}
-
-      {/* Maqola yozish oynasi */}
-      <ArticleComposer
-        open={showArticleComposer}
-        onOpenChange={setShowArticleComposer}
-        initialBody={message}
-        onSubmit={(payload) => {
-          void handleSendArticle(payload);
-        }}
-      />
     </div>
   );
 }
