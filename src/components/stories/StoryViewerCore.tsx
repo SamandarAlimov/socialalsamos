@@ -247,7 +247,7 @@ export function StoryViewer({
   }, [currentStory?.id]);
 
   useEffect(() => {
-    if (!currentStory || !user || isOwnStory) return;
+    if (!currentStory || !user) return;
 
     let cancelled = false;
 
@@ -271,7 +271,7 @@ export function StoryViewer({
     return () => {
       cancelled = true;
     };
-  }, [currentStory?.id, isOwnStory, onMarkAsViewed, user]);
+  }, [currentStory?.id, onMarkAsViewed, user]);
 
   // Image story progress: pause/resume davom etadi, 0 dan qayta boshlanmaydi.
   useEffect(() => {
