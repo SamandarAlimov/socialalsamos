@@ -482,6 +482,8 @@ export function StoryViewer({
         prevStory();
       } else if (relativeX > rect.width * 0.66) {
         nextStory();
+      } else {
+        setIsPaused((value) => !value);
       }
     },
     [
@@ -994,8 +996,8 @@ export function StoryViewer({
           </div>
         )}
 
-        {/* Long press feedback juda nozik — media ustini yopmaydi. */}
-        {isHolding && (
+        {/* Explicit tap-to-pause feedback. Long press pauses silently. */}
+        {isPaused && !isHolding && (
           <div className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center">
             <span className="flex h-12 w-12 items-center justify-center rounded-full bg-black/45 text-white shadow-xl backdrop-blur-md">
               <Pause className="h-5 w-5 fill-current" />

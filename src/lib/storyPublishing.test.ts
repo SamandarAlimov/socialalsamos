@@ -90,6 +90,15 @@ describe('unified Story publishing contract', () => {
     expect((viewer.match(/isInteractiveTarget\(event\.target\)/g) || []).length).toBeGreaterThanOrEqual(2);
   });
 
+  it('pauses silently on hold and exposes pause feedback only for explicit tap pause', () => {
+    const viewer = source('src/components/stories/StoryViewerCore.tsx');
+
+    expect(viewer).toContain('setIsHolding(true);');
+    expect(viewer).toContain("} else {\n        setIsPaused((value) => !value);\n      }");
+    expect(viewer).toContain('{isPaused && !isHolding && (');
+    expect(viewer).not.toContain('Long press feedback juda nozik');
+  });
+
   it('keeps the Home Story rail scoped to the current user and followed users', () => {
     const storiesHook = source('src/hooks/useStories.ts');
 
