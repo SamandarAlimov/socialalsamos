@@ -14,6 +14,22 @@ export const SUPPORTED_LANGUAGES = [
 
 export type LanguageCode = (typeof SUPPORTED_LANGUAGES)[number]['code'];
 
+export const LANGUAGE_STORAGE_KEY = 'alsamos-language';
+export const LANGUAGE_EXPLICIT_KEY = 'alsamos-language-explicit';
+
+// Older builds cached the browser language automatically. That could make only
+// translated surfaces English/Russian while much of the platform still looked
+// Uzbek. Treat a cached value that simply mirrors the browser locale as legacy
+// auto-detection unless the user has explicitly chosen a language in Settings.
+if (typeof window !== 'undefined') {
+  const explicit = window.localStorage.getItem(LANGUAGE_EXPLICIT_KEY) === '1';
+  const stored = window.localStorage.getItem(LANGUAGE_STORAGE_KEY)?.split('-')[0];
+  const browser = window.navigator.language?.split('-')[0];
+  if (!explicit && stored && stored !== 'uz' && stored === browser) {
+    window.localStorage.removeItem(LANGUAGE_STORAGE_KEY);
+  }
+}
+
 i18n
   .use(LanguageDetector)
   .use(initReactI18next)
@@ -27,9 +43,11 @@ i18n
     supportedLngs: ['uz', 'en', 'ru'],
     interpolation: { escapeValue: false },
     detection: {
-      order: ['localStorage', 'navigator'],
+      // Uzbek is the product default. English/Russian are used after an explicit
+      // user choice, persisted by LanguageSwitcher.
+      order: ['localStorage'],
       caches: ['localStorage'],
-      lookupLocalStorage: 'alsamos-language',
+      lookupLocalStorage: LANGUAGE_STORAGE_KEY,
     },
     returnEmptyString: false,
   });
