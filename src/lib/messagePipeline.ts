@@ -1,3 +1,8 @@
+import {
+  decryptSecretMessageRow,
+  prepareSecretMessagePayload,
+} from './secretChatCrypto';
+
 export const BASE_MESSAGE_SELECT = `
   *,
   sender:profiles!messages_sender_id_fkey (
@@ -96,24 +101,36 @@ export function isReplyCompatibilityError(error: unknown): boolean {
   );
 }
 
+async function decryptQueryData<T>(result: QueryResult<T>): Promise<QueryResult<T>> {
+  if (!result.data) return result;
+  return {
+    ...result,
+    data: await decryptSecretMessageRow(result.data),
+  };
+}
+
 export async function insertMessageWithReplyFallback<T>(
   payload: Record<string, unknown>,
   insert: (nextPayload: Record<string, unknown>) => Promise<QueryResult<T>>
 ): Promise<QueryResult<T> & { usedFallback: boolean }> {
-  const first = await insert(payload);
+  // Secret Chat context lives only on the bound browser device. Standard chats
+  // pass through unchanged; E2EE chats are converted to a ciphertext envelope
+  // before the Supabase insert ever sees the payload.
+  const preparedPayload = await prepareSecretMessagePayload(payload);
+  const first = await decryptQueryData(await insert(preparedPayload));
 
   if (
     !first.error ||
-    !payload.reply_to_id ||
+    !preparedPayload.reply_to_id ||
     !isReplyCompatibilityError(first.error)
   ) {
     return { ...first, usedFallback: false };
   }
 
-  const fallbackPayload = { ...payload };
+  const fallbackPayload = { ...preparedPayload };
   delete fallbackPayload.reply_to_id;
 
-  const fallback = await insert(fallbackPayload);
+  const fallback = await decryptQueryData(await insert(fallbackPayload));
   return { ...fallback, usedFallback: true };
 }
 
@@ -126,25 +143,36 @@ export async function hydrateReplyTargets<
 ): Promise<Array<T & { reply_to: R | null }>> {
   if (rows.length === 0) return [];
 
+  // Incoming history and realtime rows are decrypted on the client before they
+  // reach the message UI. Plain/legacy rows remain byte-for-byte unchanged.
+  const decryptedRows = await Promise.all(rows.map((row) => decryptSecretMessageRow(row)));
+
   const replyIds = Array.from(
-    new Set(rows.map((row) => row.reply_to_id).filter((id): id is string => Boolean(id)))
+    new Set(
+      decryptedRows
+        .map((row) => row.reply_to_id)
+        .filter((id): id is string => Boolean(id)),
+    ),
   );
 
   if (replyIds.length === 0) {
-    return rows.map((row) => ({ ...row, reply_to: null }));
+    return decryptedRows.map((row) => ({ ...row, reply_to: null }));
   }
 
   const { data, error } = await fetchReplies(replyIds);
 
   // Reply preview optional enhancement: xatosi core tarixni yo'q qilmasligi shart.
   if (error) {
-    return rows.map((row) => ({ ...row, reply_to: null }));
+    return decryptedRows.map((row) => ({ ...row, reply_to: null }));
   }
 
+  const decryptedReplies = await Promise.all(
+    (data || []).map((reply) => decryptSecretMessageRow(reply)),
+  );
   const replyMap = new Map<string, R>();
-  for (const reply of data || []) replyMap.set(reply.id, reply);
+  for (const reply of decryptedReplies) replyMap.set(reply.id, reply);
 
-  return rows.map((row) => ({
+  return decryptedRows.map((row) => ({
     ...row,
     reply_to: row.reply_to_id ? replyMap.get(row.reply_to_id) ?? null : null,
   }));
