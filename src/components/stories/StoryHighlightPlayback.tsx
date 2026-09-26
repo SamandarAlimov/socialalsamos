@@ -17,6 +17,7 @@ interface StoryHighlightPlaybackProps {
   onClose: () => void;
   onEdit: (highlight: StoryHighlight) => void;
   onRemoveStory: (highlightId: string, storyId: string) => Promise<boolean>;
+  onViewed?: (storyId: string) => void | Promise<void>;
 }
 
 const IMAGE_DURATION = 5000;
@@ -35,6 +36,7 @@ export function StoryHighlightPlayback({
   onClose,
   onEdit,
   onRemoveStory,
+  onViewed,
 }: StoryHighlightPlaybackProps) {
   const [items, setItems] = useState<StoryHighlightItem[]>(highlight.items || []);
   const [index, setIndex] = useState(0);
@@ -54,6 +56,11 @@ export function StoryHighlightPlayback({
   const coverItem = resolveCoverItem(highlight);
   const coverUrl = highlight.cover_url || items.find((item) => item.media_type !== 'video')?.media_url || null;
   const avatarUrl = coverItem?.media_type === 'video' ? null : coverUrl;
+
+  useEffect(() => {
+    if (!current) return;
+    void onViewed?.(current.story_id);
+  }, [current?.story_id, onViewed]);
 
   useEffect(() => {
     if (!current || isVideo || menuOpen) return;

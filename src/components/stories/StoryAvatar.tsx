@@ -119,6 +119,12 @@ export function StoryAvatar({
   }, [userId, user?.id]);
 
   useEffect(() => {
+    if (userId || hasUnviewed === undefined) return;
+    setHasStory(true);
+    setHasUnviewedStory(hasUnviewed);
+  }, [hasUnviewed, userId]);
+
+  useEffect(() => {
     return () => {
       if (longPressTimerRef.current !== null) window.clearTimeout(longPressTimerRef.current);
       if (longPressResetTimerRef.current !== null) window.clearTimeout(longPressResetTimerRef.current);
@@ -141,8 +147,10 @@ export function StoryAvatar({
       if (stories && stories.length > 0) {
         setHasStory(true);
 
-        // Check if current user has viewed all stories
-        if (user && user.id !== userId) {
+        // Seen/unseen is account-specific for both your own Story and other
+        // people's Stories. A fresh own Story must be colored until you view it,
+        // then it uses the neutral viewed ring just like the Home rail.
+        if (user) {
           const { data: views } = await supabase
             .from('story_views')
             .select('story_id')
@@ -150,11 +158,9 @@ export function StoryAvatar({
             .in('story_id', stories.map(s => s.id));
 
           const viewedIds = new Set((views || []).map(v => v.story_id));
-          const hasUnviewed = stories.some(s => !viewedIds.has(s.id));
-          setHasUnviewedStory(hasUnviewed);
-        } else if (user?.id === userId) {
-          // Own story - always show as viewed
-          setHasUnviewedStory(false);
+          setHasUnviewedStory(stories.some(s => !viewedIds.has(s.id)));
+        } else {
+          setHasUnviewedStory(Boolean(hasUnviewed));
         }
 
         // Build story group
@@ -169,6 +175,7 @@ export function StoryAvatar({
         });
       } else {
         setHasStory(false);
+        setHasUnviewedStory(false);
         setStoryGroup(null);
       }
     } catch (error) {
@@ -261,10 +268,8 @@ export function StoryAvatar({
   };
 
   const handleMarkAsViewed = () => {
-    // Update local state when story is viewed
-    if (user?.id !== userId) {
-      checkForStories();
-    }
+    // Refresh the ring for both own and other Stories after a viewed row lands.
+    checkForStories();
   };
 
   return (
@@ -286,7 +291,7 @@ export function StoryAvatar({
           hasStory && showRing ? (
             hasUnviewedStory
               ? 'bg-gradient-to-tr from-alsamos-orange-light to-alsamos-orange-dark'
-              : 'bg-muted'
+              : 'bg-muted-foreground/30'
           ) : '',
           hasStory && showRing && ringPadding[size],
           className

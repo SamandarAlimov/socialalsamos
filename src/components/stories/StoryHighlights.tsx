@@ -18,8 +18,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useStoryViews } from '@/hooks/useStoryViews';
 import { supabase } from '@/integrations/supabase/client';
 import { useStoryHighlights, type StoryHighlight, type StoryHighlightItem } from '@/hooks/useStoryHighlights';
 import { cn } from '@/lib/utils';
@@ -70,6 +70,7 @@ function HighlightCover({ highlight }: { highlight: StoryHighlight }) {
 export function StoryHighlights({ userId, className }: StoryHighlightsProps) {
   const { t } = useTranslation();
   const [searchParams] = useSearchParams();
+  const { markAsViewed, hasViewedAll } = useStoryViews();
   const {
     highlights,
     isLoading,
@@ -175,6 +176,11 @@ export function StoryHighlights({ userId, className }: StoryHighlightsProps) {
     if (highlight.items && highlight.items.length > 0) setSelectedHighlight(highlight);
   };
 
+  const highlightHasUnviewed = (highlight: StoryHighlight) => {
+    const storyIds = (highlight.items || []).map((item) => item.story_id);
+    return storyIds.length > 0 && !hasViewedAll(storyIds);
+  };
+
   if (isLoading) {
     return (
       <div className={cn('flex gap-4 overflow-x-auto pb-4 scrollbar-hidden', className)}>
@@ -193,21 +199,13 @@ export function StoryHighlights({ userId, className }: StoryHighlightsProps) {
   return (
     <>
       <section className={cn('space-y-3', className)}>
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-muted text-foreground">
-              <Sparkles className="h-3.5 w-3.5" />
-            </span>
-            <h2 className="text-sm font-semibold tracking-[-0.01em] text-foreground">
-              {t('profile.highlights.title', { defaultValue: 'Tanlanganlar' })}
-            </h2>
-          </div>
-          {isOwnProfile && highlights.length > 0 ? (
-            <Button variant="ghost" size="sm" className="h-8 gap-1 rounded-full px-3 text-xs font-medium" onClick={() => setShowCreateDialog(true)}>
-              <Plus className="h-3.5 w-3.5" />
-              {t('profile.highlights.new', { defaultValue: 'Yangi' })}
-            </Button>
-          ) : null}
+        <div className="flex items-center gap-2">
+          <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-muted text-foreground">
+            <Sparkles className="h-3.5 w-3.5" />
+          </span>
+          <h2 className="text-sm font-semibold tracking-[-0.01em] text-foreground">
+            {t('profile.highlights.title', { defaultValue: 'Tanlanganlar' })}
+          </h2>
         </div>
 
         {highlights.length === 0 && isOwnProfile ? (
@@ -263,7 +261,12 @@ export function StoryHighlights({ userId, className }: StoryHighlightsProps) {
                     }
                     openHighlightViewer(highlight);
                   }}
-                  className="relative select-none rounded-full bg-gradient-to-tr from-amber-300 via-fuchsia-500 to-violet-600 p-[2px] shadow-sm transition-transform active:scale-[0.97]"
+                  className={cn(
+                    'relative select-none rounded-full p-[2px] shadow-sm transition-transform active:scale-[0.97]',
+                    highlightHasUnviewed(highlight)
+                      ? 'bg-gradient-to-tr from-amber-300 via-fuchsia-500 to-violet-600'
+                      : 'bg-muted-foreground/30',
+                  )}
                   style={{ WebkitUserSelect: 'none', userSelect: 'none' }}
                   aria-label={highlight.name}
                 >
@@ -338,6 +341,7 @@ export function StoryHighlights({ userId, className }: StoryHighlightsProps) {
           onClose={() => setSelectedHighlight(null)}
           onEdit={openEditDialog}
           onRemoveStory={removeStoryFromHighlight}
+          onViewed={markAsViewed}
         />
       ) : null}
     </>

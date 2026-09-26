@@ -62,4 +62,20 @@ describe('unified Story publishing contract', () => {
     expect(migration).toContain('p.profile_hidden_at is null');
     expect(migration).toContain('update public.profiles');
   });
+
+  it('persists and renders seen state for own and other Stories', () => {
+    const home = source('src/pages/HomePage.tsx');
+    const avatar = source('src/components/stories/StoryAvatar.tsx');
+    const viewer = source('src/components/stories/StoryViewerCore.tsx');
+
+    expect(home).toContain('!hasViewedAll(userStoryGroup.all_story_ids)');
+    expect(home).toContain('bg-muted-foreground/30');
+    expect(avatar).toContain(".eq('viewer_id', user.id)");
+    expect(avatar).not.toContain("else if (user?.id === userId)");
+    expect(avatar).toContain("'bg-muted-foreground/30'");
+    expect(viewer).toContain('if (!currentStory || !user) return;');
+    expect(viewer).not.toContain('if (!currentStory || !user || isOwnStory) return;');
+    expect(viewer).toContain(".from('story_views')");
+    expect(viewer).toContain('onMarkAsViewed?.(currentStory.id)');
+  });
 });
