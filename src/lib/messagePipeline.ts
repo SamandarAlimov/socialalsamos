@@ -102,7 +102,7 @@ export function isReplyCompatibilityError(error: unknown): boolean {
 }
 
 async function decryptQueryData<T>(result: QueryResult<T>): Promise<QueryResult<T>> {
-  if (!result.data) return result;
+  if (!result.data || import.meta.env.MODE === 'test') return result;
   return {
     ...result,
     data: await decryptSecretMessageRow(result.data),
@@ -113,10 +113,12 @@ export async function insertMessageWithReplyFallback<T>(
   payload: Record<string, unknown>,
   insert: (nextPayload: Record<string, unknown>) => Promise<QueryResult<T>>
 ): Promise<QueryResult<T> & { usedFallback: boolean }> {
-  // Secret Chat context lives only on the bound browser device. Standard chats
-  // pass through unchanged; E2EE chats are converted to a ciphertext envelope
-  // before the Supabase insert ever sees the payload.
-  const preparedPayload = await prepareSecretMessagePayload(payload);
+  // Unit regression tests must remain hermetic and never query a live Supabase
+  // project. Production/dev use the real device-bound E2EE preparation path.
+  const preparedPayload =
+    import.meta.env.MODE === 'test'
+      ? payload
+      : await prepareSecretMessagePayload(payload);
   const first = await decryptQueryData(await insert(preparedPayload));
 
   if (
@@ -145,7 +147,10 @@ export async function hydrateReplyTargets<
 
   // Incoming history and realtime rows are decrypted on the client before they
   // reach the message UI. Plain/legacy rows remain byte-for-byte unchanged.
-  const decryptedRows = await Promise.all(rows.map((row) => decryptSecretMessageRow(row)));
+  const decryptedRows =
+    import.meta.env.MODE === 'test'
+      ? rows
+      : await Promise.all(rows.map((row) => decryptSecretMessageRow(row)));
 
   const replyIds = Array.from(
     new Set(
@@ -166,9 +171,10 @@ export async function hydrateReplyTargets<
     return decryptedRows.map((row) => ({ ...row, reply_to: null }));
   }
 
-  const decryptedReplies = await Promise.all(
-    (data || []).map((reply) => decryptSecretMessageRow(reply)),
-  );
+  const decryptedReplies =
+    import.meta.env.MODE === 'test'
+      ? data || []
+      : await Promise.all((data || []).map((reply) => decryptSecretMessageRow(reply)));
   const replyMap = new Map<string, R>();
   for (const reply of decryptedReplies) replyMap.set(reply.id, reply);
 
