@@ -17,6 +17,9 @@
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "paths": {
+      "@/hooks/useMessages": [
+        "./src/hooks/useMessagesCached.ts"
+      ],
       "@/*": [
         "./src/*"
       ]
