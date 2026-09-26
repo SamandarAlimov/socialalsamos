@@ -48,4 +48,18 @@ describe('unified Story publishing contract', () => {
     expect(dialog).not.toContain("from('stories')");
     expect(dialog).not.toContain('uploadFile(');
   });
+
+  it('keeps canonical Story rows out of profile posts and profile post counts', () => {
+    const profileHook = source('src/hooks/useUserProfile.ts');
+    const migration = source(
+      'supabase/migrations/20260926143000_exclude_stories_from_profile_post_counts.sql',
+    );
+
+    expect(profileHook).toContain("post.post_kind !== 'story'");
+    expect(profileHook).toContain(".or('post_kind.is.null,post_kind.neq.story')");
+    expect(profileHook).toContain(".filter(p => p.post_kind !== 'story'");
+    expect(migration).toContain("coalesce(p.post_kind, 'post') <> 'story'");
+    expect(migration).toContain('p.profile_hidden_at is null');
+    expect(migration).toContain('update public.profiles');
+  });
 });
