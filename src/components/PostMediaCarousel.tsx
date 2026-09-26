@@ -9,6 +9,7 @@ import { ImageLightbox } from '@/components/media/ImageLightbox';
 import { CreateMusicPreview } from '@/components/create/CreateMusicPreview';
 import { resolveTouchAxis, type TouchAxis } from '@/lib/touchGesture';
 import { uniqueMediaCandidates } from '@/lib/mediaRecovery';
+import { getMediaCarouselSwipeTarget } from '@/lib/mediaSwipeNavigation';
 
 interface PostMediaCarouselProps {
   /** Primary URL for each logical media item. Kept for backward compatibility. */
@@ -290,7 +291,13 @@ export function PostMediaCarousel({
       if (swipeAxisRef.current === 'unknown') return;
     }
 
-    if (swipeAxisRef.current === 'horizontal') {
+    if (
+      swipeAxisRef.current === 'horizontal' &&
+      getMediaCarouselSwipeTarget(currentIndex, mediaUrls.length, dx) !== null
+    ) {
+      // The collection owns this direction while an adjacent media item exists.
+      // At the first/last item we deliberately let the event bubble so Home can
+      // take over the same gesture (for example first-item right swipe -> Create).
       event.stopPropagation();
     }
   };
@@ -299,21 +306,22 @@ export function PostMediaCarousel({
     const start = swipeStartRef.current;
     const changed = event.changedTouches[0];
 
-    if (
-      swipeAxisRef.current === 'horizontal' &&
-      start &&
-      changed &&
-      mediaUrls.length > 1
-    ) {
-      event.stopPropagation();
-
+    if (swipeAxisRef.current === 'horizontal' && start && changed) {
       const dx = changed.clientX - start.x;
       const elapsed = Date.now() - start.at;
+      const target = getMediaCarouselSwipeTarget(
+        currentIndex,
+        mediaUrls.length,
+        dx,
+      );
+
+      if (target !== null) {
+        event.stopPropagation();
+      }
 
       if (Math.abs(dx) >= 44 && elapsed < 900) {
         didSwipeRef.current = true;
-        const target = adjacentIndex(currentIndex, dx < 0 ? 1 : -1);
-        if (target >= 0) setCurrentIndex(target);
+        if (target !== null) setCurrentIndex(target);
       }
     }
 
