@@ -148,6 +148,9 @@ begin
   if p_other_user_id is null or p_other_user_id = v_user then
     raise exception 'invalid_recipient';
   end if;
+  if not public.check_rate_limit('secret_chat_create', v_user::text, 20, 3600) then
+    raise exception 'rate_limited';
+  end if;
 
   select * into v_my_device
   from public.user_e2ee_devices d
@@ -257,6 +260,19 @@ begin
   end if;
 
   if tg_op = 'UPDATE' then
+    -- Everyone-delete is the only content mutation allowed for Secret Chat.
+    -- The encrypted envelope is removed as part of the tombstone write.
+    if new.is_deleted is true and old.is_deleted is distinct from true then
+      new.content := '🔒';
+      new.media_url := null;
+      new.media_type := null;
+      new.location_payload := null;
+      new.live_location_expires_at := null;
+      new.live_location_stopped_at := now();
+      new.metadata := '{}'::jsonb;
+      return new;
+    end if;
+
     if new.content is distinct from old.content
        or new.media_url is distinct from old.media_url
        or new.media_type is distinct from old.media_type
@@ -315,6 +331,36 @@ drop trigger if exists trg_guard_secret_message_payload on public.messages;
 create trigger trg_guard_secret_message_payload
 before insert or update on public.messages
 for each row execute function public.guard_secret_message_payload();
+
+create or replace function public.guard_secret_scheduled_message()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_security_mode text;
+begin
+  select c.security_mode into v_security_mode
+  from public.conversations c
+  where c.id = new.conversation_id;
+
+  if coalesce(v_security_mode, 'standard') = 'e2ee' then
+    raise exception 'secret_chat_scheduling_not_supported';
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_guard_secret_scheduled_message on public.scheduled_messages;
+create trigger trg_guard_secret_scheduled_message
+before insert or update on public.scheduled_messages
+for each row execute function public.guard_secret_scheduled_message();
+
+-- Trigger helpers are internal implementation details, not public RPCs.
+revoke all on function public.guard_secret_message_payload() from public, anon, authenticated;
+revoke all on function public.guard_secret_scheduled_message() from public, anon, authenticated;
 
 comment on column public.conversations.security_mode is
   'standard = server-readable message payload; e2ee = device-bound end-to-end encrypted payload enforced by guard_secret_message_payload().';
