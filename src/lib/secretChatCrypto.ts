@@ -33,6 +33,7 @@ type SecretEnvelope = {
 };
 
 const contextCache = new Map<string, SecretContext>();
+const secretModeCache = new Map<string, boolean>();
 let dbPromise: Promise<IDBDatabase> | null = null;
 
 function assertCryptoSupport() {
@@ -113,7 +114,9 @@ function storageKey(userId: string, conversationId: string) {
 }
 
 function saveContext(context: SecretContext) {
-  contextCache.set(contextKey(context.userId, context.conversationId), context);
+  const key = contextKey(context.userId, context.conversationId);
+  contextCache.set(key, context);
+  secretModeCache.set(key, true);
   try {
     localStorage.setItem(storageKey(context.userId, context.conversationId), JSON.stringify(context));
   } catch {
@@ -141,6 +144,7 @@ function readCachedContext(userId: string, conversationId: string): SecretContex
       return null;
     }
     contextCache.set(key, parsed);
+    secretModeCache.set(key, true);
     return parsed;
   } catch {
     return null;
@@ -293,6 +297,24 @@ async function loadConversationContext(
   return context;
 }
 
+async function isSecretConversation(userId: string, conversationId: string): Promise<boolean> {
+  const key = contextKey(userId, conversationId);
+  if (readCachedContext(userId, conversationId)) return true;
+  if (secretModeCache.has(key)) return secretModeCache.get(key) === true;
+
+  const { data, error } = await (supabase as any)
+    .from('secret_conversation_devices')
+    .select('conversation_id')
+    .eq('conversation_id', conversationId)
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (error) throw error;
+  const isSecret = Boolean(data?.conversation_id);
+  secretModeCache.set(key, isSecret);
+  return isSecret;
+}
+
 async function deriveAesKey(identity: StoredIdentity, context: SecretContext): Promise<CryptoKey> {
   const peerPublicKey = await crypto.subtle.importKey(
     'jwk',
@@ -359,8 +381,8 @@ export async function prepareSecretMessagePayload(
   const senderId = typeof payload.sender_id === 'string' ? payload.sender_id : null;
   if (!conversationId || !senderId) return payload;
 
-  const context = readCachedContext(senderId, conversationId);
-  if (!context) return payload;
+  if (!(await isSecretConversation(senderId, conversationId))) return payload;
+  const context = await loadConversationContext(senderId, conversationId);
 
   if (
     payload.media_url ||
