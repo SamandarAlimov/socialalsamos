@@ -27,6 +27,7 @@ import HomePage from "./pages/HomePage";
 import PostPermalinkPage from "./pages/PostPermalinkPage";
 import PostInsightsPage from "./pages/PostInsightsPage";
 import MessagesPage from "./pages/MessagesPage";
+import MessageConversationCreatePage from "./pages/MessageConversationCreatePage";
 import ProfilePage from "./pages/ProfilePage";
 import ProfileCoverPage from "./pages/ProfileCoverPage";
 import UserProfilePage from "./pages/UserProfilePage";
@@ -182,6 +183,7 @@ function AppRoutes() {
         <Route path="/web" element={<WebViewerPage />} />
         <Route path="/videos" element={<VideosPage />} />
         <Route path="/messages" element={<MessagesPage />} />
+        <Route path="/messages/new/:type" element={<MessageConversationCreatePage />} />
         <Route path="/join/:slug" element={<JoinInvitePage />} />
         <Route path="/marketplace" element={<MarketplacePage />} />
         <Route path="/marketplace/catalog" element={<MarketplaceCatalogPage />} />
