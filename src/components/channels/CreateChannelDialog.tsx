@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -19,11 +20,19 @@ interface CreateChannelDialogProps {
 }
 
 export function CreateChannelDialog({ open, onOpenChange, onCreateChannel }: CreateChannelDialogProps) {
+  const navigate = useNavigate();
+  const location = useLocation();
   const [name, setName] = useState('');
   const [username, setUsername] = useState('');
   const [description, setDescription] = useState('');
   const [channelType, setChannelType] = useState<'public' | 'private'>('public');
   const [isCreating, setIsCreating] = useState(false);
+
+  useEffect(() => {
+    if (!open || location.pathname !== '/messages') return;
+    onOpenChange(false);
+    navigate('/messages/new/channel');
+  }, [open, location.pathname, navigate, onOpenChange]);
 
   const handleCreate = async () => {
     if (!name.trim()) return;
@@ -38,6 +47,8 @@ export function CreateChannelDialog({ open, onOpenChange, onCreateChannel }: Cre
       onOpenChange(false);
     }
   };
+
+  if (open && location.pathname === '/messages') return null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
