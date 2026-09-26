@@ -106,11 +106,14 @@ function compactStoryAge(iso: string): string {
 }
 
 function isInteractiveTarget(target: EventTarget | null): boolean {
+  if (typeof Element === 'undefined' || !(target instanceof Element)) {
+    return false;
+  }
+
   return Boolean(
-    target instanceof HTMLElement &&
-      target.closest(
-        '[data-story-interactive="true"], button, input, textarea, select, a, [role="button"]',
-      ),
+    target.closest(
+      '[data-story-interactive="true"], button, input, textarea, select, a, [role="button"]',
+    ),
   );
 }
 
@@ -360,9 +363,24 @@ export function StoryViewer({
     }
   }, []);
 
+  const resetPointerGesture = useCallback(() => {
+    clearHoldTimer();
+    pointerStartRef.current = null;
+    pointerMovedRef.current = false;
+    if (heldRef.current) {
+      heldRef.current = false;
+      setIsHolding(false);
+    }
+  }, [clearHoldTimer]);
+
   const handlePointerDown = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
-      if (isInteractiveTarget(event.target)) return;
+      // SVG ikonkalari PointerEvent target sifatida SVGElement/path qaytaradi.
+      // Interaktiv child ustida story navigation gesture boshlanmasligi kerak.
+      if (isInteractiveTarget(event.target)) {
+        resetPointerGesture();
+        return;
+      }
 
       try {
         event.currentTarget.setPointerCapture(event.pointerId);
@@ -385,7 +403,7 @@ export function StoryViewer({
         setIsHolding(true);
       }, HOLD_DELAY_MS);
     },
-    [clearHoldTimer],
+    [clearHoldTimer, resetPointerGesture],
   );
 
   const handlePointerMove = useCallback(
@@ -408,6 +426,13 @@ export function StoryViewer({
 
   const handlePointerUp = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
+      // Pointerup ham bubbling qiladi. Defensive guard bo'lmasa SVG ikonka
+      // bosilishi navigation tap sifatida qayta ishlanib nextStory/onClose ga ketishi mumkin.
+      if (isInteractiveTarget(event.target)) {
+        resetPointerGesture();
+        return;
+      }
+
       const start = pointerStartRef.current;
       clearHoldTimer();
 
@@ -459,18 +484,19 @@ export function StoryViewer({
         nextStory();
       }
     },
-    [clearHoldTimer, isOwnStory, nextStory, onClose, prevStory],
+    [
+      clearHoldTimer,
+      isOwnStory,
+      nextStory,
+      onClose,
+      prevStory,
+      resetPointerGesture,
+    ],
   );
 
   const handlePointerCancel = useCallback(() => {
-    clearHoldTimer();
-    pointerStartRef.current = null;
-    pointerMovedRef.current = false;
-    if (heldRef.current) {
-      heldRef.current = false;
-      setIsHolding(false);
-    }
-  }, [clearHoldTimer]);
+    resetPointerGesture();
+  }, [resetPointerGesture]);
 
   const openProfile = useCallback(() => {
     onClose();

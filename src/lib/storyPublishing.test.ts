@@ -78,4 +78,15 @@ describe('unified Story publishing contract', () => {
     expect(viewer).toContain(".from('story_views')");
     expect(viewer).toContain('onMarkAsViewed?.(currentStory.id)');
   });
+
+  it('keeps taps on story controls out of navigation gestures', () => {
+    const viewer = source('src/components/stories/StoryViewerCore.tsx');
+
+    expect(viewer).toContain("typeof Element === 'undefined'");
+    expect(viewer).toContain('target instanceof Element');
+    expect(viewer).not.toContain('target instanceof HTMLElement');
+    expect(viewer).toContain('const resetPointerGesture = useCallback');
+    expect(viewer).toContain('resetPointerGesture();');
+    expect((viewer.match(/isInteractiveTarget\(event\.target\)/g) || []).length).toBeGreaterThanOrEqual(2);
+  });
 });
