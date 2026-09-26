@@ -125,7 +125,7 @@ describe('unified Story publishing contract', () => {
     const dialog = source('src/components/stories/AddToHighlightDialog.tsx');
 
     expect(dialog).toContain('Tanlanganlarga qo‘shish');
-    expect(dialog).not.toContain('Storini mavjud Tanlanganga qo‘shhing yoki yangisini yarating.');
+    expect(dialog).not.toContain('Storini mavjud Tanlanganga qo‘shing yoki yangisini yarating.');
     expect(dialog).not.toContain('DialogDescription');
   });
 
