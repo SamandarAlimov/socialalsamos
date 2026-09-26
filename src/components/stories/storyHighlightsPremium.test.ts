@@ -80,6 +80,21 @@ describe('premium story highlights', () => {
     expect(highlights).toContain('onContextMenu={(event) => {');
   });
 
+  it('tracks highlight seen state and keeps only the circular create action', () => {
+    const highlights = source('components/stories/StoryHighlights.tsx');
+    const playback = source('components/stories/StoryHighlightPlayback.tsx');
+
+    expect(highlights).toContain("import { useStoryViews } from '@/hooks/useStoryViews'");
+    expect(highlights).toContain('const { markAsViewed, hasViewedAll } = useStoryViews()');
+    expect(highlights).toContain('const highlightHasUnviewed = (highlight: StoryHighlight) =>');
+    expect(highlights).toContain("? 'bg-gradient-to-tr from-amber-300 via-fuchsia-500 to-violet-600'");
+    expect(highlights).toContain(": 'bg-muted-foreground/30'");
+    expect(highlights).toContain('onViewed={markAsViewed}');
+    expect(highlights).not.toContain('isOwnProfile && highlights.length > 0 ? (');
+    expect(playback).toContain('onViewed?: (storyId: string) => void | Promise<void>');
+    expect(playback).toContain('void onViewed?.(current.story_id)');
+  });
+
   it('shares highlights through action sheet, copy link and QR code', () => {
     const actions = source('components/stories/StoryHighlightActions.tsx');
     const highlights = source('components/stories/StoryHighlights.tsx');
