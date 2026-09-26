@@ -36,6 +36,7 @@ export interface UserPost {
   bookmarks_count: number;
   is_pinned: boolean;
   visibility: string;
+  post_kind?: string | null;
   profile_hidden_at?: string | null;
   created_at: string;
   is_liked?: boolean;
@@ -110,12 +111,12 @@ export function useUserProfile(userId?: string) {
 
       if (error) throw error;
 
-      // Owners keep hidden rows in memory so the profile can expose the
-      // reversible "Yashirilgan" manager. Other viewers never receive those
-      // rows in the rendered profile list even though the post itself still
-      // exists elsewhere on the platform.
+      // Story publishing intentionally creates a canonical linked row in posts,
+      // but that row belongs only to Story surfaces and must never render in the
+      // profile Posts/Videos tabs. Owners still keep non-story hidden rows in
+      // memory so the reversible "Yashirilgan" manager can restore them.
       const profileRows = (data ?? []).filter((post: any) =>
-        isOwnTarget || !post.profile_hidden_at,
+        post.post_kind !== 'story' && (isOwnTarget || !post.profile_hidden_at),
       );
 
       // Check like status for current user
@@ -158,13 +159,15 @@ export function useUserProfile(userId?: string) {
         .select('*', { count: 'exact', head: true })
         .eq('follower_id', targetUserId);
 
-      // Profile post count intentionally excludes profile-hidden rows. They are
-      // preserved for restore, but should not inflate the public profile stat.
+      // Profile post count excludes both hidden rows and canonical Story-linked
+      // post rows. Story rows exist in posts for the unified graph, not because
+      // they should count as profile posts.
       const { count: visiblePostsCount } = await db
         .from('posts')
         .select('*', { count: 'exact', head: true })
         .eq('user_id', targetUserId)
-        .is('profile_hidden_at', null);
+        .is('profile_hidden_at', null)
+        .or('post_kind.is.null,post_kind.neq.story');
 
       setFollowersCount(followers || 0);
       setFollowingCount(following || 0);
@@ -336,13 +339,14 @@ export function useUserProfile(userId?: string) {
                       comments_count: newData.comments_count ?? p.comments_count,
                       shares_count: newData.shares_count ?? p.shares_count,
                       bookmarks_count: newData.bookmarks_count ?? p.bookmarks_count,
+                      post_kind: newData.post_kind ?? p.post_kind,
                       profile_hidden_at: hasProfileVisibility
                         ? newData.profile_hidden_at
                         : p.profile_hidden_at,
                     }
                   : p
               )
-              .filter(p => isOwnTarget || !p.profile_hidden_at)
+              .filter(p => p.post_kind !== 'story' && (isOwnTarget || !p.profile_hidden_at))
             );
             if (hasProfileVisibility) void fetchCounts();
           } else {
