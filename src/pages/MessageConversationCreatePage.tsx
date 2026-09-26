@@ -1,14 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Navigate, useNavigate, useParams } from 'react-router-dom';
-import {
-  ArrowLeft,
-  Camera,
-  Check,
-  Loader2,
-  Search,
-  X,
-} from 'lucide-react';
+import { ArrowLeft, Camera, Check, Loader2, Search, X } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -36,7 +29,7 @@ const MAX_DESCRIPTION = 255;
 export default function MessageConversationCreatePage() {
   const { type } = useParams<{ type: string }>();
   const chatType: ChatType | null = type === 'group' || type === 'channel' ? type : null;
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const { user } = useAuth();
   const { toast } = useToast();
@@ -95,8 +88,14 @@ export default function MessageConversationCreatePage() {
 
   const title =
     chatType === 'group'
-      ? t('messages.createFlow.groupTitle')
-      : t('messages.createFlow.channelTitle');
+      ? t('messages.createChat.createGroup')
+      : t('messages.createChat.createChannel');
+
+  const nextLabel = i18n.resolvedLanguage?.startsWith('ru')
+    ? 'Далее'
+    : i18n.resolvedLanguage?.startsWith('en')
+      ? 'Next'
+      : 'Keyingisi';
 
   const isFinalStep =
     (chatType === 'group' && step === 'details') ||
@@ -142,8 +141,7 @@ export default function MessageConversationCreatePage() {
     } catch (error) {
       toast({
         title: t('common.error'),
-        description:
-          error instanceof Error ? error.message : t('messages.createFlow.uploadFailed'),
+        description: error instanceof Error ? error.message : undefined,
         variant: 'destructive',
       });
     } finally {
@@ -192,16 +190,11 @@ export default function MessageConversationCreatePage() {
         throw participantError;
       }
 
-      toast({
-        title:
-          chatType === 'group'
-            ? t('messages.createFlow.groupCreated')
-            : t('messages.createFlow.channelCreated'),
-      });
+      toast({ title: t('common.success') });
       navigate(`/messages?conversation=${encodeURIComponent(conversation.id)}`, { replace: true });
     } catch (error) {
       toast({
-        title: t('messages.createFlow.failed'),
+        title: t('common.error'),
         description: error instanceof Error ? error.message : undefined,
         variant: 'destructive',
       });
@@ -249,12 +242,12 @@ export default function MessageConversationCreatePage() {
             className="min-w-[92px] rounded-full bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground transition active:scale-95 disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100"
           >
             {creating
-              ? t('messages.createFlow.creating')
+              ? t('messages.createChat.creating')
               : isFinalStep
                 ? chatType === 'group'
-                  ? t('messages.createFlow.createGroup')
-                  : t('messages.createFlow.createChannel')
-                : t('messages.createFlow.next')}
+                  ? t('messages.createChat.createGroup')
+                  : t('messages.createChat.createChannel')
+                : nextLabel}
           </button>
         </div>
       </header>
@@ -290,8 +283,8 @@ export default function MessageConversationCreatePage() {
                     onChange={(event) => setName(event.target.value)}
                     placeholder={
                       chatType === 'group'
-                        ? t('messages.createFlow.groupName')
-                        : t('messages.createFlow.channelName')
+                        ? t('messages.createChat.groupName')
+                        : t('messages.createChat.channelName')
                     }
                     className="h-14 flex-1 border-0 bg-transparent px-2 text-lg shadow-none focus-visible:ring-0"
                   />
@@ -303,7 +296,7 @@ export default function MessageConversationCreatePage() {
                   value={description}
                   maxLength={MAX_DESCRIPTION}
                   onChange={(event) => setDescription(event.target.value)}
-                  placeholder={t('messages.createFlow.description')}
+                  placeholder={t('messages.createChat.descriptionOptional')}
                   rows={4}
                   className="min-h-[112px] resize-none border-0 bg-transparent px-1 text-base shadow-none focus-visible:ring-0"
                 />
@@ -318,8 +311,8 @@ export default function MessageConversationCreatePage() {
                     autoFocus
                     value={searchQuery}
                     onChange={(event) => setSearchQuery(event.target.value)}
-                    placeholder={t('messages.createFlow.searchUsers')}
-                    className="h-13 rounded-2xl border-border bg-card pl-12 pr-11 shadow-sm"
+                    placeholder={t('messages.createChat.searchUsers')}
+                    className="h-12 rounded-2xl border-border bg-card pl-12 pr-11 shadow-sm"
                   />
                   {searchQuery && (
                     <button
@@ -368,7 +361,7 @@ export default function MessageConversationCreatePage() {
                   </div>
                 ) : users.length === 0 ? (
                   <div className="flex h-48 items-center justify-center px-6 text-center text-sm text-muted-foreground">
-                    {t('messages.createFlow.noUsers')}
+                    {t('messages.createChat.noUsers')}
                   </div>
                 ) : (
                   users.map((person, index) => {
