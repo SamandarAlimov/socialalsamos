@@ -1,6 +1,10 @@
 import { useTranslation } from 'react-i18next';
 import { Globe } from 'lucide-react';
-import { SUPPORTED_LANGUAGES } from '@/i18n';
+import {
+  LANGUAGE_EXPLICIT_KEY,
+  LANGUAGE_STORAGE_KEY,
+  SUPPORTED_LANGUAGES,
+} from '@/i18n';
 import {
   Select,
   SelectContent,
@@ -17,7 +21,9 @@ export function LanguageSwitcher({ variant = 'default' }: LanguageSwitcherProps)
   const { i18n, t } = useTranslation();
 
   const handleChange = (value: string) => {
-    i18n.changeLanguage(value);
+    window.localStorage.setItem(LANGUAGE_EXPLICIT_KEY, '1');
+    window.localStorage.setItem(LANGUAGE_STORAGE_KEY, value);
+    void i18n.changeLanguage(value);
     document.documentElement.lang = value;
   };
 
