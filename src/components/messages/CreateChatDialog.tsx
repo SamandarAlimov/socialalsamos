@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import {
   Dialog,
   DialogContent,
@@ -28,6 +29,8 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/hooks/use-toast';
+import { createSecretConversation } from '@/lib/secretChatCrypto';
 import { cn } from '@/lib/utils';
 
 type ChatType = 'private' | 'group' | 'channel' | 'secret';
@@ -57,6 +60,8 @@ export function CreateChatDialog({
   onCreateChannel,
 }: CreateChatDialogProps) {
   const { t } = useTranslation();
+  const navigate = useNavigate();
+  const { toast } = useToast();
   const { user } = useAuth();
   const [chatType, setChatType] = useState<ChatType>('private');
   const [step, setStep] = useState<Step>('select-type');
@@ -104,14 +109,12 @@ export function CreateChatDialog({
   }, [user, step, searchQuery]);
 
   const handleTypeSelect = (type: ChatType) => {
-    if (type === 'secret') return;
-
     setChatType(type);
     setSearchQuery('');
     setSelectedUsers([]);
 
     // Kanal yaratishda a'zo tanlash natijada ishlatilmasdi. Oqimni bevosita
-    // kanal ma'lumotlariga olib o'tamiz, guruh esa a'zolar bosqichini saqlaydi.
+    // kanal ma'lumotlariga olib o'tamiz; private/group/secret odam tanlaydi.
     setStep(type === 'channel' ? 'group-details' : 'select-users');
   };
 
@@ -121,6 +124,30 @@ export function CreateChatDialog({
       try {
         await onCreatePrivate(userId);
         onOpenChange(false);
+      } finally {
+        setCreating(false);
+      }
+      return;
+    }
+
+    if (chatType === 'secret') {
+      setCreating(true);
+      try {
+        const conversationId = await createSecretConversation(userId);
+        onOpenChange(false);
+        navigate(`/messages?conversation=${encodeURIComponent(conversationId)}`);
+        toast({ title: t('messages.createChat.secretCreated') });
+      } catch (error) {
+        const code = error instanceof Error ? error.message : '';
+        const title =
+          code === 'E2EE_PEER_NOT_READY'
+            ? t('messages.createChat.secretPeerNotReady')
+            : code === 'E2EE_PEER_DISABLED'
+              ? t('messages.createChat.secretDisabled')
+              : code === 'E2EE_UNSUPPORTED'
+                ? t('messages.createChat.secretUnsupported')
+                : t('messages.createChat.secretFailed');
+        toast({ title, variant: 'destructive' });
       } finally {
         setCreating(false);
       }
@@ -184,7 +211,6 @@ export function CreateChatDialog({
       label: t('messages.newSecretChat'),
       description: t('messages.createChat.secretDescription'),
       iconClassName: 'bg-emerald-500/12 text-emerald-500 ring-emerald-500/10',
-      disabled: true,
     },
   ];
 
@@ -194,7 +220,9 @@ export function CreateChatDialog({
       : step === 'select-users'
         ? chatType === 'private'
           ? t('messages.createChat.selectUser')
-          : t('messages.createChat.addMembers')
+          : chatType === 'secret'
+            ? t('messages.createChat.selectSecretUser')
+            : t('messages.createChat.addMembers')
         : chatType === 'group'
           ? t('messages.createChat.groupDetails')
           : t('messages.createChat.channelDetails');
@@ -205,7 +233,9 @@ export function CreateChatDialog({
       : step === 'select-users'
         ? chatType === 'private'
           ? t('messages.createChat.selectUserHint')
-          : t('messages.createChat.addMembersHint')
+          : chatType === 'secret'
+            ? t('messages.createChat.selectSecretUserHint')
+            : t('messages.createChat.addMembersHint')
         : chatType === 'group'
           ? t('messages.createChat.groupDetailsHint')
           : t('messages.createChat.channelDetailsHint');
@@ -275,12 +305,10 @@ export function CreateChatDialog({
               <button
                 key={type.id}
                 type="button"
-                disabled={type.disabled}
                 onClick={() => handleTypeSelect(type.id)}
                 className={cn(
                   'group flex w-full items-center gap-3.5 rounded-[22px] border border-border/55 bg-card/70 p-3.5 text-left shadow-[0_1px_0_rgba(255,255,255,0.04)] transition duration-200',
                   'hover:-translate-y-0.5 hover:border-border hover:bg-accent/45 hover:shadow-md active:translate-y-0 active:scale-[0.985]',
-                  'disabled:cursor-default disabled:opacity-65 disabled:hover:translate-y-0 disabled:hover:bg-card/70 disabled:hover:shadow-none',
                 )}
               >
                 <div
@@ -293,26 +321,17 @@ export function CreateChatDialog({
                 </div>
 
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <p className="truncate text-[15px] font-semibold tracking-[-0.01em] text-foreground">
-                      {type.label}
-                    </p>
-                    {type.disabled && (
-                      <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                        {t('messages.createChat.comingSoon')}
-                      </span>
-                    )}
-                  </div>
+                  <p className="truncate text-[15px] font-semibold tracking-[-0.01em] text-foreground">
+                    {type.label}
+                  </p>
                   <p className="mt-0.5 line-clamp-2 text-[12.5px] leading-[18px] text-muted-foreground sm:text-[13px]">
                     {type.description}
                   </p>
                 </div>
 
-                {!type.disabled && (
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted/55 text-muted-foreground transition group-hover:bg-background group-hover:text-foreground">
-                    <ChevronRight className="h-4 w-4" />
-                  </span>
-                )}
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted/55 text-muted-foreground transition group-hover:bg-background group-hover:text-foreground">
+                  <ChevronRight className="h-4 w-4" />
+                </span>
               </button>
             ))}
           </div>
@@ -342,6 +361,15 @@ export function CreateChatDialog({
                 )}
               </div>
             </div>
+
+            {chatType === 'secret' && (
+              <div className="mx-4 mb-3 flex items-start gap-2.5 rounded-2xl border border-emerald-500/15 bg-emerald-500/8 px-3.5 py-3 text-emerald-700 dark:text-emerald-300 sm:mx-5">
+                <LockKeyhole className="mt-0.5 h-4 w-4 shrink-0" />
+                <p className="text-[12px] leading-[18px]">
+                  {t('messages.createChat.secretDeviceNotice')}
+                </p>
+              </div>
+            )}
 
             {chatType === 'group' && selectedUsers.length > 0 && (
               <div className="flex gap-2 overflow-x-auto px-4 pb-3 scrollbar-hidden sm:px-5">
@@ -430,6 +458,8 @@ export function CreateChatDialog({
                             >
                               <Check className="h-3.5 w-3.5" strokeWidth={2.5} />
                             </span>
+                          ) : creating ? (
+                            <Loader2 className="h-4 w-4 shrink-0 animate-spin text-muted-foreground" />
                           ) : (
                             <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground/70" />
                           )}
