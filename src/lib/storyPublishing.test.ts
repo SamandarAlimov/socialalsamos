@@ -118,4 +118,14 @@ describe('unified Story publishing contract', () => {
     expect(dialog).not.toContain('Storini mavjud Tanlanganga qo‘shing yoki yangisini yarating.');
     expect(dialog).not.toContain('DialogDescription');
   });
+
+  it('keeps the Post create header free of a redundant camera action', () => {
+    const composePage = source('src/pages/ComposePage.tsx');
+
+    expect(composePage).toContain("mode === 'post' ? (\n            <PostComposer />");
+    expect(composePage).not.toContain("import { Camera,");
+    expect(composePage).not.toContain('CameraVideoRecorder');
+    expect(composePage).not.toContain('postCameraOpen');
+    expect(composePage).not.toContain('handlePostCameraCapture');
+  });
 });
