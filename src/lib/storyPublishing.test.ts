@@ -111,6 +111,16 @@ describe('unified Story publishing contract', () => {
     expect(storiesHook).toContain('filter: `follower_id=eq.${user.id}`');
   });
 
+  it('keeps own Story playback separate from the always-available add action', () => {
+    const home = source('src/pages/HomePage.tsx');
+
+    expect(home).toContain('data-story-add-action="true"');
+    expect(home).toContain('aria-label="Yangi story qo‘shish"');
+    expect(home).toContain("onClick={() => navigate('/create?mode=story')}");
+    expect(home).toContain("userStoryGroup ? 'Storini ko‘rish' : 'Story qo‘shish'");
+    expect(home).not.toContain('{!userStoryGroup && (\n                <div className="absolute bottom-0 right-0');
+  });
+
   it('keeps the add-to-highlight dialog concise', () => {
     const dialog = source('src/components/stories/AddToHighlightDialog.tsx');
 
