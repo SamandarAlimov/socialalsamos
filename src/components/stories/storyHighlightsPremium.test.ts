@@ -66,6 +66,20 @@ describe('premium story highlights', () => {
     expect(hook).toContain('.update({ cover_url: fallbackCover })');
   });
 
+  it('opens owner highlight actions by long press without a visible more icon', () => {
+    const highlights = source('components/stories/StoryHighlights.tsx');
+
+    expect(highlights).not.toContain('MoreHorizontal');
+    expect(highlights).toContain('HIGHLIGHT_LONG_PRESS_MS');
+    expect(highlights).toContain('HIGHLIGHT_LONG_PRESS_MOVE_TOLERANCE');
+    expect(highlights).toContain('handleHighlightPointerDown');
+    expect(highlights).toContain('handleHighlightPointerMove');
+    expect(highlights).toContain('suppressHighlightClickRef');
+    expect(highlights).toContain('setActionHighlight(highlight)');
+    expect(highlights).toContain('onPointerDown={(event) => handleHighlightPointerDown(event, highlight)}');
+    expect(highlights).toContain('onContextMenu={(event) => {');
+  });
+
   it('shares highlights through action sheet, copy link and QR code', () => {
     const actions = source('components/stories/StoryHighlightActions.tsx');
     const highlights = source('components/stories/StoryHighlights.tsx');
